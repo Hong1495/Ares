@@ -1,48 +1,37 @@
 import SwiftUI
 
 struct MainView: View {
-    @State private var selection: NavigationItem? = .dashboard
-    
-    enum NavigationItem: Hashable {
-        case dashboard
-        case proxies
-        case profiles
-        case connections
-        case logs
-        case antigravity
-        case rules
-        case settings
-    }
+    @EnvironmentObject private var appState: AppState
     
     var body: some View {
         NavigationSplitView {
-            List(selection: $selection) {
-                NavigationLink(value: NavigationItem.dashboard) {
+            List(selection: $appState.selection) {
+                NavigationLink(value: AppState.NavigationItem.dashboard) {
                     Label("Dashboard", systemImage: "gauge.with.dots.needle.bottom.50percent")
                 }
-                NavigationLink(value: NavigationItem.proxies) {
+                NavigationLink(value: AppState.NavigationItem.proxies) {
                     Label("Proxies", systemImage: "network")
                 }
-                NavigationLink(value: NavigationItem.profiles) {
+                NavigationLink(value: AppState.NavigationItem.profiles) {
                     Label("Profiles", systemImage: "doc.text.fill")
                 }
-                NavigationLink(value: NavigationItem.connections) {
+                NavigationLink(value: AppState.NavigationItem.connections) {
                     Label("Connections", systemImage: "point.3.connected.trianglepath.dotted")
                 }
-                NavigationLink(value: NavigationItem.antigravity) {
+                NavigationLink(value: AppState.NavigationItem.antigravity) {
                     Label("Antigravity", systemImage: "sparkles")
                 }
-                NavigationLink(value: NavigationItem.logs) {
+                NavigationLink(value: AppState.NavigationItem.logs) {
                     Label("Logs", systemImage: "list.bullet.rectangle.portrait")
                 }
-                NavigationLink(value: NavigationItem.settings) {
+                NavigationLink(value: AppState.NavigationItem.settings) {
                     Label("Settings", systemImage: "gearshape")
                 }
             }
             .listStyle(.sidebar)
             .navigationTitle("Ares")
         } detail: {
-            switch selection {
+            switch appState.selection {
             case .dashboard:
                 DashboardView()
             case .proxies:
@@ -59,8 +48,6 @@ struct MainView: View {
                 Text("Rules - Coming Soon")
             case .settings:
                 SettingsView()
-            case .none:
-                Text("Select an item")
             }
         }
     }

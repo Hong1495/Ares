@@ -9,6 +9,19 @@ class AppState: ObservableObject {
     // Clash Mode
     @Published var currentMode: ClashConfig.Mode = .rule
     
+    // Navigation State
+    enum NavigationItem: Hashable {
+        case dashboard
+        case proxies
+        case profiles
+        case connections
+        case logs
+        case antigravity
+        case rules
+        case settings
+    }
+    @Published var selection: NavigationItem = .dashboard
+    
     // System toggles
     @Published var systemProxyEnabled = false
     @Published var tunEnabled = false

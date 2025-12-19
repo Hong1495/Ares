@@ -11,6 +11,7 @@ class ThemeService: ObservableObject {
     var theme: String {
         get { defaults.string(forKey: themeKey) ?? "system" }
         set {
+            objectWillChange.send()
             defaults.set(newValue, forKey: themeKey)
             applyTheme()
         }

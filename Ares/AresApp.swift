@@ -79,47 +79,67 @@ struct AresApp: App {
                 .onAppear {
                     NSWindow.allowsAutomaticWindowTabbing = false
                 }
+                .preferredColorScheme(themeService.theme == "dark" ? .dark : (themeService.theme == "light" ? .light : nil))
         }
         
         // Enhanced Menu Bar
         MenuBarExtra("Ares", systemImage: "bolt.shield.fill") {
+            Button(action: {
+                NSApp.activate(ignoringOtherApps: true)
+                appState.selection = .dashboard
+                if let window = NSApp.windows.first {
+                    window.makeKeyAndOrderFront(nil)
+                }
+            }) {
+                Label("Dashboard", systemImage: "gauge.with.dots.needle.bottom.50percent")
+            }
+            .keyboardShortcut("d", modifiers: [.command])
+
+            Divider()
+
             // System Proxy Toggle
-            Toggle("System Proxy", isOn: Binding(
+            Toggle(isOn: Binding(
                 get: { appState.systemProxyEnabled },
                 set: { _ in
                     Task {
                         await appState.toggleSystemProxy()
                     }
                 }
-            ))
+            )) {
+                Label("System Proxy", systemImage: "network")
+            }
             .keyboardShortcut("p", modifiers: [.command, .shift])
             
             // TUN Mode Toggle
-            Toggle("TUN Mode", isOn: Binding(
+            Toggle(isOn: Binding(
                 get: { appState.tunEnabled },
                 set: { newValue in
                     print("[MenuBar] 🔘 TUN toggle clicked: \(appState.tunEnabled) -> \(newValue)")
-                    print("[MenuBar] 📞 Calling toggleTUN()")
                     appState.toggleTUN()
-                    print("[MenuBar] ✅ toggleTUN() called")
                 }
-            ))
+            )) {
+                Label("TUN Mode", systemImage: "bolt.shield.fill")
+            }
             .keyboardShortcut("t", modifiers: [.command, .shift])
             
             Divider()
             
             // Mode Selector
-            Menu("Mode") {
+            Menu {
                 Button(action: {
                     Task {
                         await appState.setMode(.rule)
                     }
                 }) {
-                    HStack {
-                        Text("Rule")
-                        if appState.currentMode == .rule {
-                            Image(systemName: "checkmark")
+                    Label {
+                        HStack {
+                            Text("Rule")
+                            if appState.currentMode == .rule {
+                                Image(systemName: "checkmark")
+                            }
                         }
+                    } icon: {
+                        Image(systemName: "list.bullet.rectangle")
                     }
                 }
                 .keyboardShortcut("1", modifiers: [.command])
@@ -129,11 +149,15 @@ struct AresApp: App {
                         await appState.setMode(.global)
                     }
                 }) {
-                    HStack {
-                        Text("Global")
-                        if appState.currentMode == .global {
-                            Image(systemName: "checkmark")
+                    Label {
+                        HStack {
+                            Text("Global")
+                            if appState.currentMode == .global {
+                                Image(systemName: "checkmark")
+                            }
                         }
+                    } icon: {
+                        Image(systemName: "globe")
                     }
                 }
                 .keyboardShortcut("2", modifiers: [.command])
@@ -143,32 +167,29 @@ struct AresApp: App {
                         await appState.setMode(.direct)
                     }
                 }) {
-                    HStack {
-                        Text("Direct")
-                        if appState.currentMode == .direct {
-                            Image(systemName: "checkmark")
+                    Label {
+                        HStack {
+                            Text("Direct")
+                            if appState.currentMode == .direct {
+                                Image(systemName: "checkmark")
+                            }
                         }
+                    } icon: {
+                        Image(systemName: "arrow.up.right.circle")
                     }
                 }
                 .keyboardShortcut("3", modifiers: [.command])
+            } label: {
+                Label("Mode", systemImage: "rhombus.fill")
             }
             .keyboardShortcut("M", modifiers: [.command, .shift])
             
             Divider()
             
-            Button("Dashboard") {
-                NSApp.activate(ignoringOtherApps: true)
-                // Just bringing window to front, usually handled by Dock icon click
-                if let window = NSApp.windows.first {
-                    window.makeKeyAndOrderFront(nil)
-                }
-            }
-            .keyboardShortcut("d", modifiers: [.command])
-            
-            Divider()
-            
-            Button("Quit Ares") {
+            Button(action: {
                 NSApplication.shared.terminate(nil)
+            }) {
+                Label("Quit Ares", systemImage: "power")
             }
             .keyboardShortcut("q", modifiers: [.command])
         }
