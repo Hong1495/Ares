@@ -196,16 +196,21 @@ actor ClashServiceActor {
             process = proc
             pipe = outputPipe
             
+            // Drain pipe in background to avoid process freeze
+            setupOutputObserver(pipe: outputPipe)
+            
             addLog("[ClashServiceActor] ✅ Clash launched with TUN (PID: \(proc.processIdentifier))")
             isRunning = true
             await notifyRunningState(true)
-            logger.info("Clash TUN started")
             
             // Background port verification (informational only)
             Task {
+                try? await Task.sleep(nanoseconds: 1_500_000_000) // Increase wait to 1.5s
                 let portReady = await waitForPort(19097, timeout: 5.0)
                 if !portReady {
                     addLog("[ClashServiceActor] ⚠️ Port 19097 check timeout - core may still be initializing")
+                } else {
+                    addLog("[ClashServiceActor] 🟢 Port 19097 is now listening")
                 }
             }
         } catch {
@@ -246,6 +251,9 @@ actor ClashServiceActor {
             try proc.run()
             process = proc
             pipe = outputPipe
+            
+            // Drain pipe in background
+            setupOutputObserver(pipe: outputPipe)
             
             isRunning = true
             await notifyRunningState(true)
@@ -414,6 +422,26 @@ actor ClashServiceActor {
     private func notifyRunningState(_ running: Bool) async {
         await MainActor.run {
             ClashViewModel.shared.updateRunningState(running)
+        }
+    }
+    
+    private func setupOutputObserver(pipe: Pipe) {
+        let handle = pipe.fileHandleForReading
+        handle.readabilityHandler = { [weak self] h in
+            let data = h.availableData
+            guard !data.isEmpty else { 
+                h.readabilityHandler = nil
+                return 
+            }
+            
+            if let output = String(data: data, encoding: .utf8) {
+                let lines = output.components(separatedBy: .newlines)
+                for line in lines where !line.isEmpty {
+                    // Also print to console for easier debugging
+                    print("[ClashCore] \(line)")
+                    self?.addLog("[Core] \(line)")
+                }
+            }
         }
     }
 }

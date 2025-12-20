@@ -173,7 +173,9 @@ struct IpInfoCard: View {
                 self.isLoading = false
                 return // Success
             } catch {
-                print("[IpInfoCard] Attempt \(attempt) failed: \(error.localizedDescription)")
+                if attempt == retries {
+                    print("[IpInfoCard] ❌ Final attempt failed: \(error.localizedDescription)")
+                }
                 if attempt < retries {
                     try? await Task.sleep(nanoseconds: 2_000_000_000) // Wait 2s
                 }
@@ -252,7 +254,9 @@ struct ClashInfoCard: View {
                     return // Success
                 }
             } catch {
-                print("[ClashInfoCard] Attempt \(attempt) failed: \(error.localizedDescription)")
+                if attempt == retries {
+                    print("[ClashInfoCard] ❌ Final attempt failed: \(error.localizedDescription)")
+                }
                 if attempt < retries {
                     try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5s
                 }

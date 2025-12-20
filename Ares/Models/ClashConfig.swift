@@ -105,12 +105,26 @@ struct ClashConfig: Codable {
               ipv6: \(ipv6)
               enhanced-mode: fake-ip
               fake-ip-range: 198.18.0.1/16
+              default-nameserver:
+                - 223.5.5.5
+                - 119.29.29.29
+                - 1.1.1.1
+                - 8.8.8.8
               nameserver:
                 - https://doh.pub/dns-query
                 - https://dns.alidns.com/dns-query
+                - 223.5.5.5
+                - 114.114.114.114
               fallback:
                 - https://1.1.1.1/dns-query
                 - https://8.8.8.8/dns-query
+                - tls://8.8.4.4:853
+                - tcp://8.8.8.8
+              fallback-filter:
+                geoip: true
+                geoip-code: CN
+                ipcidr:
+                  - 240.0.0.0/4
             
             # Sniffer Configuration (Recover domain names from TLS/HTTP)
             sniffer:

@@ -15,10 +15,25 @@ class AppState: ObservableObject {
         case proxies
         case profiles
         case connections
+        case analysis
         case logs
         case antigravity
         case rules
         case settings
+        
+        var displayName: String {
+            switch self {
+            case .dashboard: return "Dashboard"
+            case .proxies: return "Proxies"
+            case .profiles: return "Profiles"
+            case .connections: return "Connections"
+            case .analysis: return "Analysis"
+            case .logs: return "Logs"
+            case .antigravity: return "Antigravity"
+            case .rules: return "Rules"
+            case .settings: return "Settings"
+            }
+        }
     }
     @Published var selection: NavigationItem = .dashboard
     
@@ -32,6 +47,7 @@ class AppState: ObservableObject {
     private var clashController = ClashController.shared
     private var clashViewModel = ClashViewModel.shared
     private var systemProxyManager = SystemProxyManager.shared
+    private var browserAnalysisService = BrowserAnalysisService.shared
     
     private var pollingTimer: AnyCancellable?
     
@@ -152,7 +168,18 @@ class AppState: ObservableObject {
         
         // Determine correct ports and rules
         let (httpPort, socksPort) = getProxyPorts()
-        let bypassRules = UserDefaults.standard.string(forKey: "bypassRules") ?? ""
+        var bypassRules = UserDefaults.standard.string(forKey: "bypassRules") ?? ""
+        
+        // CRITICAL: Ensure local traffic is bypassed for Browser Analysis Extension
+        let localBypasses = ["127.0.0.1", "localhost"]
+        for bypass in localBypasses {
+            if !bypassRules.contains(bypass) {
+                if !bypassRules.isEmpty && !bypassRules.hasSuffix(",") {
+                    bypassRules += ", "
+                }
+                bypassRules += bypass
+            }
+        }
         
         guard await systemProxyManager.setSystemProxy(enabled: newState, httpPort: httpPort, socksPort: socksPort, bypassRules: bypassRules) else {
             clashViewModel.addLog("[AppState] ❌ Failed to set system proxy")
@@ -303,7 +330,18 @@ class AppState: ObservableObject {
         
         // Determine correct ports and rules
         let (httpPort, socksPort) = getProxyPorts()
-        let bypassRules = UserDefaults.standard.string(forKey: "bypassRules") ?? ""
+        var bypassRules = UserDefaults.standard.string(forKey: "bypassRules") ?? ""
+        
+        // CRITICAL: Ensure local traffic is bypassed for Browser Analysis Extension
+        let localBypasses = ["127.0.0.1", "localhost"]
+        for bypass in localBypasses {
+            if !bypassRules.contains(bypass) {
+                if !bypassRules.isEmpty && !bypassRules.hasSuffix(",") {
+                    bypassRules += ", "
+                }
+                bypassRules += bypass
+            }
+        }
         
         if await systemProxyManager.setSystemProxy(enabled: true, httpPort: httpPort, socksPort: socksPort, bypassRules: bypassRules) {
             systemProxyEnabled = true

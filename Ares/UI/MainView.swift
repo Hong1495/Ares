@@ -35,6 +35,10 @@ struct MainView: View {
                     Label("Connections", systemImage: "point.3.connected.trianglepath.dotted")
                         .font(.headline)
                 }
+                NavigationLink(value: AppState.NavigationItem.analysis) {
+                    Label("Analysis", systemImage: "antenna.radiowaves.left.and.right")
+                        .font(.headline)
+                }
                 NavigationLink(value: AppState.NavigationItem.antigravity) {
                     Label("Antigravity", systemImage: "sparkles")
                         .font(.headline)
@@ -49,7 +53,7 @@ struct MainView: View {
                 }
             }
             .listStyle(.sidebar)
-            .navigationTitle("Ares")
+            .navigationTitle(appState.selection.displayName)
         } detail: {
             switch appState.selection {
             case .dashboard:
@@ -60,6 +64,8 @@ struct MainView: View {
                 ProfilesView()
             case .connections:
                 ConnectionsView()
+            case .analysis:
+                AnalysisView()
             case .logs:
                 LogsView()
             case .antigravity:

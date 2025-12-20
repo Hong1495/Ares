@@ -3,7 +3,8 @@ import UniformTypeIdentifiers
 
 struct LogsView: View {
     @EnvironmentObject var clashViewModel: ClashViewModel
-    @AppStorage("logLevel") private var selectedLevel: String = "info"
+    @AppStorage("logLevel") private var globalLogLevel: String = "info"
+    @State private var selectedTabLevel: String = "all"
     @State private var searchText = ""
     @State private var autoScroll = true
     
@@ -14,15 +15,19 @@ struct LogsView: View {
         let lines = clashViewModel.logs
         var filtered = lines
         
-        // Filter by level (Hierarchical)
-        if selectedLevel != "all" && selectedLevel != "silent" {
-            let selectedPriority = priority(for: selectedLevel)
+        // Filter by level (Hierarchical vs Literal)
+        // Tab "All": Displays everything received (already filtered by core settings)
+        // Tab "Debug/Info/etc": Strictly literal matching for that specific level
+        
+        if selectedTabLevel == "all" {
+            // No additional filter for "All" tab
+        } else if selectedTabLevel == "silent" {
+            return []
+        } else {
+            let targetPriority = priority(for: selectedTabLevel)
             filtered = filtered.filter { line in
-                let linePriority = priority(forLine: line)
-                return linePriority >= selectedPriority
+                priority(forLine: line) == targetPriority
             }
-        } else if selectedLevel == "silent" {
-            return [] // Show nothing if silent
         }
         
         // Filter by search
@@ -73,7 +78,8 @@ struct LogsView: View {
                         .fontWeight(.medium)
                         .foregroundStyle(.secondary)
                     
-                    Picker("", selection: $selectedLevel) {
+                    Picker("", selection: $selectedTabLevel) {
+                        Text("All").tag("all")
                         Text("Debug").tag("debug")
                         Text("Info").tag("info")
                         Text("Warning").tag("warning")
