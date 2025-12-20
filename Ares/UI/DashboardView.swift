@@ -63,11 +63,13 @@ struct StatusHeader: View {
         HStack {
             Label(clashViewModel.isRunning ? "Clash Running" : "Clash Stopped", 
                   systemImage: clashViewModel.isRunning ? "bolt.fill" : "bolt.slash.fill")
-                .font(.caption)
+                .font(.footnote)
+                .fontWeight(.medium)
                 .foregroundStyle(clashViewModel.isRunning ? .green : .secondary)
             Spacer()
             Label("Port: 7890", systemImage: "network")
-                .font(.caption)
+                .font(.footnote)
+                .fontWeight(.medium)
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal)
@@ -118,7 +120,8 @@ struct NetworkTrafficCard: View {
                 "Proxy disabled"
             
             Text(statusText)
-                .font(.caption)
+                .font(.footnote)
+                .fontWeight(.medium)
                 .foregroundStyle(.secondary)
         }
         .padding()
@@ -150,8 +153,8 @@ struct ProxyModeCard: View {
                             Image(systemName: modeIcon(mode))
                                 .font(.title2)
                             Text(mode.rawValue.capitalized)
-                                .font(.caption)
-                                .fontWeight(.medium)
+                                .font(.footnote)
+                                .fontWeight(.semibold)
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
@@ -173,7 +176,8 @@ struct ProxyModeCard: View {
             }
             
             Text(modeDescription)
-                .font(.caption)
+                .font(.footnote)
+                .fontWeight(.medium)
                 .foregroundStyle(.secondary)
                 .padding(.top, 4)
         }
@@ -222,7 +226,8 @@ struct TUNModeCard: View {
             .toggleStyle(SwitchToggleStyle(tint: .blue))
             
             Text(appState.tunEnabled ? "TUN Mode is Active" : "TUN Mode is Inactive")
-                .font(.caption)
+                .font(.footnote)
+                .fontWeight(.medium)
                 .foregroundStyle(.secondary)
         }
         .padding()
@@ -279,7 +284,8 @@ struct SmallTrafficCard: View {
             
             VStack(alignment: .leading) {
                 Text(title)
-                    .font(.caption2)
+                    .font(.footnote)
+                    .fontWeight(.semibold)
                     .foregroundStyle(.secondary)
                 if let unit = unit {
                     Text("\(value) \(unit)")
@@ -287,6 +293,7 @@ struct SmallTrafficCard: View {
                 } else {
                     Text(formatBytes(value) + (showRate ? "/s" : ""))
                         .font(.headline)
+                        .monospacedDigit()
                 }
             }
             Spacer()

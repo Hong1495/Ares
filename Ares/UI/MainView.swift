@@ -17,27 +17,35 @@ struct MainView: View {
             )) {
                 NavigationLink(value: AppState.NavigationItem.dashboard) {
                     Label("Dashboard", systemImage: "gauge.with.dots.needle.bottom.50percent")
+                        .font(.headline)
                 }
                 NavigationLink(value: AppState.NavigationItem.proxies) {
                     Label("Proxies", systemImage: "network")
+                        .font(.headline)
                 }
                 NavigationLink(value: AppState.NavigationItem.rules) {
                     Label("Rules", systemImage: "checklist")
+                        .font(.headline)
                 }
                 NavigationLink(value: AppState.NavigationItem.profiles) {
                     Label("Profiles", systemImage: "doc.text.fill")
+                        .font(.headline)
                 }
                 NavigationLink(value: AppState.NavigationItem.connections) {
                     Label("Connections", systemImage: "point.3.connected.trianglepath.dotted")
+                        .font(.headline)
                 }
                 NavigationLink(value: AppState.NavigationItem.antigravity) {
                     Label("Antigravity", systemImage: "sparkles")
+                        .font(.headline)
                 }
                 NavigationLink(value: AppState.NavigationItem.logs) {
                     Label("Logs", systemImage: "list.bullet.rectangle.portrait")
+                        .font(.headline)
                 }
                 NavigationLink(value: AppState.NavigationItem.settings) {
                     Label("Settings", systemImage: "gearshape")
+                        .font(.headline)
                 }
             }
             .listStyle(.sidebar)

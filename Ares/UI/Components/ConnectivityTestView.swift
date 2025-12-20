@@ -34,7 +34,8 @@ struct ConnectivityTestView: View {
                             .frame(height: 30)
                         
                         Text(site.0)
-                            .font(.caption)
+                            .font(.footnote)
+                            .fontWeight(.medium)
                             .foregroundStyle(.secondary)
                         
                         if loadingStates[site.0] == true {
@@ -42,16 +43,20 @@ struct ConnectivityTestView: View {
                         } else if let ms = latencies[site.0] {
                             if ms < 0 {
                                 Text("Error")
-                                    .font(.caption2)
+                                    .font(.footnote)
+                                    .fontWeight(.semibold)
                                     .foregroundStyle(.red)
                             } else {
                                 Text("\(ms) ms")
-                                    .font(.caption2)
+                                    .font(.footnote)
+                                    .fontWeight(.semibold)
+                                    .monospacedDigit()
                                     .foregroundStyle(ms < 200 ? .green : (ms < 500 ? .orange : .red))
                             }
                         } else {
                             Text("Test")
-                                .font(.caption2)
+                                .font(.footnote)
+                                .fontWeight(.medium)
                                 .foregroundStyle(.blue)
                         }
                     }

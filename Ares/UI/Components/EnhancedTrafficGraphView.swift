@@ -20,10 +20,12 @@ struct EnhancedTrafficGraphView: View {
                             .fill(.cyan)
                             .frame(width: 8, height: 8)
                         Text("Upload")
-                            .font(.caption2)
+                            .font(.footnote)
+                            .fontWeight(.medium)
                         Text(formatSpeed(viewModel.currentUpload))
-                            .font(.caption)
+                            .font(.footnote)
                             .fontWeight(.semibold)
+                            .monospacedDigit()
                             .foregroundStyle(.cyan)
                     }
                     HStack(spacing: 6) {
@@ -31,10 +33,12 @@ struct EnhancedTrafficGraphView: View {
                             .fill(.green)
                             .frame(width: 8, height: 8)
                         Text("Download")
-                            .font(.caption2)
+                            .font(.footnote)
+                            .fontWeight(.medium)
                         Text(formatSpeed(viewModel.currentDownload))
-                            .font(.caption)
+                            .font(.footnote)
                             .fontWeight(.semibold)
+                            .monospacedDigit()
                             .foregroundStyle(.green)
                     }
                 }

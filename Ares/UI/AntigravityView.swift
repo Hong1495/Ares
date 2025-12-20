@@ -29,7 +29,7 @@ struct AntigravityView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 8) {
                             Text("Neural Link")
-                                .font(.caption.bold())
+                                .font(.footnote.bold())
                                 .foregroundStyle(.secondary)
                             
                             Circle()
@@ -69,7 +69,8 @@ struct AntigravityView: View {
                             
                             VStack(alignment: .trailing, spacing: 4) {
                                 Text("Connection health")
-                                    .font(.caption)
+                                    .font(.footnote)
+                                    .fontWeight(.medium)
                                     .foregroundStyle(.secondary)
                                 
                                 Text("\(trafficAnalyzer.healthScore)%")
@@ -86,16 +87,18 @@ struct AntigravityView: View {
                     // Lifetime display
                     VStack(spacing: 8) {
                         Text("Lifetime intelligence")
-                            .font(.caption.bold())
+                            .font(.footnote.bold())
                             .foregroundStyle(.secondary)
                         
                         Text(formatTokens(Int64(trafficAnalyzer.lifetimeTokens * 5)))
-                            .font(.system(size: 48, weight: .bold, design: .rounded))
+                            .font(.system(size: 52, weight: .bold, design: .rounded))
+                            .monospacedDigit()
                             .minimumScaleFactor(0.5)
                             .lineLimit(1)
                         
                         Text("Tokens synchronized")
-                            .font(.caption)
+                            .font(.footnote)
+                            .fontWeight(.medium)
                             .foregroundStyle(.secondary)
                     }
                     
@@ -106,26 +109,29 @@ struct AntigravityView: View {
                     HStack(spacing: 40) {
                         VStack(spacing: 4) {
                             Text("TPS")
-                                .font(.caption.bold())
+                                .font(.footnote.bold())
                                 .foregroundStyle(.secondary)
                             Text(String(format: "%.1f", trafficAnalyzer.currentTPS))
                                 .font(.headline)
+                                .monospacedDigit()
                         }
                         
                         VStack(spacing: 4) {
                             Text("Today")
-                                .font(.caption.bold())
+                                .font(.footnote.bold())
                                 .foregroundStyle(.secondary)
                             Text(formatTokens(trafficAnalyzer.totalBytes))
                                 .font(.headline)
+                                .monospacedDigit()
                         }
                         
                         VStack(spacing: 4) {
                             Text("Latency")
-                                .font(.caption.bold())
+                                .font(.footnote.bold())
                                 .foregroundStyle(.secondary)
                             Text("\(isOnline ? googleLatency : 0)ms")
                                 .font(.headline)
+                                .monospacedDigit()
                                 .foregroundStyle(latencyColor(googleLatency))
                         }
                     }
@@ -176,8 +182,8 @@ struct AntigravityView: View {
                                 }
                                 .foregroundStyle(.orange)
                             }
-                            .font(.system(size: 10, design: .monospaced))
-                            .fontWeight(.medium)
+                            .font(.system(size: 12, design: .monospaced))
+                            .fontWeight(.semibold)
                         }
                         
                         Spacer(minLength: 0)
@@ -228,7 +234,8 @@ struct AntigravityView: View {
                             }
                             if trafficAnalyzer.debugLogs.isEmpty {
                                 Text("No activity")
-                                    .font(.caption)
+                                    .font(.footnote)
+                                    .fontWeight(.medium)
                                     .foregroundStyle(.secondary)
                             }
                         }
@@ -243,22 +250,27 @@ struct AntigravityView: View {
                 DisclosureGroup(isExpanded: $isDiagnosticsExpanded) {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text("Link diagnostics").font(.caption.bold())
+                            Text("Link diagnostics").font(.footnote.bold())
                             Spacer()
                             Button("Reset cache") { trafficAnalyzer.debugLogs.removeAll() }
                                 .buttonStyle(.link)
-                                .font(.caption2)
+                                .font(.footnote)
+                                .fontWeight(.medium)
                         }
                         .foregroundStyle(.secondary)
                         
                         ForEach(trafficAnalyzer.debugLogs.prefix(10), id: \.0) { log in
                             HStack {
-                                Text(log.0).font(.system(.caption2, design: .monospaced))
+                                Text(log.0).font(.system(.footnote, design: .monospaced))
+                                    .fontWeight(.medium)
                                     .lineLimit(1)
                                 Spacer()
-                                Text(formatTokens(log.3)).font(.system(.caption2, design: .monospaced))
+                                Text(formatTokens(log.3)).font(.system(.footnote, design: .monospaced))
+                                    .fontWeight(.medium)
                                     .foregroundStyle(.secondary)
-                                Text(log.1).font(.caption2).foregroundStyle(.blue)
+                                Text(log.1).font(.footnote)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.blue)
                                     .frame(width: 100, alignment: .trailing)
                             }
                             .padding(.vertical, 2)
@@ -267,7 +279,8 @@ struct AntigravityView: View {
                     .padding(.top, 10)
                 } label: {
                     Label("Technical diagnostics", systemImage: "chevron.right.square")
-                        .font(.caption)
+                        .font(.footnote)
+                        .fontWeight(.medium)
                         .foregroundStyle(.secondary)
                 }
                 .padding()
@@ -374,11 +387,13 @@ struct ProcessRow: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(name)
-                    .font(.caption)
+                    .font(.footnote)
+                    .fontWeight(.medium)
                     .foregroundStyle(.primary)
                 Spacer()
                 Text(formatDetailedBytes(value))
-                    .font(.caption.monospaced())
+                    .font(.system(.footnote, design: .monospaced))
+                    .fontWeight(.semibold)
                     .foregroundStyle(.secondary)
             }
             

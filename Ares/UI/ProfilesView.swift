@@ -144,16 +144,18 @@ struct ProfileCard: View {
                         .font(.headline)
                     if let url = profile.url {
                         Text(url.absoluteString)
-                            .font(.caption)
+                            .font(.footnote)
+                            .fontWeight(.medium)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
                     if let lastUpdated = profile.lastUpdated {
                         HStack(spacing: 4) {
                             Image(systemName: "clock")
-                                .font(.caption2)
+                                .font(.footnote)
                             Text(lastUpdated, style: .relative)
-                                .font(.caption2)
+                                .font(.footnote)
+                                .fontWeight(.medium)
                         }
                         .foregroundStyle(.secondary)
                     }
@@ -227,6 +229,7 @@ struct AddProfileSheet: View {
         VStack(spacing: 20) {
             Text("Add Remote Profile")
                 .font(.headline)
+                .fontWeight(.bold)
             
             TextField("Profile Name", text: $name)
                 .textFieldStyle(.roundedBorder)
@@ -239,7 +242,8 @@ struct AddProfileSheet: View {
             if let error = errorMessage {
                 Text(error)
                     .foregroundStyle(.red)
-                    .font(.caption)
+                    .font(.footnote)
+                    .fontWeight(.medium)
             }
             
             HStack(spacing: 12) {

@@ -69,7 +69,8 @@ struct LogsView: View {
                 // Level filter
                 HStack(spacing: 6) {
                     Text("Level:")
-                        .font(.caption)
+                        .font(.footnote)
+                        .fontWeight(.medium)
                         .foregroundStyle(.secondary)
                     
                     Picker("", selection: $selectedLevel) {
@@ -102,7 +103,8 @@ struct LogsView: View {
                     .toggleStyle(.switch)
                 
                 Text("\(filteredLogs.count)")
-                    .font(.caption)
+                    .font(.footnote)
+                    .fontWeight(.medium)
                     .monospacedDigit()
                 
                 // Clear button
@@ -171,13 +173,14 @@ struct LogLineView: View {
         HStack(alignment: .top, spacing: 8) {
             // Line number
             Text("\(index + 1)")
-                .font(.system(.caption, design: .monospaced))
+                .font(.system(.footnote, design: .monospaced))
+                .fontWeight(.medium)
                 .foregroundStyle(.secondary)
                 .frame(width: 50, alignment: .trailing)
             
             // Log content
             Text(line)
-                .font(.system(.caption, design: .monospaced))
+                .font(.system(.footnote, design: .monospaced))
                 .foregroundStyle(lineColor)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)

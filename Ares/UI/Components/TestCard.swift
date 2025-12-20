@@ -29,7 +29,8 @@ struct TestCard: View {
                         .font(.title)
                         .foregroundStyle(.secondary)
                     Text("No test results yet")
-                        .font(.caption)
+                        .font(.footnote)
+                        .fontWeight(.medium)
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity)
@@ -39,15 +40,17 @@ struct TestCard: View {
                         ForEach(Array(testResults.sorted(by: { $0.value < $1.value }).prefix(5)), id: \.key) { name, delay in
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(name)
-                                    .font(.caption)
+                                    .font(.footnote)
+                                    .fontWeight(.medium)
                                     .lineLimit(1)
                                 HStack(spacing: 4) {
                                     Circle()
                                         .fill(delayColor(delay))
                                         .frame(width: 6, height: 6)
                                     Text("\(delay)ms")
-                                        .font(.caption2)
-                                        .fontWeight(.medium)
+                                        .font(.footnote)
+                                        .fontWeight(.semibold)
+                                        .monospacedDigit()
                                 }
                             }
                             .padding(8)

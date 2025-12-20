@@ -34,7 +34,8 @@ struct RulesView: View {
                 Spacer()
                 
                 Text("\(filteredRules.count) Rules")
-                    .font(.caption)
+                    .font(.footnote)
+                    .fontWeight(.medium)
                     .foregroundStyle(.secondary)
             }
             .padding()

@@ -30,6 +30,7 @@ struct SettingsView: View {
             Section("General") {
                 Toggle(isOn: $autoStart) {
                     Label("Start with macOS", systemImage: "desktopcomputer")
+                        .fontWeight(.medium)
                 }
                 .onChange(of: autoStart) { _, newValue in
                     Task {
@@ -39,6 +40,7 @@ struct SettingsView: View {
                 
                 Toggle(isOn: $silentStart) {
                     Label("Silent Start", systemImage: "bell.slash")
+                        .fontWeight(.medium)
                 }
                 
                 Picker(selection: $theme) {
@@ -47,6 +49,7 @@ struct SettingsView: View {
                     Text("Dark").tag("dark")
                 } label: {
                     Label("Theme", systemImage: "paintpalette")
+                        .fontWeight(.medium)
                 }
                 .onChange(of: theme) { _, newValue in
                     Task { @MainActor in
@@ -57,23 +60,41 @@ struct SettingsView: View {
             
             // Core Networking
             Section("Clash Core") {
-                LabeledContent("HTTP Port") {
-                    TextField("7892", text: $httpPort)
-                        .frame(width: 60)
+                LabeledContent {
+                    TextField("", text: $httpPort)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 80)
+                } label: {
+                    Text("HTTP Port")
+                        .fontWeight(.medium)
                 }
                 
-                LabeledContent("SOCKS Port") {
-                    TextField("7891", text: $socksPort)
-                        .frame(width: 60)
+                LabeledContent {
+                    TextField("", text: $socksPort)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 80)
+                } label: {
+                    Text("SOCKS Port")
+                        .fontWeight(.medium)
                 }
 
-                LabeledContent("Mixed Port") {
-                    TextField("7890", text: $mixedPort)
-                        .frame(width: 60)
+                LabeledContent {
+                    TextField("", text: $mixedPort)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 80)
+                } label: {
+                    Text("Mixed Port")
+                        .fontWeight(.medium)
                 }
                 
-                Toggle("Allow LAN", isOn: $allowLan)
-                Toggle("IPv6 Support", isOn: $ipv6)
+                Toggle(isOn: $allowLan) {
+                    Text("Allow LAN")
+                        .fontWeight(.medium)
+                }
+                Toggle(isOn: $ipv6) {
+                    Text("IPv6 Support")
+                        .fontWeight(.medium)
+                }
                 
                 Button("Restart Clash Core") {
                     Task {
@@ -85,7 +106,10 @@ struct SettingsView: View {
             
             // Unified TUN Mode Info
             Section {
-                Toggle("Enable TUN Mode", isOn: $tunEnabled)
+                Toggle(isOn: $tunEnabled) {
+                    Text("Enable TUN Mode")
+                        .fontWeight(.medium)
+                }
                 
                 Picker("Network Stack", selection: $tunStack) {
                     Text("System").tag("system")
@@ -93,10 +117,16 @@ struct SettingsView: View {
                 }
                 .disabled(!tunEnabled)
                 
-                Toggle("Auto Route", isOn: $tunAutoRoute)
+                Toggle(isOn: $tunAutoRoute) {
+                    Text("Auto Route")
+                        .fontWeight(.medium)
+                }
                     .disabled(!tunEnabled)
                 
-                Toggle("Auto Detect Interface", isOn: $tunAutoDetectInterface)
+                Toggle(isOn: $tunAutoDetectInterface) {
+                    Text("Auto Detect Interface")
+                        .fontWeight(.medium)
+                }
                     .disabled(!tunEnabled)
             } header: {
                 Text("TUN Mode")
@@ -106,12 +136,15 @@ struct SettingsView: View {
                     Text("• Global traffic capture via virtual interface")
                     Text("• Changes require core restart")
                 }
-                .font(.caption2)
+                .font(.footnote)
+                .fontWeight(.medium)
             }
             
             // System Proxy Bypass
             Section("System Proxy Bypass") {
                 VStack(alignment: .leading, spacing: 8) {
+                    Text("Bypass Domains")
+                        .fontWeight(.medium)
                     TextEditor(text: $bypassRules)
                         .font(.system(.body, design: .monospaced))
                         .frame(height: 100)
@@ -121,7 +154,8 @@ struct SettingsView: View {
                         .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.gray.opacity(0.2)))
                     
                     Text("Comma-separated domains/IPs to bypass proxy")
-                        .font(.caption2)
+                        .font(.footnote)
+                        .fontWeight(.medium)
                         .foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 4)

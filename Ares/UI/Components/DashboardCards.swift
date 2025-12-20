@@ -26,10 +26,11 @@ struct CurrentProxyCard: View {
                 Spacer()
                 // Mode indicator
                 Text(appState.currentMode.rawValue.capitalized)
-                    .font(.caption)
+                    .font(.footnote)
+                    .fontWeight(.medium)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(modeColor.opacity(0.2))
+                    .background(modeColor.opacity(0.15))
                     .foregroundStyle(modeColor)
                     .cornerRadius(6)
             }
@@ -61,8 +62,9 @@ struct CurrentProxyCard: View {
                                 .font(.subheadline)
                             if let current = group.now {
                                 Text(current)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundStyle(.primary)
                             }
                         }
                         
@@ -128,6 +130,7 @@ struct IpInfoCard: View {
                                 .foregroundStyle(.green)
                             Text(country)
                                 .font(.subheadline)
+                                .fontWeight(.medium)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -200,22 +203,24 @@ struct ClashInfoCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("Version")
-                        .font(.caption)
+                        .font(.footnote)
                         .foregroundStyle(.secondary)
                     Spacer()
                     Text(version)
-                        .font(.caption)
-                        .fontWeight(.medium)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .monospacedDigit()
                 }
                 
                 HStack {
                     Text("Memory")
-                        .font(.caption)
+                        .font(.footnote)
                         .foregroundStyle(.secondary)
                     Spacer()
                     Text(formatMemory(memory))
-                        .font(.caption)
-                        .fontWeight(.medium)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .monospacedDigit()
                 }
             }
         }
@@ -276,22 +281,23 @@ struct SystemInfoCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("macOS")
-                        .font(.caption)
+                        .font(.footnote)
                         .foregroundStyle(.secondary)
                     Spacer()
                     Text(osVersion)
-                        .font(.caption)
-                        .fontWeight(.medium)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .monospacedDigit()
                 }
                 
                 HStack {
                     Text("Architecture")
-                        .font(.caption)
+                        .font(.footnote)
                         .foregroundStyle(.secondary)
                     Spacer()
                     Text(architecture)
-                        .font(.caption)
-                        .fontWeight(.medium)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
                 }
             }
         }

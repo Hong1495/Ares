@@ -60,7 +60,8 @@ struct ProxiesView: View {
                             .font(.title2)
                             .fontWeight(.medium)
                         Text("All traffic goes directly")
-                            .font(.caption)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
                             .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity)
@@ -73,8 +74,9 @@ struct ProxiesView: View {
                         Text("No proxy groups available")
                             .foregroundStyle(.secondary)
                         Text("Start Clash to see proxies")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
+                            .font(.footnote)
+                            .fontWeight(.medium)
+                            .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(60)
@@ -150,15 +152,16 @@ struct SimpleProxyGroupCard: View {
                     }
                     
                     Text(group.type)
-                        .font(.caption)
+                        .font(.footnote)
+                        .fontWeight(.medium)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 3)
-                        .background(Color.gray.opacity(0.1))
+                        .background(Color.gray.opacity(0.12))
                         .cornerRadius(4)
                     
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.caption)
+                        .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -240,8 +243,9 @@ struct SimpleProxyButton: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(name)
-                .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
                 .lineLimit(2)
+                .foregroundStyle(isSelected ? Color.primary : Color.primary.opacity(0.8))
             
             HStack(spacing: 6) {
                 if let ms = delay {
@@ -250,7 +254,8 @@ struct SimpleProxyButton: View {
                             .fill(delayColor(ms))
                             .frame(width: 5, height: 5)
                         Text("\(ms)ms")
-                            .font(.system(size: 10))
+                            .font(.system(size: 11, weight: .medium))
+                            .monospacedDigit()
                             .foregroundStyle(.secondary)
                     }
                 } else {

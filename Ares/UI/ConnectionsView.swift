@@ -74,7 +74,8 @@ struct ConnectionsView: View {
             // Toolbar
             HStack(spacing: 12) {
                 Text("\(filteredConnections.count) connections")
-                    .font(.caption)
+                    .font(.footnote)
+                    .fontWeight(.medium)
                     .foregroundStyle(.secondary)
                 
                 Spacer()
@@ -128,18 +129,19 @@ struct ConnectionsView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 4) {
                             Image(systemName: "arrow.down")
-                                .font(.system(size: 9, weight: .bold))
+                                .font(.system(size: 11, weight: .bold))
                                 .foregroundStyle(.blue)
                             Text(formatBytes(conn.download))
                         }
                         HStack(spacing: 4) {
                             Image(systemName: "arrow.up")
-                                .font(.system(size: 9, weight: .bold))
+                                .font(.system(size: 11, weight: .bold))
                                 .foregroundStyle(.orange)
                             Text(formatBytes(conn.upload))
                         }
                     }
-                    .font(.system(.caption, design: .monospaced))
+                    .font(.system(.footnote, design: .monospaced))
+                    .fontWeight(.medium)
                 }
                 .width(ideal: 110)
                 
@@ -148,13 +150,15 @@ struct ConnectionsView: View {
                         Text("↓ \(formatSpeed(conn.downloadSpeed))").foregroundStyle(.blue)
                         Text("↑ \(formatSpeed(conn.uploadSpeed))").foregroundStyle(.orange)
                     }
-                    .font(.system(.caption, design: .monospaced))
+                    .font(.system(.footnote, design: .monospaced))
+                    .fontWeight(.medium)
                 }
                 .width(ideal: 110)
                 
                 TableColumn("Chains", value: \.chainsString) { conn in
                     Text(conn.chainsString)
-                        .font(.caption2)
+                        .font(.footnote)
+                        .fontWeight(.medium)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
@@ -163,12 +167,13 @@ struct ConnectionsView: View {
                 TableColumn("Rule", value: \.rule) { conn in
                     VStack(alignment: .leading, spacing: 1) {
                         Text(conn.rule)
-                            .font(.caption)
+                            .font(.footnote)
                             .fontWeight(.medium)
                             .foregroundStyle(.primary)
                         if !conn.rulePayload.isEmpty {
                             Text(conn.rulePayload)
-                                .font(.system(size: 9))
+                                .font(.system(size: 11))
+                                .fontWeight(.medium)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -177,35 +182,40 @@ struct ConnectionsView: View {
                 
                 TableColumn("Process", value: \.processName) { conn in
                     Text(conn.processName)
-                        .font(.caption)
+                        .font(.footnote)
+                        .fontWeight(.medium)
                         .foregroundStyle(.primary)
                 }
                 .width(ideal: 100)
                 
                 TableColumn("Time", value: \.start) { conn in
                     Text(formatDuration(conn.duration))
-                        .font(.caption)
+                        .font(.footnote)
+                        .fontWeight(.medium)
                         .foregroundStyle(.secondary)
                 }
                 .width(ideal: 70)
                 
                 TableColumn("Source", value: \.sourceString) { conn in
                     Text(conn.sourceString)
-                        .font(.system(.caption, design: .monospaced))
+                        .font(.system(.footnote, design: .monospaced))
+                        .fontWeight(.medium)
                         .foregroundStyle(.secondary)
                 }
                 .width(ideal: 140)
                 
                 TableColumn("Destination", value: \.destinationString) { conn in
                     Text(conn.destinationString)
-                        .font(.system(.caption, design: .monospaced))
+                        .font(.system(.footnote, design: .monospaced))
+                        .fontWeight(.medium)
                         .foregroundStyle(.secondary)
                 }
                 .width(ideal: 140)
                 
                 TableColumn("Type", value: \.typeString) { conn in
                     Text(conn.typeString)
-                        .font(.caption2)
+                        .font(.footnote)
+                        .fontWeight(.medium)
                         .foregroundStyle(.secondary)
                 }
                 .width(ideal: 90)
