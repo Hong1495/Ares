@@ -3,43 +3,26 @@ import UniformTypeIdentifiers
 
 struct LogsView: View {
     @EnvironmentObject var clashViewModel: ClashViewModel
-    @State private var selectedLevel: LogLevel = .all
+    @AppStorage("logLevel") private var selectedLevel: String = "info"
     @State private var searchText = ""
     @State private var autoScroll = true
     
-    enum LogLevel: String, CaseIterable {
-        case all = "All"
-        case error = "Error"
-        case warning = "Warning"
-        case info = "Info"
-        case debug = "Debug"
-    }
+    // Levels mapped for Priority Filtering
+    private let levels = ["debug", "info", "warning", "error", "silent"]
     
     var filteredLogs: [String] {
-        // Direct access, no costly splitting
         let lines = clashViewModel.logs
+        var filtered = lines
         
-        var filtered = lines // .filter { !$0.isEmpty } // Already non-empty
-        
-        // Filter out Clash core INFO logs (too noisy)
-        filtered = filtered.filter { line in
-            // Keep our own logs (starts with timestamp in brackets)
-            if line.hasPrefix("[") {
-                return true
-            }
-            // Filter out Clash INFO logs
-            if line.contains("INFO") || line.contains("36m") {
-                return false
-            }
-            // Keep ERROR and WARN
-            return true
-        }
-        
-        // Filter by level
-        if selectedLevel != .all {
+        // Filter by level (Hierarchical)
+        if selectedLevel != "all" && selectedLevel != "silent" {
+            let selectedPriority = priority(for: selectedLevel)
             filtered = filtered.filter { line in
-                line.localizedCaseInsensitiveContains(selectedLevel.rawValue)
+                let linePriority = priority(forLine: line)
+                return linePriority >= selectedPriority
             }
+        } else if selectedLevel == "silent" {
+            return [] // Show nothing if silent
         }
         
         // Filter by search
@@ -50,6 +33,33 @@ struct LogsView: View {
         }
         
         return filtered
+    }
+    
+    private func priority(for level: String) -> Int {
+        switch level {
+        case "debug": return 0
+        case "info": return 1
+        case "warning": return 2
+        case "error": return 3
+        case "silent": return 999
+        default: return -1
+        }
+    }
+    
+    private func priority(forLine line: String) -> Int {
+        let lower = line.lowercased()
+        if lower.contains("error") || lower.contains("fatal") || lower.contains("31m") {
+            return 3
+        } else if lower.contains("warning") || lower.contains("warn") || lower.contains("33m") {
+            return 2
+        } else if lower.contains("debug") || lower.contains("35m") {
+            return 0
+        } else if lower.contains("info") || lower.contains("36m") {
+            return 1
+        } else {
+            // Default to Info for our own apps logs [timestamp]
+            return 1
+        }
     }
     
     var body: some View {
@@ -63,12 +73,14 @@ struct LogsView: View {
                         .foregroundStyle(.secondary)
                     
                     Picker("", selection: $selectedLevel) {
-                        ForEach(LogLevel.allCases, id: \.self) { level in
-                            Text(level.rawValue).tag(level)
-                        }
+                        Text("Debug").tag("debug")
+                        Text("Info").tag("info")
+                        Text("Warning").tag("warning")
+                        Text("Error").tag("error")
+                        Text("Silent").tag("silent")
                     }
                     .pickerStyle(.segmented)
-                    .frame(maxWidth: 350)
+                    .frame(maxWidth: 400)
                 }
                 
                 Spacer()

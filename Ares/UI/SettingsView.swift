@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var clashViewModel: ClashViewModel
+    @EnvironmentObject var appState: AppState
     @AppStorage("autoStart") private var autoStart = false
     @AppStorage("silentStart") private var silentStart = true
     @AppStorage("theme") private var theme = "system"
@@ -21,28 +22,25 @@ struct SettingsView: View {
     @AppStorage("tunAutoDetectInterface") private var tunAutoDetectInterface = true
     
     // System Proxy Bypass
-    @State private var bypassRules = "localhost,127.*,10.*,172.16.*,172.31.*,192.168.*"
+    @AppStorage("bypassRules") private var bypassRules = "localhost,127.*,10.*,172.16.*,172.31.*,192.168.*"
     
     var body: some View {
         Form {
-            // System Settings
-            Section("System") {
+            // General Settings
+            Section("General") {
                 Toggle(isOn: $autoStart) {
                     Label("Start with macOS", systemImage: "desktopcomputer")
                 }
                 .onChange(of: autoStart) { _, newValue in
-                    do {
-                        try LaunchService.shared.setLaunchAtLogin(enabled: newValue)
-                        print("[Settings] Auto-start set to \(newValue)")
-                    } catch {
-                        print("[Settings] Failed to set auto-start: \(error)")
-                        // Revert if failed (optional, but good UX)
-                        // autoStart = !newValue 
+                    Task {
+                        try? LaunchService.shared.setLaunchAtLogin(enabled: newValue)
                     }
                 }
+                
                 Toggle(isOn: $silentStart) {
                     Label("Silent Start", systemImage: "bell.slash")
                 }
+                
                 Picker(selection: $theme) {
                     Text("System").tag("system")
                     Text("Light").tag("light")
@@ -51,111 +49,97 @@ struct SettingsView: View {
                     Label("Theme", systemImage: "paintpalette")
                 }
                 .onChange(of: theme) { _, newValue in
-                    DispatchQueue.main.async {
+                    Task { @MainActor in
                         ThemeService.shared.theme = newValue
                     }
                 }
             }
             
-            // Clash Core Settings
+            // Core Networking
             Section("Clash Core") {
-                LabeledContent {
+                LabeledContent("HTTP Port") {
                     TextField("7892", text: $httpPort)
-                        .frame(width: 80)
-                } label: {
-                    Label("HTTP Port", systemImage: "globe")
+                        .frame(width: 60)
                 }
                 
-                LabeledContent {
+                LabeledContent("SOCKS Port") {
                     TextField("7891", text: $socksPort)
-                        .frame(width: 80)
-                } label: {
-                    Label("SOCKS Port", systemImage: "network")
+                        .frame(width: 60)
                 }
 
-                LabeledContent {
+                LabeledContent("Mixed Port") {
                     TextField("7890", text: $mixedPort)
-                        .frame(width: 80)
-                } label: {
-                    Label("Mixed Port", systemImage: "arrow.triangle.merge")
+                        .frame(width: 60)
                 }
                 
-                Toggle(isOn: $allowLan) {
-                    Label("Allow LAN", systemImage: "wifi")
-                }
+                Toggle("Allow LAN", isOn: $allowLan)
+                Toggle("IPv6 Support", isOn: $ipv6)
                 
-                Toggle(isOn: $ipv6) {
-                    Label("IPv6", systemImage: "network.badge.shield.half.filled")
-                }
-                
-                Button("Restart Core") {
+                Button("Restart Clash Core") {
                     Task {
                         await clashViewModel.restart()
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.bordered)
             }
             
-            // TUN Mode  
-            Section("TUN Mode") {
-                Toggle(isOn: $tunEnabled) {
-                    Label("Enable TUN", systemImage: "network")
-                }
-                .help("Enable virtual network interface for global traffic capture")
+            // Unified TUN Mode Info
+            Section {
+                Toggle("Enable TUN Mode", isOn: $tunEnabled)
                 
-                Picker(selection: $tunStack) {
-                    Text("system").tag("system")
-                    Text("gvisor").tag("gvisor")
-                } label: {
-                    Label("Stack", systemImage: "square.3.layers.3d")
+                Picker("Network Stack", selection: $tunStack) {
+                    Text("System").tag("system")
+                    Text("gVisor").tag("gvisor")
                 }
+                .disabled(!tunEnabled)
                 
-                Toggle(isOn: $tunAutoRoute) {
-                    Label("Auto Route", systemImage: "arrow.triangle.branch")
-                }
+                Toggle("Auto Route", isOn: $tunAutoRoute)
+                    .disabled(!tunEnabled)
                 
-                Toggle(isOn: $tunAutoDetectInterface) {
-                    Label("Auto Detect Interface", systemImage: "antenna.radiowaves.left.and.right")
+                Toggle("Auto Detect Interface", isOn: $tunAutoDetectInterface)
+                    .disabled(!tunEnabled)
+            } header: {
+                Text("TUN Mode")
+            } footer: {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("• Requires administrator privileges")
+                    Text("• Global traffic capture via virtual interface")
+                    Text("• Changes require core restart")
                 }
-            }
-            
-            // Note about TUN
-            Section("TUN Mode") {
-                Text("TUN mode requires administrator privileges")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text("Changes to TUN settings require core restart")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                .font(.caption2)
             }
             
             // System Proxy Bypass
-            Section("System Proxy") {
+            Section("System Proxy Bypass") {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Bypass Rules")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    
                     TextEditor(text: $bypassRules)
-                        .frame(height: 80)
                         .font(.system(.body, design: .monospaced))
-                        .border(Color.gray.opacity(0.3))
+                        .frame(height: 100)
+                        .padding(4)
+                        .background(Color(nsColor: .textBackgroundColor))
+                        .cornerRadius(4)
+                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.gray.opacity(0.2)))
                     
-                    Text("Comma-separated list of domains/IPs to bypass")
+                    Text("Comma-separated domains/IPs to bypass proxy")
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                 }
+                .padding(.vertical, 4)
                 
-                Button("Apply Bypass Rules") {
-                    applyBypassRules()
+                Button("Apply Proxy Rules") {
+                    Task {
+                        // Refresh system proxy with new rules if currently enabled
+                        if appState.systemProxyEnabled {
+                            await appState.toggleSystemProxy() // Off
+                            await appState.toggleSystemProxy() // On with new rules
+                        }
+                    }
                 }
                 .buttonStyle(.bordered)
             }
             
-            // Advanced
+            // Advanced & Maintenance
             Section("Advanced") {
-                Toggle("Enable Logs", isOn: .constant(true))
-                
                 Picker("Log Level", selection: $logLevel) {
                     Text("Silent").tag("silent")
                     Text("Error").tag("error")
@@ -163,40 +147,37 @@ struct SettingsView: View {
                     Text("Info").tag("info")
                     Text("Debug").tag("debug")
                 }
-                
-                Button("Clear Cache") {
-                    clearCache()
+                .onChange(of: logLevel) { _, newValue in
+                    Task {
+                        try? await ClashController.shared.setLogLevel(newValue)
+                    }
                 }
                 
-                Button("Reset Settings") {
-                    resetSettings()
+                HStack {
+                    Button("Clear Cache") {
+                        clearCache()
+                    }
+                    Spacer()
+                    Button("Reset to Defaults") {
+                        resetSettings()
+                    }
+                    .foregroundStyle(.red)
                 }
-                .foregroundStyle(.red)
+                .buttonStyle(.bordered)
             }
         }
         .formStyle(.grouped)
         .navigationTitle("Settings")
     }
     
-    private func applyBypassRules() {
-        let rules = bypassRules.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-        print("[Settings] Bypass rules saved: \(rules)")
-        // Bypass rules are automatically used by SystemProxyManager when enabled
-    }
-    
     private func clearCache() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let aresDir = appSupport.appendingPathComponent("Ares")
-        
-        // Clear clash cache directory if exists
-        let cacheDir = aresDir.appendingPathComponent("cache")
+        let cacheDir = appSupport.appendingPathComponent("Ares/cache")
         try? FileManager.default.removeItem(at: cacheDir)
-        
         print("[Settings] Cache cleared")
     }
     
     private func resetSettings() {
-        // Reset to defaults
         httpPort = "7892"
         socksPort = "7891"
         mixedPort = "7890"
@@ -206,10 +187,8 @@ struct SettingsView: View {
         autoStart = false
         silentStart = true
         theme = "system"
+        bypassRules = "localhost,127.*,10.*,172.16.*,172.31.*,192.168.*"
         
-        print("[Settings] Settings reset to defaults")
-        
-        // Restart core to apply
         Task {
             await clashViewModel.restart()
         }

@@ -402,6 +402,21 @@ class ClashController: ObservableObject {
         
         throw NSError(domain: "ClashController", code: 2, userInfo: nil)
     }
+
+    /// Set Clash log level
+    func setLogLevel(_ level: String) async throws {
+        guard let url = URL(string: "\(baseURL)/configs") else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let body = ["log-level": level]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (_, _) = try await URLSession.shared.data(for: request)
+        ClashViewModel.shared.addLog("[ClashController] Set log level to \(level)")
+    }
     
     /// Monitor active connections
     func monitorConnections() async {

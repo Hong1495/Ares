@@ -11,10 +11,12 @@ class SystemProxyManager {
     /// This will prompt for password on each toggle
     /// Set system proxy using networksetup command
     /// Uses password-less sudo if available, otherwise prompts for password
-    func setSystemProxy(enabled: Bool, httpPort: Int = 7890, socksPort: Int = 7891) async -> Bool {
+    func setSystemProxy(enabled: Bool, httpPort: Int = 7890, socksPort: Int = 7891, bypassRules: String = "") async -> Bool {
         print("[SystemProxy] \(enabled ? "Enabling" : "Disabling") system proxy via networksetup...")
         
-        // CRITICAL: Run ENTIRE operation on background thread (including getNetworkServices)
+        let bypassArray = bypassRules.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        
+        // CRITICAL: Run ENTIRE operation on background thread (including getNetworkServicesSync)
         return await Task.detached {
             let services = self.getNetworkServicesSync()
             guard !services.isEmpty else {
@@ -36,6 +38,11 @@ class SystemProxyManager {
                         commandsToRun.append(["-setwebproxystate", service, "on"])
                         commandsToRun.append(["-setsecurewebproxystate", service, "on"])
                         commandsToRun.append(["-setsocksfirewallproxystate", service, "on"])
+                        
+                        // Apply bypass rules if provided
+                        if !bypassArray.isEmpty {
+                            commandsToRun.append(["-setproxybypassdomains", service] + bypassArray)
+                        }
                     } else {
                         commandsToRun.append(["-setwebproxystate", service, "off"])
                         commandsToRun.append(["-setsecurewebproxystate", service, "off"])
@@ -48,10 +55,10 @@ class SystemProxyManager {
                         task.arguments = ["-n", "/usr/sbin/networksetup"] + args
                         
                         try? task.run()
-                        task.waitUntilExit()  // OK to block - we're on background thread
+                        task.waitUntilExit()
                         
                         if task.terminationStatus != 0 {
-                            print("[SystemProxy] ⚠️ Sudo command failed for \(service)")
+                            print("[SystemProxy] ⚠️ Sudo command failed for \(service): \(args.first ?? "")")
                         }
                     }
                 }
@@ -73,6 +80,12 @@ class SystemProxyManager {
                     commands.append("networksetup -setwebproxystate '\(service)' on")
                     commands.append("networksetup -setsecurewebproxystate '\(service)' on")
                     commands.append("networksetup -setsocksfirewallproxystate '\(service)' on")
+                    
+                    // Apply bypass rules
+                    if !bypassArray.isEmpty {
+                        let bypassStr = bypassArray.map { "'\($0)'" }.joined(separator: " ")
+                        commands.append("networksetup -setproxybypassdomains '\(service)' \(bypassStr)")
+                    }
                 } else {
                     // Disable proxies
                     commands.append("networksetup -setwebproxystate '\(service)' off")

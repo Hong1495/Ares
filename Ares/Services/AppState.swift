@@ -150,22 +150,11 @@ class AppState: ObservableObject {
              _ = await PrivilegeService.shared.installSudoers()
         }
         
-        // Use correct ports based on TUN mode
-        let httpPort: Int
-        let socksPort: Int
+        // Determine correct ports and rules
+        let (httpPort, socksPort) = getProxyPorts()
+        let bypassRules = UserDefaults.standard.string(forKey: "bypassRules") ?? ""
         
-        if tunEnabled {
-            // TUN mode uses fixed high ports (port isolation)
-            httpPort = 17890
-            socksPort = 17891
-        } else {
-            // Normal mode uses user-configured ports
-            let defaults = UserDefaults.standard
-            httpPort = Int(defaults.string(forKey: "mixedPort") ?? "7890") ?? 7890
-            socksPort = Int(defaults.string(forKey: "socksPort") ?? "7891") ?? 7891
-        }
-        
-        guard await systemProxyManager.setSystemProxy(enabled: newState, httpPort: httpPort, socksPort: socksPort) else {
+        guard await systemProxyManager.setSystemProxy(enabled: newState, httpPort: httpPort, socksPort: socksPort, bypassRules: bypassRules) else {
             clashViewModel.addLog("[AppState] ❌ Failed to set system proxy")
             // Revert on failure
             systemProxyEnabled = !newState
@@ -312,27 +301,28 @@ class AppState: ObservableObject {
              _ = await PrivilegeService.shared.installSudoers()
         }
         
-        // Use correct ports based on TUN mode
-        let httpPort: Int
-        let socksPort: Int
+        // Determine correct ports and rules
+        let (httpPort, socksPort) = getProxyPorts()
+        let bypassRules = UserDefaults.standard.string(forKey: "bypassRules") ?? ""
         
-        if tunEnabled {
-            // TUN mode uses fixed high ports (port isolation)
-            httpPort = 17890
-            socksPort = 17891
-        } else {
-            // Normal mode uses user-configured ports
-            let defaults = UserDefaults.standard
-            httpPort = Int(defaults.string(forKey: "mixedPort") ?? "7890") ?? 7890
-            socksPort = Int(defaults.string(forKey: "socksPort") ?? "7891") ?? 7891
-        }
-        
-        if await systemProxyManager.setSystemProxy(enabled: true, httpPort: httpPort, socksPort: socksPort) {
+        if await systemProxyManager.setSystemProxy(enabled: true, httpPort: httpPort, socksPort: socksPort, bypassRules: bypassRules) {
             systemProxyEnabled = true
             objectWillChange.send()
             clashViewModel.addLog("[AppState] ✅ System proxy enabled (HTTP/HTTPS: \(httpPort), SOCKS: \(socksPort))")
         } else {
             clashViewModel.addLog("[AppState] ❌ Failed to restore system proxy")
+        }
+    }
+    
+    /// Helper to get proxy ports based on TUN mode state
+    private func getProxyPorts() -> (Int, Int) {
+        if tunEnabled {
+            return (17890, 17891) // Isolated high ports for TUN
+        } else {
+            let defaults = UserDefaults.standard
+            let http = Int(defaults.string(forKey: "mixedPort") ?? "7890") ?? 7890
+            let socks = Int(defaults.string(forKey: "socksPort") ?? "7891") ?? 7891
+            return (http, socks)
         }
     }
 }

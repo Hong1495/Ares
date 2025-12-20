@@ -7,6 +7,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             // Initial health check and sync on launch
             await checkAndRecoverState()
         }
+        
+        // Handle Silent Start
+        let silent = UserDefaults.standard.bool(forKey: "silentStart")
+        if silent {
+            print("[AppDelegate] 🤫 Silent start enabled - hiding application")
+            // Hide the entire application from foreground
+            DispatchQueue.main.async {
+                NSApp.hide(nil)
+            }
+        }
     }
     
     func applicationWillTerminate(_ notification: Notification) {
