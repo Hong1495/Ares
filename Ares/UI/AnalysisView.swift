@@ -192,7 +192,7 @@ struct DetailContent: View {
             if let selectedId = selectedRequestId,
                let request = displayRequests.first(where: { $0.id == selectedId }) {
                 InspectorView(request: request)
-                    .frame(width: 380) // Slightly wider for better readability
+                    .frame(minWidth: 300, idealWidth: 380, maxWidth: .infinity)
                     .background(Color(nsColor: .windowBackgroundColor))
             }
         }
@@ -660,7 +660,7 @@ struct JSONTreeView: View {
                 }
             }
         } else if let array = value as? [Any] {
-            JSONFolderView(key: key, count: array.count, depth: depth, icon: "brackets.square") {
+            JSONFolderView(key: key, count: array.count, depth: depth, icon: "text.justify") {
                 ForEach(0..<array.count, id: \.self) { i in
                     JSONTreeView(value: array[i], key: "\(i)", depth: depth + 1)
                 }
@@ -686,8 +686,8 @@ struct JSONFolderView<Content: View>: View {
         self.depth = depth
         self.icon = icon
         self.content = content
-        // Auto-expand top level or small objects
-        self._isExpanded = State(initialValue: depth == 0 || count < 5)
+        // Default ALL collapsed as requested
+        self._isExpanded = State(initialValue: false)
     }
     
     var body: some View {
@@ -712,7 +712,7 @@ struct JSONFolderView<Content: View>: View {
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                     
-                    Text(isExpanded ? "" : "\(count) items")
+                    Text(isExpanded ? "" : "{\(count)}")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }

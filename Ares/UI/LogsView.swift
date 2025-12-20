@@ -15,19 +15,19 @@ struct LogsView: View {
         let lines = clashViewModel.logs
         var filtered = lines
         
-        // Filter by level (Hierarchical vs Literal)
-        // Tab "All": Displays everything received (already filtered by core settings)
-        // Tab "Debug/Info/etc": Strictly literal matching for that specific level
+        // 1. Mandatory Baseline: Filter by Global Log Level (from Settings)
+        let globalPriority = priority(for: globalLogLevel)
+        filtered = filtered.filter { priority(forLine: $0) >= globalPriority }
         
+        // 2. View Filter: Tab-specific logic
         if selectedTabLevel == "all" {
-            // No additional filter for "All" tab
+            // "All" keeps everything from the global baseline
         } else if selectedTabLevel == "silent" {
             return []
         } else {
+            // Specific tabs: Strictly literal matching for that exact level
             let targetPriority = priority(for: selectedTabLevel)
-            filtered = filtered.filter { line in
-                priority(forLine: line) == targetPriority
-            }
+            filtered = filtered.filter { priority(forLine: $0) == targetPriority }
         }
         
         // Filter by search
