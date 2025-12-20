@@ -35,16 +35,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         print("🚀 Starting Clash...")
         await ClashViewModel.shared.start()
         
-        // 1.1 First-run health check: if not running, wait and retry once
-        try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5s wait to stabilize
-        if !ClashViewModel.shared.isRunning {
-            print("⚠️ Initial Clash start failed or slow, retrying...")
-            await ClashViewModel.shared.stop()
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
-            await ClashViewModel.shared.start()
-        }
-        
-        // 2. Sync state with Clash
+        // 2. Sync state with Clash immediately
         await AppState.shared.syncWithClash()
         
         // 3. Restore System Proxy state if enabled (NON-BLOCKING)

@@ -284,14 +284,20 @@ final class ConnectionsViewModel: ObservableObject {
     private var webSocketTask: URLSessionWebSocketTask?
     private var isMonitoring = false
     
-    func startMonitoring() async {
-        guard !isMonitoring else { return }
-        isMonitoring = true
+    func startMonitoring(isRetry: Bool = false) async {
+        if !isRetry {
+            guard !isMonitoring else { return }
+            isMonitoring = true
+        }
         
         // Use dynamic port based on TUN mode (port isolation)
         let tunEnabled = AppState.shared.tunEnabled
         let port = tunEnabled ? 19097 : 9097
         let url = URL(string: "ws://127.0.0.1:\(port)/connections")!
+        
+        // Cancel existing if any
+        webSocketTask?.cancel()
+        
         webSocketTask = URLSession.shared.webSocketTask(with: url)
         webSocketTask?.resume()
         
@@ -326,8 +332,19 @@ final class ConnectionsViewModel: ObservableObject {
                 await receiveMessages()
             }
         } catch {
-            print("[ConnectionsViewModel] WebSocket error: \(error)")
-            isMonitoring = false
+            let nsError = error as NSError
+            // Silence expected startup/shutdown errors (61: Connection Refused, 57: Socket not connected, -999: Cancelled)
+            if nsError.code != 61 && nsError.code != 57 && nsError.code != -999 {
+                print("[ConnectionsViewModel] ⚠️ WebSocket error: \(error.localizedDescription)")
+            }
+            
+            // Auto-retry if still monitoring
+            if isMonitoring {
+                Task {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000) // 1s wait
+                    await self.startMonitoring(isRetry: true)
+                }
+            }
         }
     }
     

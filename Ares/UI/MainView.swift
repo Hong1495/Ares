@@ -21,6 +21,9 @@ struct MainView: View {
                 NavigationLink(value: AppState.NavigationItem.proxies) {
                     Label("Proxies", systemImage: "network")
                 }
+                NavigationLink(value: AppState.NavigationItem.rules) {
+                    Label("Rules", systemImage: "checklist")
+                }
                 NavigationLink(value: AppState.NavigationItem.profiles) {
                     Label("Profiles", systemImage: "doc.text.fill")
                 }
@@ -54,7 +57,7 @@ struct MainView: View {
             case .antigravity:
                 AntigravityView()
             case .rules:
-                Text("Rules - Coming Soon")
+                RulesView()
             case .settings:
                 SettingsView()
             }

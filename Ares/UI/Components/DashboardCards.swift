@@ -149,37 +149,35 @@ struct IpInfoCard: View {
         }
     }
     
-    private func fetchIPInfo() async {
-        DispatchQueue.main.async {
-            isLoading = true
-        }
-        defer { 
-            DispatchQueue.main.async {
-                isLoading = false 
+    @MainActor
+    private func fetchIPInfo(retries: Int = 3) async {
+        isLoading = true
+        
+        for attempt in 1...retries {
+            do {
+                print("[IpInfoCard] Fetching IP (Attempt \(attempt))...")
+                let url = URL(string: "https://ipapi.co/json/")!
+                let (data, _) = try await URLSession.shared.data(from: url)
+                let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+                
+                let ip = json?["ip"] as? String ?? "Unknown"
+                let country = json?["country_name"] as? String
+                let city = json?["city"] as? String
+                
+                print("[IpInfoCard] Got IP: \(ip)")
+                
+                self.ipInfo = IPInfo(ip: ip, country: country, city: city)
+                self.isLoading = false
+                return // Success
+            } catch {
+                print("[IpInfoCard] Attempt \(attempt) failed: \(error.localizedDescription)")
+                if attempt < retries {
+                    try? await Task.sleep(nanoseconds: 2_000_000_000) // Wait 2s
+                }
             }
         }
         
-        do {
-            print("[IpInfoCard] Fetching IP...")
-            // Use ipapi.co which supports HTTPS and returns all info in one request
-            let url = URL(string: "https://ipapi.co/json/")!
-            let (data, _) = try await URLSession.shared.data(from: url)
-            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-            
-            let ip = json?["ip"] as? String ?? "Unknown"
-            let country = json?["country_name"] as? String
-            let city = json?["city"] as? String
-            
-            print("[IpInfoCard] Got IP: \(ip), Location: \(country ?? "N/A"), \(city ?? "N/A")")
-            
-            await MainActor.run {
-                DispatchQueue.main.async {
-                    ipInfo = IPInfo(ip: ip, country: country, city: city)
-                }
-            }
-        } catch {
-            print("[IpInfoCard] Error: \(error)")
-        }
+        self.isLoading = false
     }
 }
 
@@ -232,32 +230,31 @@ struct ClashInfoCard: View {
         }
     }
     
-    private func fetchClashInfo() async {
-        do {
-            let url = URL(string: "http://127.0.0.1:9097/version")!
-            let (data, _) = try await URLSession.shared.data(from: url)
-            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-            
-            print("[ClashInfoCard] API Response: \(json ?? [:])")
-            
-            if let versionStr = json?["version"] as? String {
-                await MainActor.run {
-                    DispatchQueue.main.async {
-                        version = versionStr
-                    }
+    @EnvironmentObject var appState: AppState
+
+    @MainActor
+    private func fetchClashInfo(retries: Int = 5) async {
+        let port = appState.tunEnabled ? 19097 : 9097
+        let url = URL(string: "http://127.0.0.1:\(port)/version")!
+        
+        for attempt in 1...retries {
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+                
+                if let versionStr = json?["version"] as? String {
+                    self.version = versionStr
+                    return // Success
                 }
-            }
-            
-            // Note: Clash API doesn't return memory in /version endpoint
-            // We'd need to use /memory or另一个 endpoint for that
-        } catch {
-            print("[ClashInfoCard] Error: \(error)")
-            await MainActor.run {
-                DispatchQueue.main.async {
-                    version = "API Error"
+            } catch {
+                print("[ClashInfoCard] Attempt \(attempt) failed: \(error.localizedDescription)")
+                if attempt < retries {
+                    try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5s
                 }
             }
         }
+        
+        self.version = "Offline"
     }
     
     private func formatMemory(_ bytes: Int64) -> String {

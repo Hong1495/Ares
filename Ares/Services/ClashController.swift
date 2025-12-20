@@ -7,6 +7,14 @@ struct TrafficStats: Codable {
     var down: Int64 = 0
 }
 
+/// Clash Rule
+struct ClashRule: Codable, Identifiable {
+    let id: UUID
+    let type: String
+    let payload: String
+    let proxy: String
+}
+
 /// Controller for interacting with Clash API
 @MainActor
 class ClashController: ObservableObject {
@@ -27,6 +35,7 @@ class ClashController: ObservableObject {
     @Published var proxies: [String: Any] = [:]
     @Published var proxyGroups: [ProxyGroup] = []
     @Published var proxyNodes: [String: ProxyNode] = [:]
+    @Published var rules: [ClashRule] = []
     
     private var statusSubscription: AnyCancellable?
     private var refreshTimer: Timer?
@@ -61,6 +70,26 @@ class ClashController: ObservableObject {
     
     /// Start all monitors
     private func startMonitors() {
+        // Trigger initial full sync IMMEDIATELY with retries
+        Task { @MainActor in
+            ClashViewModel.shared.addLog("[ClashController] 🔄 Initial state sync...")
+            for i in 1...10 { // 10s window
+                do {
+                    try await self.fetchProxiesData()
+                    try await self.fetchRules()
+                    if let mode = try? await self.getCurrentMode() {
+                        AppState.shared.currentMode = mode
+                    }
+                    ClashViewModel.shared.addLog("[ClashController] ✅ Initial sync completed (Attempt \(i))")
+                    return
+                } catch {
+                    if i < 10 {
+                        try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    }
+                }
+            }
+        }
+        
         // Start WebSocket for real-time traffic
         startTrafficMonitor()
         
@@ -71,8 +100,6 @@ class ClashController: ObservableObject {
                 try? await self?.fetchProxiesData()
             }
         }
-        // Initial fetch
-        Task { try? await fetchProxiesData() }
     }
     
     /// Stop all monitors
@@ -170,7 +197,7 @@ class ClashController: ObservableObject {
                         return
                     }
                     
-                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    try? await Task.sleep(nanoseconds: 1_000_000_000) // 1.0s wait
                     if self.isMonitoring && ClashViewModel.shared.isRunning {
                         self.restartMonitor()
                     }
@@ -399,6 +426,34 @@ class ClashController: ObservableObject {
             }
         } catch {
             ClashViewModel.shared.addLog("[ClashController] ⚠️ Failed to get connections: \(error)")
+        }
+    }
+    /// Fetch active rules from Clash API
+    func fetchRules() async throws {
+        await Task.yield()
+        guard let url = URL(string: "\(baseURL)/rules") else { return }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            return
+        }
+        
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        guard let rulesList = json?["rules"] as? [[String: Any]] else { return }
+        
+        var fetchedRules: [ClashRule] = []
+        for ruleData in rulesList {
+            if let type = ruleData["type"] as? String,
+               let payload = ruleData["payload"] as? String,
+               let proxy = ruleData["proxy"] as? String {
+                fetchedRules.append(ClashRule(id: UUID(), type: type, payload: payload, proxy: proxy))
+            }
+        }
+        
+        await MainActor.run {
+            DispatchQueue.main.async {
+                self.rules = fetchedRules
+            }
         }
     }
 }

@@ -79,6 +79,11 @@ actor ClashServiceActor {
         // Start based on TUN mode
         let tunEnabled = await MainActor.run { AppState.shared.tunEnabled }
         
+        // Update API controller port immediately
+        await MainActor.run {
+            ClashController.shared.updatePort(tunEnabled: tunEnabled)
+        }
+        
         if tunEnabled {
             await startWithTUN()
         } else {
@@ -191,50 +196,18 @@ actor ClashServiceActor {
             process = proc
             pipe = outputPipe
             
-            // Wait briefly to see if sudo fails immediately
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            
-            if !proc.isRunning {
-                 addLog("[ClashServiceActor] ❌ Sudo launch failed immediately")
-                 let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-                 if let output = String(data: data, encoding: .utf8) {
-                     addLog("Sudo error: \(output)")
-                 }
-                 return
-            }
-            
-            // Finding PID is good, but let's also verify the port is open
-            // TUN mode uses port 19097 due to port isolation
-            let portReady = await waitForPort(19097, timeout: 15.0)
-            if !portReady {
-                 // Check if process crashed during wait
-                 if !proc.isRunning {
-                     addLog("[ClashServiceActor] ❌ TUN process crashed during startup (Exit: \(proc.terminationStatus))")
-                     let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-                     let output = String(data: data, encoding: .utf8) ?? "<no output>"
-                     addLog("[ClashServiceActor] 📜 Crash Log: \(output)")
-                     logger.error("Clash (TUN) crashed: \(output)")
-                 } else {
-                     addLog("[ClashServiceActor] ❌ Port 19097 not ready after 15s - Aborting")
-                     let data = outputPipe.fileHandleForReading.availableData
-                     let output = String(data: data, encoding: .utf8) ?? "<no output>"
-                     addLog("[ClashServiceActor] 📜 Process Output: \(output)")
-                     logger.error("Clash (TUN) hung startup output: \(output)")
-                 }
-                 proc.terminate()
-                 process = nil
-                 return
-            }
-            
-            // Since we used sudo, the proc.processIdentifier is the sudo process, not clash.
-            // We need to find the actual clash-meta PID.
-            // But we can track the sudo process for lifecycle.
-            
-            addLog("[ClashServiceActor] ✅ Clash started with TUN (PID: \(proc.processIdentifier))")
+            addLog("[ClashServiceActor] ✅ Clash launched with TUN (PID: \(proc.processIdentifier))")
             isRunning = true
             await notifyRunningState(true)
             logger.info("Clash TUN started")
             
+            // Background port verification (informational only)
+            Task {
+                let portReady = await waitForPort(19097, timeout: 5.0)
+                if !portReady {
+                    addLog("[ClashServiceActor] ⚠️ Port 19097 check timeout - core may still be initializing")
+                }
+            }
         } catch {
             addLog("[ClashServiceActor] ❌ TUN start failed: \(error)")
             logger.error("TUN start failed: \(error)")
@@ -274,46 +247,18 @@ actor ClashServiceActor {
             process = proc
             pipe = outputPipe
             
-            // Health check
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            
-            if !proc.isRunning {
-                addLog("[ClashServiceActor] ❌ Normal startup failed immediately (Exit: \(proc.terminationStatus))")
-                let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-                if let output = String(data: data, encoding: .utf8) {
-                    addLog("[ClashServiceActor] 📜 Error Log: \(output)")
-                    logger.error("Clash normal crash: \(output)")
-                }
-                return
-            }
-            
-            // Verify port 9097 ready
-            let portReady = await waitForPort(9097, timeout: 15.0)
-            if !portReady {
-                 // Check if process crashed during wait
-                 if !proc.isRunning {
-                     addLog("[ClashServiceActor] ❌ Process crashed during startup (Exit: \(proc.terminationStatus))")
-                     let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-                     let output = String(data: data, encoding: .utf8) ?? "<no output>"
-                     addLog("[ClashServiceActor] 📜 Crash Log: \(output)")
-                     logger.error("Clash crashed: \(output)")
-                 } else {
-                     addLog("[ClashServiceActor] ❌ Port 9097 not ready after 15s - Aborting")
-                     let data = outputPipe.fileHandleForReading.availableData
-                     let output = String(data: data, encoding: .utf8) ?? "<no output>"
-                     addLog("[ClashServiceActor] 📜 Process Output: \(output)")
-                     logger.error("Clash hung startup output: \(output)")
-                 }
-                 proc.terminate()
-                 process = nil
-                 return
-            }
-            
             isRunning = true
-            
             await notifyRunningState(true)
-            addLog("[ClashServiceActor] ✅ Clash started (Normal)")
+            addLog("[ClashServiceActor] ✅ Clash launched (Normal)")
             logger.info("Clash started successfully")
+            
+            // Background port verification (informational only)
+            Task {
+                let portReady = await waitForPort(9097, timeout: 5.0)
+                if !portReady {
+                    addLog("[ClashServiceActor] ⚠️ Port 9097 check timeout - core may still be initializing")
+                }
+            }
         } catch {
             addLog("[ClashServiceActor] ❌ Failed to start: \(error)")
             logger.error("Failed to start clash: \(error)")

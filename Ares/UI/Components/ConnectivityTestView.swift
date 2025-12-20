@@ -79,32 +79,44 @@ struct ConnectivityTestView: View {
         }
     }
     
+    @MainActor
     func testAll() {
         for site in sites {
             testSite(name: site.0, url: site.1)
         }
     }
     
+    @MainActor
     func testSite(name: String, url: String) {
-        DispatchQueue.main.async {
-            loadingStates[name] = true
-            latencies[name] = nil // Clear previous result
-        }
+        loadingStates[name] = true
+        latencies[name] = nil // Clear previous result
         
         Task {
-            let latency = await measureLatency(url: url)
-            await MainActor.run {
-                DispatchQueue.main.async {
-                    loadingStates[name] = false
-                    latencies[name] = latency ?? -1 // -1 means error
+            // Retry logic for connectivity tests
+            var finalLatency: Int? = nil
+            let maxAttempts = 3
+            for i in 1...maxAttempts { // 3 attempts
+                if let latency = await measureLatency(url: url) {
+                    finalLatency = latency
+                    break
                 }
+                if i < maxAttempts {
+                    try? await Task.sleep(nanoseconds: 2_000_000_000) // Wait 2s
+                }
+            }
+            
+            let result = finalLatency ?? -1
+            
+            await MainActor.run {
+                self.loadingStates[name] = false
+                self.latencies[name] = result
             }
         }
     }
     
     private func measureLatency(url: String) async -> Int? {
         // Guard: Don't test if Clash is not running
-        let isRunning = ClashViewModel.shared.isRunning
+        let isRunning = await MainActor.run { ClashViewModel.shared.isRunning }
         guard isRunning else { return nil }
 
         // Must use HTTPS to avoid ATS blocking
@@ -112,7 +124,7 @@ struct ConnectivityTestView: View {
         
         var request = URLRequest(url: targetURL)
         request.httpMethod = "HEAD"
-        request.timeoutInterval = 5.0
+        request.timeoutInterval = 5.0 // Slightly longer timeout for startup stability
         // Add cache policy to ensure real network request
         request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
         
@@ -120,13 +132,13 @@ struct ConnectivityTestView: View {
         
         do {
             let (_, response) = try await URLSession.shared.data(for: request)
-            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode < 400 {
+            if let httpResponse = response as? HTTPURLResponse, (200...499).contains(httpResponse.statusCode) {
                 let elapsed = Date().timeIntervalSince(start)
                 return Int(elapsed * 1000)
             }
             return nil
         } catch {
-            print("[Connectivity] Error testing \(url): \(error)")
+            print("[Connectivity] Error testing \(url): \(error.localizedDescription)")
             return nil
         }
     }

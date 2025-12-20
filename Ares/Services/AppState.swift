@@ -53,10 +53,7 @@ class AppState: ObservableObject {
     func initialize() async {
         clashViewModel.addLog("[AppState] 🚀 Initializing application state...")
         
-        // 1. Sync connection status
-        await syncWithClash()
-        
-        // 2. Check system proxy status (Prefer saved preference)
+        // 1. Sync preferences and system state (No network calls yet)
         systemProxyEnabled = UserDefaults.standard.bool(forKey: "systemProxyEnabled")
         // Check actual system state only if preference is missing? No, user preference dictates action.
         // If user wants it ON, we will enforce it later in AresApp.
