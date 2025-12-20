@@ -25,6 +25,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     private func checkAndRecoverState() async {
+        await Task.yield()
         print("🏥 Performing Startup Health Check...")
         
         // 0. Initialize State first (Loads Prefs, Check Privileges)
@@ -61,9 +62,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 struct AresApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     
-    @StateObject private var clashViewModel = ClashViewModel.shared
-    @StateObject private var profileService = ProfileService.shared
-    @StateObject private var clashController = ClashController.shared
+    private let clashViewModel = ClashViewModel.shared
+    private let profileService = ProfileService.shared
+    private let clashController = ClashController.shared
     @StateObject private var appState = AppState.shared
     @StateObject private var themeService = ThemeService.shared
     

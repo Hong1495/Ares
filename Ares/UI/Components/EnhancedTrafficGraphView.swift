@@ -97,7 +97,8 @@ struct EnhancedTrafficGraphView: View {
         .padding()
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
-        .onAppear {
+        .task {
+            await Task.yield()
             viewModel.startMonitoring()
         }
         .onDisappear {
@@ -162,19 +163,21 @@ class TrafficGraphViewModel: ObservableObject {
     }
     
     private func updateTraffic(up: Int64, down: Int64) {
-        currentUpload = up
-        currentDownload = down
-        
-        // Update graph data
-        let newPoint = TrafficDataPoint(
-            time: Date(),
-            upload: up,
-            download: down
-        )
-        
-        dataPoints.append(newPoint)
-        if dataPoints.count > 60 {
-            dataPoints.removeFirst()
+        DispatchQueue.main.async {
+            self.currentUpload = up
+            self.currentDownload = down
+            
+            // Update graph data
+            let newPoint = TrafficDataPoint(
+                time: Date(),
+                upload: up,
+                download: down
+            )
+            
+            self.dataPoints.append(newPoint)
+            if self.dataPoints.count > 60 {
+                self.dataPoints.removeFirst()
+            }
         }
     }
 }

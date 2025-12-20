@@ -143,16 +143,21 @@ struct IpInfoCard: View {
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
-        .onAppear {
-            Task {
-                await fetchIPInfo()
-            }
+        .task {
+            await Task.yield()
+            await fetchIPInfo()
         }
     }
     
     private func fetchIPInfo() async {
-        isLoading = true
-        defer { isLoading = false }
+        DispatchQueue.main.async {
+            isLoading = true
+        }
+        defer { 
+            DispatchQueue.main.async {
+                isLoading = false 
+            }
+        }
         
         do {
             print("[IpInfoCard] Fetching IP...")
@@ -168,7 +173,9 @@ struct IpInfoCard: View {
             print("[IpInfoCard] Got IP: \(ip), Location: \(country ?? "N/A"), \(city ?? "N/A")")
             
             await MainActor.run {
-                ipInfo = IPInfo(ip: ip, country: country, city: city)
+                DispatchQueue.main.async {
+                    ipInfo = IPInfo(ip: ip, country: country, city: city)
+                }
             }
         } catch {
             print("[IpInfoCard] Error: \(error)")
@@ -219,10 +226,9 @@ struct ClashInfoCard: View {
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
-        .onAppear {
-            Task {
-                await fetchClashInfo()
-            }
+        .task {
+            await Task.yield()
+            await fetchClashInfo()
         }
     }
     
@@ -236,7 +242,9 @@ struct ClashInfoCard: View {
             
             if let versionStr = json?["version"] as? String {
                 await MainActor.run {
-                    version = versionStr
+                    DispatchQueue.main.async {
+                        version = versionStr
+                    }
                 }
             }
             
@@ -245,7 +253,9 @@ struct ClashInfoCard: View {
         } catch {
             print("[ClashInfoCard] Error: \(error)")
             await MainActor.run {
-                version = "API Error"
+                DispatchQueue.main.async {
+                    version = "API Error"
+                }
             }
         }
     }
@@ -293,7 +303,8 @@ struct SystemInfoCard: View {
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
-        .onAppear {
+        .task {
+            await Task.yield()
             fetchSystemInfo()
         }
     }
@@ -307,10 +318,12 @@ struct SystemInfoCard: View {
                 String(cString: $0)
             }
         }
-        architecture = machine
-        
-        // Get OS version
-        let version = ProcessInfo.processInfo.operatingSystemVersion
-        osVersion = "\(version.majorVersion).\(version.minorVersion).\(version.patchVersion)"
+        DispatchQueue.main.async {
+            architecture = machine
+            
+            // Get OS version
+            let version = ProcessInfo.processInfo.operatingSystemVersion
+            osVersion = "\(version.majorVersion).\(version.minorVersion).\(version.patchVersion)"
+        }
     }
 }

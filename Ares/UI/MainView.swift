@@ -5,7 +5,16 @@ struct MainView: View {
     
     var body: some View {
         NavigationSplitView {
-            List(selection: $appState.selection) {
+            List(selection: Binding(
+                get: { appState.selection },
+                set: { newValue in
+                    DispatchQueue.main.async {
+                        if let val = newValue {
+                            appState.selection = val
+                        }
+                    }
+                }
+            )) {
                 NavigationLink(value: AppState.NavigationItem.dashboard) {
                     Label("Dashboard", systemImage: "gauge.with.dots.needle.bottom.50percent")
                 }

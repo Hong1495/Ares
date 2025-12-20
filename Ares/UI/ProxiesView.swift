@@ -100,9 +100,9 @@ struct ProxiesView: View {
             }
         }
         .navigationTitle("Proxies")
-        .onAppear {
-            Task {
-                try? await clashController.fetchProxiesData()
+        .task {
+            await Task.yield()
+            DispatchQueue.main.async {
                 // Default: all collapsed (empty set)
                 expandedGroups = []
             }

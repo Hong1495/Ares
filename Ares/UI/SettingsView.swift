@@ -51,7 +51,9 @@ struct SettingsView: View {
                     Label("Theme", systemImage: "paintpalette")
                 }
                 .onChange(of: theme) { _, newValue in
-                    ThemeService.shared.theme = newValue
+                    DispatchQueue.main.async {
+                        ThemeService.shared.theme = newValue
+                    }
                 }
             }
             

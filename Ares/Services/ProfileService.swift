@@ -21,8 +21,10 @@ class ProfileService: ObservableObject {
         // Create directories if needed
         try? FileManager.default.createDirectory(at: profilesDir, withIntermediateDirectories: true)
         
-        // Load profiles
-        loadProfiles()
+        // Load profiles asynchronously on next run loop
+        Task { @MainActor in
+            self.loadProfiles()
+        }
     }
     
     /// Load profiles from disk

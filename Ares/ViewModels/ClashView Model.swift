@@ -22,7 +22,9 @@ class ClashViewModel: ObservableObject {
         ClashController.shared.updatePort(tunEnabled: tunEnabled)
         
         // Optimistic update - this triggers Controller to start monitors
-        self.isRunning = true
+        DispatchQueue.main.async {
+            self.isRunning = true
+        }
         
         await ClashServiceActor.shared.start(isRestart: isRestart)
         // If start failed, ClashServiceActor calls updateRunningState(false)
@@ -30,16 +32,22 @@ class ClashViewModel: ObservableObject {
     
     func stop(intendedRestart: Bool = false) async {
         // Optimistic update
-        self.isRunning = false
+        DispatchQueue.main.async {
+            self.isRunning = false
+        }
         await ClashServiceActor.shared.stop(intendedRestart: intendedRestart)
     }
     
     func restart() async {
         // Stop with intended restart flag
-        self.isRunning = false
+        DispatchQueue.main.async {
+            self.isRunning = false
+        }
         await ClashServiceActor.shared.stop(intendedRestart: true)
         // Start with restart flag
-        self.isRunning = true
+        DispatchQueue.main.async {
+            self.isRunning = true
+        }
         await ClashServiceActor.shared.start(isRestart: true)
     }
     
@@ -55,11 +63,13 @@ class ClashViewModel: ObservableObject {
         let cleanMessage = message.replacingOccurrences(of: "\n", with: " ")
         let logEntry = "[\(timestamp)] \(cleanMessage)"
         
-        logs.append(logEntry)
-        
-        // Efficiently limit to last 1000 lines
-        if logs.count > 1000 {
-            logs.removeFirst(logs.count - 1000)
+        DispatchQueue.main.async {
+            self.logs.append(logEntry)
+            
+            // Efficiently limit to last 1000 lines
+            if self.logs.count > 1000 {
+                self.logs.removeFirst(self.logs.count - 1000)
+            }
         }
     }
     
@@ -71,6 +81,8 @@ class ClashViewModel: ObservableObject {
     /// Update running state from service
     /// - Parameter running: New running state
     func updateRunningState(_ running: Bool) {
-        isRunning = running
+        DispatchQueue.main.async {
+            self.isRunning = running
+        }
     }
 }

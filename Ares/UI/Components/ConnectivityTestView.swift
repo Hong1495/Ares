@@ -71,7 +71,8 @@ struct ConnectivityTestView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
-        .onAppear {
+        .task {
+            await Task.yield()
             if latencies.isEmpty {
                 testAll()
             }
@@ -85,14 +86,18 @@ struct ConnectivityTestView: View {
     }
     
     func testSite(name: String, url: String) {
-        loadingStates[name] = true
-        latencies[name] = nil // Clear previous result
+        DispatchQueue.main.async {
+            loadingStates[name] = true
+            latencies[name] = nil // Clear previous result
+        }
         
         Task {
             let latency = await measureLatency(url: url)
             await MainActor.run {
-                loadingStates[name] = false
-                latencies[name] = latency ?? -1 // -1 means error
+                DispatchQueue.main.async {
+                    loadingStates[name] = false
+                    latencies[name] = latency ?? -1 // -1 means error
+                }
             }
         }
     }

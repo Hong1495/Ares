@@ -212,10 +212,9 @@ struct ConnectionsView: View {
             }
         }
         .navigationTitle("Connections")
-        .onAppear {
-            Task {
-                await viewModel.startMonitoring()
-            }
+        .task {
+            await Task.yield()
+            await viewModel.startMonitoring()
         }
         .onDisappear {
             viewModel.stopMonitoring()
@@ -358,12 +357,14 @@ final class ConnectionsViewModel: ObservableObject {
                 let finalConnections = newConnections
                 await MainActor.run { [weak self] in
                     guard let self = self else { return }
-                    self.connections = finalConnections
-                    
-                    // Update snapshots for next time
-                    self.previousSnapshots.removeAll()
-                    for conn in finalConnections {
-                        self.previousSnapshots[conn.id] = (conn.upload, conn.download, now)
+                    DispatchQueue.main.async {
+                        self.connections = finalConnections
+                        
+                        // Update snapshots for next time
+                        self.previousSnapshots.removeAll()
+                        for conn in finalConnections {
+                            self.previousSnapshots[conn.id] = (conn.upload, conn.download, now)
+                        }
                     }
                 }
             }

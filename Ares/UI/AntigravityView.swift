@@ -287,6 +287,7 @@ struct AntigravityView: View {
             }
         }
         .task {
+            await Task.yield()
             await testLatency()
         }
     }
@@ -310,15 +311,19 @@ struct AntigravityView: View {
             let ms = Int(duration * 1000)
             
             await MainActor.run {
-                self.googleLatency = ms
-                self.isOnline = true
-                AntigravityView.lastKnownLatency = ms
+                DispatchQueue.main.async {
+                    self.googleLatency = ms
+                    self.isOnline = true
+                    AntigravityView.lastKnownLatency = ms
+                }
             }
         } catch {
             await MainActor.run {
-                self.googleLatency = -1
-                self.isOnline = false
-                AntigravityView.lastKnownLatency = -1
+                DispatchQueue.main.async {
+                    self.googleLatency = -1
+                    self.isOnline = false
+                    AntigravityView.lastKnownLatency = -1
+                }
             }
         }
     }

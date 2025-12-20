@@ -146,7 +146,9 @@ class ClashController: ObservableObject {
                         
                         self.consecutiveFailures = 0
                         if let s = stats {
-                            self.traffic = s
+                            DispatchQueue.main.async {
+                                self.traffic = s
+                            }
                         }
                         self.receiveTrafficMessage() // Recursively listen
                     }
@@ -203,6 +205,7 @@ class ClashController: ObservableObject {
     
     /// Fetch and parse proxies from Clash API
     func fetchProxiesData() async throws {
+        await Task.yield()
         // Removed noisy log: ClashService.shared.addLog("[ClashController] 📡 Fetching proxy data...")
         let url = URL(string: "\(baseURL)/proxies")!
         
@@ -248,8 +251,10 @@ class ClashController: ObservableObject {
         }
         
         await MainActor.run {
-            self.proxyGroups = groups
-            self.proxyNodes = nodes
+            DispatchQueue.main.async {
+                self.proxyGroups = groups
+                self.proxyNodes = nodes
+            }
             // Only log on first fetch or significant changes
             // Removed: ClashService.shared.addLog("[ClashController] ✅ Loaded \(groups.count) groups, \(nodes.count) nodes")
         }

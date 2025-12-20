@@ -87,14 +87,21 @@ class AppState: ObservableObject {
     /// Sync status from services
     func syncStatus() {
         // Only sync if we are NOT in the middle of a restart operation
-        _ = clashViewModel.isRunning
+        if clashViewModel.isRunning {
+            Task {
+                await syncWithClash()
+            }
+        }
     }
     
     /// Sync state from Clash API
     func syncWithClash() async {
+        await Task.yield()
         // Fetch current mode
         if let mode = try? await clashController.getCurrentMode() {
-            currentMode = mode
+            DispatchQueue.main.async {
+                self.currentMode = mode
+            }
         }
     }
     
@@ -195,6 +202,8 @@ class AppState: ObservableObject {
         // IMMEDIATELY dispatch to background - don't touch ANY state here!
         Task.detached { [weak self] in
             guard let self = self else { return }
+            
+            await Task.yield()
             
             // Get current state and update UI on MainActor
             let newState = await MainActor.run {

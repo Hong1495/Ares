@@ -181,11 +181,6 @@ struct ProxyModeCard: View {
         .frame(height: 150)
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
-        .onAppear {
-            Task {
-                await appState.syncWithClash()
-            }
-        }
     }
     
     private func modeIcon(_ mode: ClashConfig.Mode) -> String {

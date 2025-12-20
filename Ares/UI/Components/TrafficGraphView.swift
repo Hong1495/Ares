@@ -47,11 +47,13 @@ struct TrafficGraphView: View {
             }
             .frame(height: 150)
             .onReceive(clashController.$traffic) { traffic in
-                downloadHistory.append(traffic.down)
-                if downloadHistory.count > 60 { downloadHistory.removeFirst() }
-                
-                uploadHistory.append(traffic.up)
-                if uploadHistory.count > 60 { uploadHistory.removeFirst() }
+                Task { @MainActor in
+                    downloadHistory.append(traffic.down)
+                    if downloadHistory.count > 60 { downloadHistory.removeFirst() }
+                    
+                    uploadHistory.append(traffic.up)
+                    if uploadHistory.count > 60 { uploadHistory.removeFirst() }
+                }
             }
         }
         .padding()
