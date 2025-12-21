@@ -8,6 +8,7 @@ class ClashViewModel: ObservableObject {
     // MARK: - Published UI State
     @Published var isRunning: Bool = false
     @Published var logs: [String] = []
+    @Published var isToggling: Bool = false
     
     // MARK: - Singleton
     static let shared = ClashViewModel()
@@ -17,38 +18,42 @@ class ClashViewModel: ObservableObject {
     // MARK: - Public Methods (UI-facing)
     
     func start(isRestart: Bool = false) async {
+        guard !isToggling else { return }
+        isToggling = true
+        defer { isToggling = false }
+        await startCore(isRestart: isRestart)
+    }
+    
+    func stop(intendedRestart: Bool = false) async {
+        guard !isToggling else { return }
+        isToggling = true
+        defer { isToggling = false }
+        await stopCore(intendedRestart: intendedRestart)
+    }
+    
+    /// Internal methods for core operations - NO GATING
+    func startCore(isRestart: Bool = false) async {
         // Sync Controller port with App State BEFORE activating monitors
         let tunEnabled = await MainActor.run { AppState.shared.tunEnabled }
         ClashController.shared.updatePort(tunEnabled: tunEnabled)
         
-        // Optimistic update - this triggers Controller to start monitors
-        DispatchQueue.main.async {
-            self.isRunning = true
-        }
-        
+        self.isRunning = true
         await ClashServiceActor.shared.start(isRestart: isRestart)
-        // If start failed, ClashServiceActor calls updateRunningState(false)
     }
     
-    func stop(intendedRestart: Bool = false) async {
-        // Optimistic update
-        DispatchQueue.main.async {
-            self.isRunning = false
-        }
+    func stopCore(intendedRestart: Bool = false) async {
+        self.isRunning = false
         await ClashServiceActor.shared.stop(intendedRestart: intendedRestart)
     }
     
     func restart() async {
-        // Stop with intended restart flag
-        DispatchQueue.main.async {
-            self.isRunning = false
-        }
-        await ClashServiceActor.shared.stop(intendedRestart: true)
-        // Start with restart flag
-        DispatchQueue.main.async {
-            self.isRunning = true
-        }
-        await ClashServiceActor.shared.start(isRestart: true)
+        // Global operation gate
+        guard !isToggling else { return }
+        isToggling = true
+        defer { isToggling = false }
+        
+        await stopCore(intendedRestart: true)
+        await startCore(isRestart: true)
     }
     
     /// Add log message to UI

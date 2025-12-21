@@ -100,6 +100,7 @@ struct CurrentProxyCard: View {
 
 /// IP Info Card showing public IP information
 struct IpInfoCard: View {
+    @EnvironmentObject var clashViewModel: ClashViewModel
     @State private var ipInfo: IPInfo?
     @State private var isLoading = false
     
@@ -147,7 +148,12 @@ struct IpInfoCard: View {
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
         .task {
-            await Task.yield()
+            // Wait for Clash to be running before first fetch to avoid "Connection refused" startup noise
+            while !clashViewModel.isRunning {
+                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1s
+            }
+            // Tiny extra gap for TCP stack readiness
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s
             await fetchIPInfo()
         }
     }
@@ -157,6 +163,13 @@ struct IpInfoCard: View {
         isLoading = true
         
         for attempt in 1...retries {
+            // SILENCE during toggles to avoid "Connection refused" noise
+            if clashViewModel.isToggling {
+                print("[IpInfoCard] 🤫 Silencing IP fetch - toggling in progress")
+                self.isLoading = false
+                return
+            }
+            
             do {
                 print("[IpInfoCard] Fetching IP (Attempt \(attempt))...")
                 let url = URL(string: "https://ipapi.co/json/")!
@@ -232,12 +245,16 @@ struct ClashInfoCard: View {
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
         .task {
-            await Task.yield()
+            while !clashViewModel.isRunning {
+                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1s
+            }
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s cool-down
             await fetchClashInfo()
         }
     }
     
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var clashViewModel: ClashViewModel
 
     @MainActor
     private func fetchClashInfo(retries: Int = 5) async {
@@ -245,6 +262,12 @@ struct ClashInfoCard: View {
         let url = URL(string: "http://127.0.0.1:\(port)/version")!
         
         for attempt in 1...retries {
+            // SILENCE during toggles to avoid "Connection refused" noise
+            if clashViewModel.isToggling {
+                self.version = "Toggling..."
+                return
+            }
+            
             do {
                 let (data, _) = try await URLSession.shared.data(from: url)
                 let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]

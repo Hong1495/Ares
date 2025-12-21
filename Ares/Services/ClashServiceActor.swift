@@ -105,9 +105,15 @@ actor ClashServiceActor {
         
         // Terminate tracked process if exists
         if let proc = process, proc.isRunning {
-            addLog("[ClashServiceActor] 📍 Terminating tracked process...")
+            addLog("[ClashServiceActor] 📍 Terminating tracked process (SIGTERM)...")
             proc.terminate()
-            try? await Task.sleep(nanoseconds: 500_000_000)
+            // Wait briefly for SIGTERM to work
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            if proc.isRunning {
+                addLog("[ClashServiceActor] 📍 Tracked process still alive, sending SIGKILL...")
+                proc.interrupt() // On macOS process.interrupt often sends SIGINT, and there is no direct SIGKILL via Process
+                // We'll fall back to pkill -9 below for a guaranteed kill
+            }
         }
         
         if let pid = currentProcessPID {
@@ -312,8 +318,15 @@ actor ClashServiceActor {
             }
         }
         
-        // Also kill by name
+        // Also kill by name aggressively
         await processManager.killAllProcesses(matching: "clash-meta")
+        
+        // Final aggressive sweep with sudo pkill -9
+        let aggressiveKill = Process()
+        aggressiveKill.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
+        aggressiveKill.arguments = ["-n", "/usr/bin/pkill", "-9", "-f", "clash-meta"]
+        try? aggressiveKill.run()
+        aggressiveKill.waitUntilExit()
         
         // Kernel socket cleanup wait reduced as we now use port isolation
         if killedAny {
@@ -377,9 +390,7 @@ actor ClashServiceActor {
         }
         
         // Verify ports released
-        for attempt in 1...10 {
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            
+        for attempt in 1...5 { // Reduced from 10
             var busyPorts: [Int] = []
             for port in portsToCheck {
                 let pids = await processManager.getPIDsUsingPort(port)
@@ -390,12 +401,11 @@ actor ClashServiceActor {
             
             if busyPorts.isEmpty {
                 // Port cleanup verified
-                // CRITICAL: Wait for kernel to release TCP sockets
-                // Reduced from 3s to 0.5s due to port isolation strategy
-                try? await Task.sleep(nanoseconds: 500_000_000)
+                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
                 return true
             } else {
-                addLog("[ClashServiceActor] ⏳ Attempt \(attempt)/10: Busy ports: \(busyPorts)")
+                addLog("[ClashServiceActor] ⏳ Attempt \(attempt)/5: Busy ports: \(busyPorts)")
+                try? await Task.sleep(nanoseconds: 200_000_000) // 0.2s wait before retry
             }
         }
         

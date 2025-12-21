@@ -22,7 +22,7 @@ class ClashController: ObservableObject {
     
     // Dynamic base URL based on actual running mode
     private var currentPort: Int = 9097  // Default to Normal mode
-    private var baseURL: String {
+    var baseURL: String {
         return "http://127.0.0.1:\(currentPort)"
     }
     
@@ -51,14 +51,23 @@ class ClashController: ObservableObject {
     private func setupLifecycleObserver() {
         // Reactive Lifecycle: Only start monitoring when ClashService reports it is running
         statusSubscription = ClashViewModel.shared.$isRunning
+            .combineLatest(ClashViewModel.shared.$isToggling)
             .receive(on: RunLoop.main)
-            .sink { [weak self] isRunning in
-                if isRunning {
-                    ClashViewModel.shared.addLog("[ClashController] 🟢 Core running, activating monitors...")
-                    self?.consecutiveFailures = 0  // Reset failure counter
-                    self?.startMonitors()
+            .sink { [weak self] isRunning, isToggling in
+                if isRunning && !isToggling {
+                    self?.consecutiveFailures = 0
+                    // Add a tiny cool-down to ensure TCP ports are fully open by the kernel
+                    Task {
+                        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s
+                        if let self = self, ClashViewModel.shared.isRunning, !ClashViewModel.shared.isToggling {
+                            ClashViewModel.shared.addLog("[ClashController] 🟢 Core stable, activating monitors...")
+                            self.startMonitors()
+                        }
+                    }
                 } else {
-                     ClashViewModel.shared.addLog("[ClashController] 🔴 Core stopped, deactivating monitors...")
+                    if isToggling {
+                        ClashViewModel.shared.addLog("[ClashController] 🟡 Toggling in progress, silencing monitors...")
+                    }
                     self?.stopMonitors()
                 }
             }
@@ -93,13 +102,15 @@ class ClashController: ObservableObject {
         // Start WebSocket for real-time traffic
         startTrafficMonitor()
         
-        // Start polling for proxies
+        // Start polling for proxies - REMOVED: Managed by AppState heartbeat
+/*
         stopRefreshTimer() // Safety clear
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 try? await self?.fetchProxiesData()
             }
         }
+*/
     }
     
     /// Stop all monitors
@@ -111,6 +122,27 @@ class ClashController: ObservableObject {
     private func stopRefreshTimer() {
         refreshTimer?.invalidate()
         refreshTimer = nil
+    }
+    
+    /// Dynamic Readiness Check: Polls the Clash API until it responds or timeouts.
+    /// This is more elegant than a fixed Task.sleep().
+    func waitForAPIReady(timeout: TimeInterval = 5.0) async -> Bool {
+        let start = Date()
+        let url = URL(string: "\(baseURL)/version")!
+        
+        while Date().timeIntervalSince(start) < timeout {
+            do {
+                let (_, response) = try await URLSession.shared.data(from: url)
+                if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
+                    return true
+                }
+            } catch {
+                // Ignore errors during retry period
+            }
+            // Wait briefly before retrying
+            try? await Task.sleep(nanoseconds: 200_000_000) // 200ms
+        }
+        return false
     }
     
     private var trafficWebSocket: URLSessionWebSocketTask?
@@ -136,8 +168,12 @@ class ClashController: ObservableObject {
     
     func stopTrafficMonitor() {
         isMonitoring = false
-        trafficWebSocket?.cancel(with: .goingAway, reason: nil)
+        trafficWebSocket?.cancel(with: .goingAway, reason: "Monitoring stopped".data(using: .utf8))
         trafficWebSocket = nil
+        // Reset traffic stats to 0 when stopped
+        DispatchQueue.main.async {
+            self.traffic = TrafficStats()
+        }
     }
     
     private func restartMonitor() {
@@ -424,14 +460,17 @@ class ClashController: ObservableObject {
         do {
             guard let url = URL(string: "\(baseURL)/connections") else { return }
             let (data, _) = try await URLSession.shared.data(from: url)
-            guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-                  let connections = json["connections"] as? [[String: Any]] else {
+            guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
                 return
             }
             
-            let count = connections.count
-                ClashViewModel.shared.addLog("[ClashController] 🔗 Active connections: \(count)")
+            if let connections = json["connections"] as? [[String: Any]] {
+                let count = connections.count
+                // Silence noisy heartbeat logs, only print to console for developers
+                print("[ClashController] 🔗 Active connections: \(count)")
                 
+                /*
+                ClashViewModel.shared.addLog("[ClashController] 🔗 Active connections: \(count)")
                 // Log recent connections
                 for (index, conn) in connections.prefix(5).enumerated() {
                     if let metadata = conn["metadata"] as? [String: Any],
@@ -441,6 +480,8 @@ class ClashController: ObservableObject {
                         ClashViewModel.shared.addLog("[ClashController]   \(index + 1). \(host) → \(proxy)")
                     }
                 }
+                */
+            }
         } catch {
             ClashViewModel.shared.addLog("[ClashController] ⚠️ Failed to get connections: \(error)")
         }

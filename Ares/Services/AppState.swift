@@ -55,8 +55,8 @@ class AppState: ObservableObject {
         // Restore properties synchronously where possible
         tunEnabled = UserDefaults.standard.bool(forKey: "tunEnabled")
         
-        // Start polling timer
-        pollingTimer = Timer.publish(every: 2.0, on: .main, in: .common)
+        // Start polling timer (Unified Heartbeat)
+        pollingTimer = Timer.publish(every: 3.0, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
                 Task {
@@ -97,12 +97,15 @@ class AppState: ObservableObject {
         }
     }
     
-    /// Sync status from services
+    /// Sync status from services (Centralized Heartbeat)
     func syncStatus() {
         // Only sync if we are NOT in the middle of a restart operation
-        if clashViewModel.isRunning {
+        if clashViewModel.isRunning && !clashViewModel.isToggling && !isSystemProxyToggling {
             Task {
                 await syncWithClash()
+                
+                // Self-Healing: Verify port consistency
+                await verifyAndFixPortMismatches()
             }
         }
     }
@@ -110,12 +113,32 @@ class AppState: ObservableObject {
     /// Sync state from Clash API
     func syncWithClash() async {
         await Task.yield()
-        // Fetch current mode
+        // 1. Fetch current mode
         if let mode = try? await clashController.getCurrentMode() {
             DispatchQueue.main.async {
-                self.currentMode = mode
+                if self.currentMode != mode {
+                    self.currentMode = mode
+                }
             }
         }
+        
+        // 2. Refresh proxies data (Consolidated from ClashController timer)
+        try? await clashController.fetchProxiesData()
+        
+        // 3. Monitor connections count
+        await clashController.monitorConnections()
+    }
+    
+    /// Self-Healing logic to ensure system proxy matches Clash mode
+    private func verifyAndFixPortMismatches() async {
+        guard systemProxyEnabled else { return }
+        
+        // We can't easily check actual system proxy ports without running networksetup 
+        // which is expensive. Instead, we trust the internal state but force a sync
+        // if we detect we just finished a toggle or if things feel "out of sync".
+        
+        // For now, let's just make sure the ClashController port is ALWAYS up to date
+        clashController.updatePort(tunEnabled: tunEnabled)
     }
     
     /// Set Clash mode and sync
@@ -199,110 +222,109 @@ class AppState: ObservableObject {
         }
     }
     
-    // State Guard
-    private var isToggling = false
+
 
     /// Toggle TUN mode
     /// Toggle TUN mode (UI-facing, returns INSTANTLY)
     func toggleTUN() {
         print("[AppState] ⚡️ ENTERED toggleTUN()")
         
-        guard !isToggling else {
+        // 1. Check if already toggling via ClashViewModel
+        guard !clashViewModel.isToggling else {
             print("[AppState] 🚫 Toggle rejected - already in progress")
             return
         }
         
-        // IMMEDIATELY dispatch to background - don't touch ANY state here!
+        // 2. IMMEDIATE Synchronous Locking & UI Update
+        clashViewModel.isToggling = true // Lock IMMEDIATELY
+        clashViewModel.objectWillChange.send()
+        
+        let oldTUN = tunEnabled
+        let newTUN = !oldTUN
+        tunEnabled = newTUN
+        
+        // Persist immediately
+        UserDefaults.standard.set(newTUN, forKey: "tunEnabled")
+        
+        clashViewModel.addLog("[TUN] 🔘 Switching to \(newTUN ? "TUN" : "Normal") mode...")
+        
+        // 3. Dispatch the heavy lifting to background
         Task.detached { [weak self] in
             guard let self = self else { return }
             
-            await Task.yield()
+            await self.performTUNToggleWork(newState: newTUN)
             
-            // Get current state and update UI on MainActor
-            let newState = await MainActor.run {
-                self.isToggling = true
-                let current = self.tunEnabled
-                self.tunEnabled = !current
-                self.objectWillChange.send()
-                return !current
-            }
-            
-            // Save to UserDefaults in background
-            UserDefaults.standard.set(newState, forKey: "tunEnabled")
-            await self.performTUNToggleWork(newState: newState)
-            
-            // Reset toggling flag
+            // 4. Cleanup on Main Thread
             await MainActor.run {
-                self.isToggling = false
+                self.clashViewModel.isToggling = false
+                self.objectWillChange.send()
+                self.clashViewModel.addLog("[TUN] ✅ Mode switch completed")
             }
         }
     }
     
     /// Perform actual TUN toggle work in background (nonisolated)
     nonisolated private func performTUNToggleWork(newState: Bool) async {
-        let viewModel = await MainActor.run { ClashViewModel.shared }
-        
-        await MainActor.run {
-            viewModel.addLog("[TUN] 🔄 Toggling TUN mode to: \(newState ? "ENABLED" : "DISABLED")")
+        let (viewModel, controller) = await MainActor.run { 
+            (ClashViewModel.shared, ClashController.shared)
         }
         
-        // Check and install privileges if needed
+        await MainActor.run {
+            viewModel.addLog("[TUN] 🔄 Restarting Clash for \(newState ? "TUN" : "Normal") mode...")
+        }
+        
+        // 1. Ensure privileges (Sudoers)
         let hasPrivileges = await PrivilegeService.shared.checkPrivileges()
         if !hasPrivileges {
+            _ = await PrivilegeService.shared.installSudoers()
+        }
+        
+        // 2. Stop old process thoroughly
+        await viewModel.stopCore(intendedRestart: true)
+        
+        // 3. Start with new TUN config
+        await viewModel.startCore(isRestart: true)
+        
+        // 4. ELEGANT: Dynamic Readiness Check (Poll API until responsive)
+        let isReady = await controller.waitForAPIReady(timeout: 5.0)
+        if !isReady {
             await MainActor.run {
-                viewModel.addLog("[TUN] 🔐 Installing privilege helper...")
+                viewModel.addLog("[TUN] ⚠️ Clash API failed to respond within timeout")
             }
-            if await PrivilegeService.shared.installSudoers() {
-                await MainActor.run {
-                    viewModel.addLog("[TUN] ✅ Privileges granted")
-                }
-            } else {
-                await MainActor.run {
-                    viewModel.addLog("[TUN] ⚠️ Failed to grant privileges, cleanup might fail")
-                }
+        } else {
+            await MainActor.run {
+                viewModel.addLog("[TUN] ⚡️ Clash API is ready")
             }
         }
         
-        await MainActor.run {
-            viewModel.addLog("[TUN] 🔄 Restarting Clash...")
-        }
-        
-        // Stop old process - use ClashViewModel delegation
-        await viewModel.stop(intendedRestart: true)
-        
-        // Start with new TUN config
-        await viewModel.start(isRestart: true)
-        
-        // CRITICAL: Update system proxy ports to match new mode
-        let proxyEnabled = await MainActor.run { self.systemProxyEnabled }
+        // 5. Update system proxy if needed
+        let proxyEnabled = await MainActor.run { AppState.shared.systemProxyEnabled }
         if proxyEnabled {
-            await MainActor.run {
-                viewModel.addLog("[TUN] 🔄 Updating system proxy for new mode...")
-            }
-            await self.enableSystemProxy()  // This will use correct ports based on new tunEnabled state
+            await AppState.shared.enableSystemProxy() 
         }
         
-        await MainActor.run {
-            viewModel.addLog("[TUN] ✅ TUN mode \(newState ? "enabled" : "disabled") successfully")
-        }
-        
-        // Verify in background
-        let serviceIsRunning = await MainActor.run { viewModel.isRunning }
-        if serviceIsRunning {
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
-            try? await self.verifyTUNStatus()
-        }
+        // 6. Final verification - non-blocking but ensures state is correct
+        try? await self.verifyTUNStatus()
     }
     
     /// Verify TUN status from Clash API
-    private func verifyTUNStatus() async throws {
-        guard let url = URL(string: "http://127.0.0.1:9097/configs") else {
+    nonisolated private func verifyTUNStatus() async throws {
+        let (baseURL, expectedTUN) = await MainActor.run { 
+            (ClashController.shared.baseURL, AppState.shared.tunEnabled)
+        }
+        
+        guard let url = URL(string: "\(baseURL)/configs") else {
             throw NSError(domain: "AppState", code: 1)
         }
         
-        let (data, _) = try await URLSession.shared.data(from: url)
+        guard let (data, _) = try? await URLSession.shared.data(from: url) else {
+            // Quiet fail - API might not be ready yet even after start
+            return
+        }
         guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
-            clashViewModel.addLog("[TUN] ⚠️ Failed to parse API config response")
+            await MainActor.run {
+                ClashViewModel.shared.addLog("[TUN] ⚠️ Failed to parse API config response")
+            }
             return
         }
         
@@ -310,15 +332,20 @@ class AppState: ObservableObject {
             let enabled = tun["enable"] as? Bool ?? false
             let stack = tun["stack"] as? String ?? "unknown"
             
-            clashViewModel.addLog("[TUN] 📊 Clash API Status:")
-            clashViewModel.addLog("[TUN]   - Enable: \(enabled)")
-            clashViewModel.addLog("[TUN]   - Stack: \(stack)")
-            
-            if enabled != tunEnabled {
-                clashViewModel.addLog("[TUN] ⚠️ WARNING: State mismatch! Expected=\(tunEnabled), Actual=\(enabled)")
+            await MainActor.run {
+                let vm = ClashViewModel.shared
+                vm.addLog("[TUN] 📊 Clash API Status:")
+                vm.addLog("[TUN]   - Enable: \(enabled)")
+                vm.addLog("[TUN]   - Stack: \(stack)")
+                
+                if enabled != expectedTUN {
+                    vm.addLog("[TUN] ⚠️ WARNING: State mismatch! Expected=\(expectedTUN), Actual=\(enabled)")
+                }
             }
         } else {
-            clashViewModel.addLog("[TUN] ⚠️ No TUN config found in Clash response")
+            await MainActor.run {
+                ClashViewModel.shared.addLog("[TUN] ⚠️ No TUN config found in Clash response")
+            }
         }
     }
 

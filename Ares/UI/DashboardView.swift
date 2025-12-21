@@ -114,6 +114,7 @@ struct NetworkTrafficCard: View {
                 }
             ))
             .toggleStyle(SwitchToggleStyle(tint: .blue))
+            .disabled(clashViewModel.isToggling)
             
             let statusText = clashViewModel.isRunning ? 
                 (appState.systemProxyEnabled ? "Proxy enabled (port 7890)" : "Clash running (Proxy OFF)") :
@@ -207,6 +208,7 @@ struct ProxyModeCard: View {
 // TUN Mode Card
 struct TUNModeCard: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var clashViewModel: ClashViewModel
     
     var body: some View {
         VStack(alignment: .leading) {
@@ -224,6 +226,7 @@ struct TUNModeCard: View {
                 }
             ))
             .toggleStyle(SwitchToggleStyle(tint: .blue))
+            .disabled(clashViewModel.isToggling)
             
             Text(appState.tunEnabled ? "TUN Mode is Active" : "TUN Mode is Inactive")
                 .font(.footnote)

@@ -41,9 +41,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 0. Initialize State first (Loads Prefs, Check Privileges)
         await AppState.shared.initialize()
         
-        // 1. Start Clash with retry capability
-        print("🚀 Starting Clash...")
-        await ClashViewModel.shared.start()
+        // 1. Start Clash with retry capability (Gated)
+        if ClashViewModel.shared.isRunning {
+            print("ℹ️ Clash is already running, skipping explicit start")
+        } else {
+            print("🚀 Starting Clash...")
+            await ClashViewModel.shared.start()
+        }
         
         // 2. Sync state with Clash immediately
         await AppState.shared.syncWithClash()
@@ -111,6 +115,7 @@ struct AresApp: App {
             )) {
                 Label("System Proxy", systemImage: "network")
             }
+            .disabled(clashViewModel.isToggling)
             .keyboardShortcut("p", modifiers: [.command, .shift])
             
             // TUN Mode Toggle
@@ -123,6 +128,7 @@ struct AresApp: App {
             )) {
                 Label("TUN Mode", systemImage: "bolt.shield.fill")
             }
+            .disabled(clashViewModel.isToggling)
             .keyboardShortcut("t", modifiers: [.command, .shift])
             
             Divider()

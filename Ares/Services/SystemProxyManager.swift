@@ -18,7 +18,7 @@ class SystemProxyManager {
         
         // CRITICAL: Run ENTIRE operation on background thread (including getNetworkServicesSync)
         return await Task.detached {
-            let services = self.getNetworkServicesSync()
+            let services = await self.getNetworkServices()
             guard !services.isEmpty else {
                 print("[SystemProxy] No network services found")
                 return false
@@ -28,7 +28,15 @@ class SystemProxyManager {
             if await PrivilegeService.shared.checkPrivileges() {
                 print("[SystemProxy] ⚡️ Using password-less sudo...")
                 
-                for service in services {
+                // Smart Filtering: Only apply to active/relevant interfaces to avoid overhead
+                let priorityServices = ["Wi-Fi", "Ethernet", "USB 10/100/1000 LAN"]
+                let activeServices = services.filter { service in
+                    priorityServices.contains { service.contains($0) }
+                }
+                
+                let targetServices = activeServices.isEmpty ? services : activeServices
+                
+                for service in targetServices {
                     var commandsToRun: [[String]] = []
                     
                     if enabled {
@@ -39,7 +47,6 @@ class SystemProxyManager {
                         commandsToRun.append(["-setsecurewebproxystate", service, "on"])
                         commandsToRun.append(["-setsocksfirewallproxystate", service, "on"])
                         
-                        // Apply bypass rules if provided
                         if !bypassArray.isEmpty {
                             commandsToRun.append(["-setproxybypassdomains", service] + bypassArray)
                         }
@@ -56,10 +63,6 @@ class SystemProxyManager {
                         
                         try? task.run()
                         task.waitUntilExit()
-                        
-                        if task.terminationStatus != 0 {
-                            print("[SystemProxy] ⚠️ Sudo command failed for \(service): \(args.first ?? "")")
-                        }
                     }
                 }
                 
@@ -117,8 +120,17 @@ class SystemProxyManager {
         }.value
     }
     
+    private static var cachedServices: [String] = []
+    private static var lastCacheUpdate: Date = .distantPast
+    
     /// Get list of network services (Wi-Fi, Ethernet, etc.)
-    nonisolated private func getNetworkServicesSync() -> [String] {
+    nonisolated private func getNetworkServices() async -> [String] {
+        if let cached = await MainActor.run(body: {
+            Date().timeIntervalSince(Self.lastCacheUpdate) < 30 ? Self.cachedServices : nil
+        }) {
+            return cached
+        }
+        
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/sbin/networksetup")
         task.arguments = ["-listallnetworkservices"]
@@ -132,18 +144,21 @@ class SystemProxyManager {
             
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             if let output = String(data: data, encoding: .utf8) {
-                // Parse output, skip first line (header)
                 let lines = output.components(separatedBy: .newlines)
                     .dropFirst()
                     .filter { !$0.isEmpty && !$0.hasPrefix("*") }
-                return Array(lines)
+                let services = Array(lines)
+                await MainActor.run {
+                    Self.cachedServices = services
+                    Self.lastCacheUpdate = Date()
+                }
+                return services
             }
         } catch {
             print("[SystemProxy] Failed to get network services: \(error)")
         }
         
-        // Fallback to common service names
-        return ["Wi-Fi", "Ethernet"]
+        return await MainActor.run { Self.cachedServices.isEmpty ? ["Wi-Fi", "Ethernet"] : Self.cachedServices }
     }
     
     /// Check if system proxy is currently enabled
