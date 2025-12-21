@@ -301,7 +301,10 @@ class AppState: ObservableObject {
         }
         
         let (data, _) = try await URLSession.shared.data(from: url)
-        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            clashViewModel.addLog("[TUN] ⚠️ Failed to parse API config response")
+            return
+        }
         
         if let tun = json["tun"] as? [String: Any] {
             let enabled = tun["enable"] as? Bool ?? false

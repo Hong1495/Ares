@@ -237,10 +237,9 @@ class ClashController: ObservableObject {
         let url = URL(string: "\(baseURL)/proxies")!
         
         let (data, _) = try await URLSession.shared.data(from: url)
-        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
-        
-        guard let proxiesDict = json["proxies"] as? [String: [String: Any]] else {
-            ClashViewModel.shared.addLog("[ClashController] ❌ No proxies found in response")
+        guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let proxiesDict = json["proxies"] as? [String: [String: Any]] else {
+            // Removed noisy log: ClashViewModel.shared.addLog("[ClashController] ❌ No proxies found in response or invalid JSON")
             return
         }
         
@@ -332,8 +331,10 @@ class ClashController: ObservableObject {
                  throw NSError(domain: "ClashController", code: httpResp.statusCode)
             }
             
-            let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
-            let delay = json["delay"] as! Int // Clash returns 'delay', some versions 'value'
+            guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                  let delay = json["delay"] as? Int else {
+                throw NSError(domain: "ClashController", code: -2, userInfo: [NSLocalizedDescriptionKey: "Invalid delay response"])
+            }
             
             // ClashService.shared.addLog("[ClashController] ✅ \(name): \(delay)ms")
             
@@ -423,10 +424,12 @@ class ClashController: ObservableObject {
         do {
             guard let url = URL(string: "\(baseURL)/connections") else { return }
             let (data, _) = try await URLSession.shared.data(from: url)
-            let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+            guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                  let connections = json["connections"] as? [[String: Any]] else {
+                return
+            }
             
-            if let connections = json["connections"] as? [[String: Any]] {
-                let count = connections.count
+            let count = connections.count
                 ClashViewModel.shared.addLog("[ClashController] 🔗 Active connections: \(count)")
                 
                 // Log recent connections
@@ -438,7 +441,6 @@ class ClashController: ObservableObject {
                         ClashViewModel.shared.addLog("[ClashController]   \(index + 1). \(host) → \(proxy)")
                     }
                 }
-            }
         } catch {
             ClashViewModel.shared.addLog("[ClashController] ⚠️ Failed to get connections: \(error)")
         }
