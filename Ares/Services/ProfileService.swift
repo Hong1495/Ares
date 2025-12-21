@@ -119,8 +119,25 @@ class ProfileService: ObservableObject {
         
         print("[ProfileService] Downloading profile from: \(url)")
         
-        // Download profile
-        let (data, _) = try await URLSession.shared.data(from: url)
+        // Download profile with Clash User-Agent
+        var request = URLRequest(url: url)
+        request.setValue("Clash/1.0 (Ares; macOS)", forHTTPHeaderField: "User-Agent")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        // Parse subscription info from headers
+        if let httpResponse = response as? HTTPURLResponse {
+            profile.subscriptionInfo = parseSubscriptionInfo(from: httpResponse)
+        }
+        
+        // Fallback: Parse from YAML content if header info is missing
+        if profile.subscriptionInfo == nil || profile.subscriptionInfo?.total == 0 {
+            if let content = String(data: data, encoding: .utf8) {
+                if let info = parseSubscriptionInfo(fromContent: content) {
+                    profile.subscriptionInfo = info
+                }
+            }
+        }
         
         // Save to file
         let filename = "\(profile.id.uuidString).yaml"
@@ -144,10 +161,26 @@ class ProfileService: ObservableObject {
         
         print("[ProfileService] Updating profile: \(profiles[index].name)")
         
-        // Download updated content
-        let (data, _) = try await URLSession.shared.data(from: url)
+        // Download updated content with Clash User-Agent
+        var request = URLRequest(url: url)
+        request.setValue("Clash/1.0 (Ares; macOS)", forHTTPHeaderField: "User-Agent")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        // Parse subscription info from headers
+        if let httpResponse = response as? HTTPURLResponse {
+            profiles[index].subscriptionInfo = parseSubscriptionInfo(from: httpResponse)
+        }
+        
         guard let content = String(data: data, encoding: .utf8) else {
             throw NSError(domain: "ProfileService", code: 4, userInfo: [NSLocalizedDescriptionKey: "Invalid profile content"])
+        }
+        
+        // Fallback: Parse from YAML content if header info is missing
+        if profiles[index].subscriptionInfo == nil || profiles[index].subscriptionInfo?.total == 0 {
+            if let info = parseSubscriptionInfo(fromContent: content) {
+                profiles[index].subscriptionInfo = info
+            }
         }
         
         // Save to existing path
@@ -203,5 +236,82 @@ class ProfileService: ObservableObject {
     func setActiveProfile(id: UUID) {
         activeProfileID = id
         saveProfiles()
+    }
+    
+    /// Parse subscription info from HTTP headers
+    private func parseSubscriptionInfo(from response: HTTPURLResponse) -> SubscriptionInfo? {
+        if let userInfo = response.value(forHTTPHeaderField: "subscription-userinfo") {
+            Task { @MainActor in
+                ClashViewModel.shared.addLog("[ProfileService] 📡 Subscription Info Header: \(userInfo)")
+            }
+            return parseSubscriptionInfo(fromString: userInfo)
+        }
+        return nil
+    }
+    
+    /// Parse subscription info from YAML content (look for comments at the top)
+    private func parseSubscriptionInfo(fromContent content: String) -> SubscriptionInfo? {
+        let lines = content.components(separatedBy: .newlines)
+        // Only check first 30 lines for performance
+        for line in lines.prefix(30) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("#") {
+                let comment = trimmed.dropFirst().trimmingCharacters(in: .whitespaces)
+                if comment.lowercased().localizedCaseInsensitiveContains("subscription-userinfo:") {
+                    let parts = comment.components(separatedBy: ":")
+                    if parts.count >= 2 {
+                        let infoPart = parts[1...].joined(separator: ":").trimmingCharacters(in: .whitespaces)
+                        return parseSubscriptionInfo(fromString: infoPart)
+                    }
+                } else if comment.lowercased().contains("upload=") && comment.lowercased().contains("total=") {
+                    // Direct key=value support without the prefix
+                    return parseSubscriptionInfo(fromString: comment)
+                }
+            }
+        }
+        return nil
+    }
+    
+    /// Robust number parsing (handles floats like 123.45)
+    private func parseLong(_ value: String) -> Int64 {
+        let cleaned = value.trimmingCharacters(in: CharacterSet.decimalDigits.inverted.subtracting(.init(charactersIn: ".")))
+        if let long = Int64(cleaned) {
+            return long
+        }
+        if let double = Double(cleaned) {
+            return Int64(double)
+        }
+        return 0
+    }
+    
+    private func parseSubscriptionInfo(fromString userInfo: String) -> SubscriptionInfo? {
+        var upload: Int64 = 0
+        var download: Int64 = 0
+        var total: Int64 = 0
+        var expire: Date? = nil
+        
+        let components = userInfo.components(separatedBy: ";")
+        for component in components {
+            let part = component.trimmingCharacters(in: .whitespaces)
+            let kv = part.components(separatedBy: "=")
+            if kv.count == 2 {
+                let key = kv[0].lowercased().trimmingCharacters(in: .whitespaces)
+                let value = kv[1].trimmingCharacters(in: .whitespaces)
+                
+                switch key {
+                case "upload": upload = parseLong(value)
+                case "download": download = parseLong(value)
+                case "total": total = parseLong(value)
+                case "expire":
+                    if let seconds = Double(value) {
+                        expire = Date(timeIntervalSince1970: seconds)
+                    }
+                default: break
+                }
+            }
+        }
+        
+        if upload == 0 && download == 0 && total == 0 { return nil }
+        return SubscriptionInfo(upload: upload, download: download, total: total, expire: expire)
     }
 }

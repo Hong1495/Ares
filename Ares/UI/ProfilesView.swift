@@ -163,8 +163,41 @@ struct ProfileCard: View {
                 Spacer()
                 if isActive {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(.blue)
                 }
+            }
+            
+            // Subscription Info Section
+            if let sub = profile.subscriptionInfo {
+                VStack(alignment: .leading, spacing: 6) {
+                    // Traffic Usage
+                    HStack {
+                        Text("Traffic")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text("\(formatBytes(sub.used)) / \(formatBytes(sub.total))")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    
+                    ProgressView(value: Double(sub.used), total: Double(sub.total))
+                        .progressViewStyle(.linear)
+                        .tint(usageColor(used: sub.used, total: sub.total))
+                        .scaleEffect(x: 1, y: 0.5, anchor: .center)
+                    
+                    // Expiry Date
+                    if let expire = sub.expire {
+                        HStack(spacing: 4) {
+                            Image(systemName: "calendar")
+                                .font(.caption2)
+                            Text("Expires: \(expire, style: .date)")
+                                .font(.caption2)
+                        }
+                        .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 4)
             }
             
             HStack(spacing: 8) {
@@ -214,6 +247,22 @@ struct ProfileCard: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(isActive ? Color.blue : Color.clear, lineWidth: 2)
         )
+    }
+    
+    // Helper to format bytes
+    private func formatBytes(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useGB, .useMB]
+        formatter.countStyle = .binary
+        return formatter.string(fromByteCount: bytes)
+    }
+    
+    // Helper to determine progress bar color
+    private func usageColor(used: Int64, total: Int64) -> Color {
+        let ratio = total > 0 ? Double(used) / Double(total) : 0
+        if ratio > 0.9 { return .red }
+        if ratio > 0.7 { return .orange }
+        return .blue
     }
 }
 

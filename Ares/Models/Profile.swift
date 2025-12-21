@@ -29,6 +29,9 @@ struct Profile: Identifiable, Codable {
     /// Last update timestamp
     var lastUpdated: Date?
     
+    /// Subscription information (if available)
+    var subscriptionInfo: SubscriptionInfo?
+    
     /// Initialize a new remote profile
     static func remote(name: String, url: URL) -> Profile {
         Profile(
@@ -37,7 +40,8 @@ struct Profile: Identifiable, Codable {
             type: .remote,
             url: url,
             path: nil,
-            lastUpdated: nil
+            lastUpdated: nil,
+            subscriptionInfo: nil
         )
     }
     
@@ -49,7 +53,18 @@ struct Profile: Identifiable, Codable {
             type: .local,
             url: nil,
             path: path,
-            lastUpdated: Date()
+            lastUpdated: Date(),
+            subscriptionInfo: nil
         )
     }
+}
+
+/// Subscription information parsed from headers
+struct SubscriptionInfo: Codable {
+    var upload: Int64
+    var download: Int64
+    var total: Int64
+    var expire: Date?
+    
+    var used: Int64 { upload + download }
 }
