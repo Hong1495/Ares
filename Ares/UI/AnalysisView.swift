@@ -15,25 +15,43 @@ struct AnalysisView: View {
             // Secondary Sidebar: Tabs List
             VStack(spacing: 0) {
                 List(selection: $selectedTabId) {
-                    NavigationLink(value: "all_requests") {
-                        Label("All Requests", systemImage: "tray.2.fill")
-                            .font(.subheadline)
-                    }
-                    
-                    Section("Active Tabs") {
-                        ForEach(service.activeTabs) { tab in
-                            NavigationLink(value: tab.id) {
-                                TabRow(tab: tab)
+                    Group {
+                        NavigationLink(value: "all_requests") {
+                            Label("All Requests", systemImage: "history")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(selectedTabId == "all_requests" ? Color.primary : Color.secondary)
+                        }
+                        .padding(.vertical, 4)
+                        
+                        Text("Active Tabs")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(.tertiary)
+                            .padding(.top, 16)
+                            .padding(.bottom, 8)
+                            .padding(.leading, 4)
+                        
+                        if service.activeTabs.isEmpty {
+                            Text("No tabs active")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                                .padding(.leading, 12)
+                        } else {
+                            ForEach(service.activeTabs) { tab in
+                                NavigationLink(value: tab.id) {
+                                    TabRow(tab: tab, isSelected: selectedTabId == tab.id)
+                                }
+                                .listRowSeparator(.hidden)
                             }
                         }
                     }
                 }
                 .listStyle(.sidebar)
+                .scrollIndicators(.hidden)
                 
-                Divider()
                 StatusIndicator()
             }
-            .frame(minWidth: 200, maxWidth: 300)
+            .frame(minWidth: 220, maxWidth: 350)
+            .background(Color(nsColor: .windowBackgroundColor).opacity(0.3))
             
             // Main Detail Content
             VStack(spacing: 0) {
@@ -53,23 +71,7 @@ struct AnalysisView: View {
             }
             .toolbar { toolbarContent }
         }
-        .navigationTitle(currentTitle)
-    }
-
-    private var currentTitle: String {
-        if selectedTabId != "all_requests",
-           let tab = service.activeTabs.first(where: { $0.id == selectedTabId }) {
-            // Clean title: remove suffixes like " - Google Search"
-            let suffixes = [" - ", " | ", " — "]
-            var cleanTitle = tab.title
-            for suffix in suffixes {
-                if let range = cleanTitle.range(of: suffix) {
-                    cleanTitle = String(cleanTitle[..<range.lowerBound])
-                }
-            }
-            return cleanTitle
-        }
-        return "Analysis"
+        .navigationTitle("Analysis")
     }
     
     @ToolbarContentBuilder
@@ -111,6 +113,14 @@ struct DetailContent: View {
             // Optimize lookup for single tab
             return service.activeTabs.first(where: { $0.id == tabId })?.requests ?? []
         }
+    }
+    
+    private var tabTitle: String {
+        if tabId == "all_requests" { return "All Requests" }
+        if let tab = service.activeTabs.first(where: { $0.id == tabId }) {
+            return tab.title.isEmpty ? "Untitled Tab" : tab.title
+        }
+        return "Unknown Tab"
     }
     
     @State private var displayRequests: [BrowserRequest] = []
@@ -264,36 +274,42 @@ struct DetailContent: View {
 
 struct TabRow: View {
     let tab: BrowserTab
+    let isSelected: Bool
     
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             Image(systemName: "safari")
-                .foregroundStyle(.blue)
                 .font(.system(size: 14))
+                .foregroundStyle(isSelected ? Color.blue : Color.secondary)
+                .frame(width: 20)
             
-            VStack(alignment: .leading, spacing: 0) {
-                Text(tab.title)
-                    .font(.subheadline)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(tab.title.isEmpty ? "Untitled Tab" : tab.title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(isSelected ? Color.primary : Color.primary.opacity(0.8))
                     .lineLimit(1)
+                
                 Text(tab.url)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(Color.secondary.opacity(0.7))
                     .lineLimit(1)
+                    .truncationMode(.middle)
             }
             
-            Spacer()
+            Spacer(minLength: 4)
             
             if !tab.requests.isEmpty {
                 Text("\(tab.requests.count)")
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(Color.blue.opacity(0.1))
-                    .foregroundStyle(.blue)
+                    .background(isSelected ? Color.white.opacity(0.2) : Color.blue.opacity(0.1))
+                    .foregroundStyle(isSelected ? .white : .blue)
                     .clipShape(Capsule())
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
     }
 }
 
@@ -343,8 +359,10 @@ struct InspectorView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("Inspector")
+                Text(request.url)
                     .font(.headline)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
                 Spacer()
                 if request.hitCount > 1 {
                     Text("\(request.hitCount) hits")
@@ -499,22 +517,52 @@ struct StatusIndicator: View {
     var body: some View {
         VStack(spacing: 0) {
             Divider()
-            HStack {
+                .opacity(0.5)
+            
+            HStack(spacing: 8) {
                 Circle()
                     .fill(service.isListening ? Color.green : Color.red)
-                    .frame(width: 8, height: 8)
-                Text(service.isListening ? "Monitoring Active" : "Server Off")
-                    .font(.caption2)
+                    .frame(width: 6, height: 6)
+                    .shadow(color: service.isListening ? .green.opacity(0.5) : .red.opacity(0.5), radius: 2)
+                
+                Text(service.isListening ? "Monitoring" : "Stopped")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                
                 Spacer()
+                
                 if let last = service.lastReceived {
-                    Text("Conn: \(service.connectionCount) | Last: \(formatShortTime(last))")
-                        .font(.system(size: 9, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock")
+                            .font(.system(size: 9))
+                        Text(formatShortTime(last))
+                            .font(.system(size: 9, design: .monospaced))
+                    }
+                    .foregroundStyle(.tertiary)
                 }
             }
-            .padding(8)
-            .background(Color(nsColor: .windowBackgroundColor))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(VisualEffectView(material: .sidebar, blendingMode: .withinWindow).opacity(0.5))
         }
+    }
+}
+
+struct VisualEffectView: NSViewRepresentable {
+    let material: NSVisualEffectView.Material
+    let blendingMode: NSVisualEffectView.BlendingMode
+    
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = material
+        view.blendingMode = blendingMode
+        view.state = .active
+        return view
+    }
+    
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+        nsView.material = material
+        nsView.blendingMode = blendingMode
     }
 }
 
