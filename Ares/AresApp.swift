@@ -85,7 +85,8 @@ struct AresApp: App {
         }
         
         // Enhanced Menu Bar
-        MenuBarExtra("Ares", systemImage: "bolt.shield.fill") {
+        // Enhanced Menu Bar
+        MenuBarExtra {
             Button(action: {
                 NSApp.activate(ignoringOtherApps: true)
                 appState.selection = .dashboard
@@ -194,6 +195,10 @@ struct AresApp: App {
                 Label("Quit Ares", systemImage: "power")
             }
             .keyboardShortcut("q", modifiers: [.command])
+        } label: {
+            let proxyStatus = appState.systemProxyEnabled ? "1" : "0"
+            let tunStatus = appState.tunEnabled ? "1" : "0"
+            Image("Ares_Menu_\(proxyStatus)\(tunStatus)")
         }
     }
 }
