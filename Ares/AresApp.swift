@@ -135,57 +135,27 @@ struct AresApp: App {
             
             // Mode Selector
             Menu {
-                Button(action: {
-                    Task {
-                        await appState.setMode(.rule)
-                    }
-                }) {
-                    Label {
-                        HStack {
-                            Text("Rule")
-                            if appState.currentMode == .rule {
-                                Image(systemName: "checkmark")
-                            }
-                        }
-                    } icon: {
-                        Image(systemName: "list.bullet.rectangle")
-                    }
+                Toggle(isOn: Binding(
+                    get: { appState.currentMode == .rule },
+                    set: { _ in Task { await appState.setMode(.rule) } }
+                )) {
+                    Label("Rule", systemImage: "list.bullet.rectangle")
                 }
                 .keyboardShortcut("1", modifiers: [.command])
                 
-                Button(action: {
-                    Task {
-                        await appState.setMode(.global)
-                    }
-                }) {
-                    Label {
-                        HStack {
-                            Text("Global")
-                            if appState.currentMode == .global {
-                                Image(systemName: "checkmark")
-                            }
-                        }
-                    } icon: {
-                        Image(systemName: "globe")
-                    }
+                Toggle(isOn: Binding(
+                    get: { appState.currentMode == .global },
+                    set: { _ in Task { await appState.setMode(.global) } }
+                )) {
+                    Label("Global", systemImage: "globe")
                 }
                 .keyboardShortcut("2", modifiers: [.command])
                 
-                Button(action: {
-                    Task {
-                        await appState.setMode(.direct)
-                    }
-                }) {
-                    Label {
-                        HStack {
-                            Text("Direct")
-                            if appState.currentMode == .direct {
-                                Image(systemName: "checkmark")
-                            }
-                        }
-                    } icon: {
-                        Image(systemName: "arrow.up.right.circle")
-                    }
+                Toggle(isOn: Binding(
+                    get: { appState.currentMode == .direct },
+                    set: { _ in Task { await appState.setMode(.direct) } }
+                )) {
+                    Label("Direct", systemImage: "arrow.up.right.circle")
                 }
                 .keyboardShortcut("3", modifiers: [.command])
             } label: {
