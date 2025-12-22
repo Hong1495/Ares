@@ -99,9 +99,9 @@ struct RulesView: View {
     
     private func proxyIcon(_ proxy: String) -> String {
         switch proxy.lowercased() {
-        case "direct": return "arrow.up.right.circle.fill"
-        case "reject": return "xmark.circle.fill"
-        default: return "arrow.right.circle.fill"
+        case "direct": return "arrow.turn.up.right"
+        case "reject": return "shield.slash"
+        default: return "arrow.right.circle"
         }
     }
 }

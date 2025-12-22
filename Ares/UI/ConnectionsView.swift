@@ -99,6 +99,7 @@ struct ConnectionsView: View {
                     }
                 } label: {
                     Image(systemName: "trash")
+                        .fontWeight(.medium)
                 }
                 .help("Close all connections")
                 
@@ -107,6 +108,7 @@ struct ConnectionsView: View {
                     exportConnections()
                 } label: {
                     Image(systemName: "square.and.arrow.up")
+                        .fontWeight(.medium)
                 }
                 .help("Export connections")
             }
@@ -129,13 +131,13 @@ struct ConnectionsView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 4) {
                             Image(systemName: "arrow.down")
-                                .font(.system(size: 11, weight: .bold))
+                                .font(.system(size: 11, weight: .light))
                                 .foregroundStyle(.blue)
                             Text(formatBytes(conn.download))
                         }
                         HStack(spacing: 4) {
                             Image(systemName: "arrow.up")
-                                .font(.system(size: 11, weight: .bold))
+                                .font(.system(size: 11, weight: .light))
                                 .foregroundStyle(.orange)
                             Text(formatBytes(conn.upload))
                         }

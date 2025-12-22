@@ -61,15 +61,24 @@ struct StatusHeader: View {
     
     var body: some View {
         HStack {
-            Label(clashViewModel.isRunning ? "Clash Running" : "Clash Stopped", 
-                  systemImage: clashViewModel.isRunning ? "bolt.fill" : "bolt.slash.fill")
-                .font(.footnote)
-                .fontWeight(.medium)
+            Label {
+                Text(clashViewModel.isRunning ? "Clash Running" : "Clash Stopped")
+            } icon: {
+                Image(systemName: clashViewModel.isRunning ? "bolt.horizontal" : "bolt.horizontal")
+                    .fontWeight(.light)
+                    .frame(width: 16)
+            }
+            .font(.footnote.weight(.medium))
                 .foregroundStyle(clashViewModel.isRunning ? .green : .secondary)
             Spacer()
-            Label("Port: 7890", systemImage: "network")
-                .font(.footnote)
-                .fontWeight(.medium)
+            Label {
+                Text("Port: 7890")
+            } icon: {
+                Image(systemName: "link")
+                    .fontWeight(.light)
+                    .frame(width: 16)
+            }
+            .font(.footnote.weight(.medium))
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal)
@@ -82,11 +91,14 @@ struct NetworkTrafficCard: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label("Proxy Service", systemImage: "network")
-                    .font(.headline)
-                Spacer()
-            }
+                Label {
+                    Text("Proxy Service")
+                } icon: {
+                    Image(systemName: "bolt.horizontal")
+                        .fontWeight(.light)
+                        .frame(width: 20)
+                }
+                .font(.headline.weight(.medium))
             
             Spacer()
             
@@ -138,8 +150,14 @@ struct ProxyModeCard: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Proxy Mode", systemImage: "arrow.triangle.branch")
-                .font(.headline)
+            Label {
+                Text("Proxy Mode")
+            } icon: {
+                Image(systemName: "arrow.triangle.branch")
+                    .fontWeight(.light)
+                    .frame(width: 20)
+            }
+            .font(.headline.weight(.medium))
             
             Spacer()
             
@@ -190,9 +208,9 @@ struct ProxyModeCard: View {
     
     private func modeIcon(_ mode: ClashConfig.Mode) -> String {
         switch mode {
-        case .rule: return "list.bullet.rectangle"
-        case .global: return "globe"
-        case .direct: return "arrow.forward"
+        case .rule: return "list.bullet.indent"
+        case .global: return "map"
+        case .direct: return "arrow.turn.up.right"
         }
     }
     
@@ -212,11 +230,14 @@ struct TUNModeCard: View {
     
     var body: some View {
         VStack(alignment: .leading) {
-            HStack {
-                Label("TUN Mode", systemImage: "network")
-                    .font(.headline)
-                Spacer()
-            }
+                Label {
+                    Text("TUN Mode")
+                } icon: {
+                    Image(systemName: "bolt.shield")
+                        .fontWeight(.light)
+                        .frame(width: 20)
+                }
+                .font(.headline.weight(.medium))
             Spacer()
             
             Toggle("Enable TUN", isOn: Binding(

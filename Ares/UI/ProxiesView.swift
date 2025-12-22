@@ -53,8 +53,8 @@ struct ProxiesView: View {
             ScrollView {
                 if selectedTab == .direct {
                     VStack(spacing: 12) {
-                        Image(systemName: "arrow.forward.circle")
-                            .font(.system(size: 48))
+                        Image(systemName: "arrow.turn.up.right")
+                            .font(.system(size: 48, weight: .medium))
                             .foregroundStyle(.green)
                         Text("Direct Connection")
                             .font(.title2)
@@ -69,7 +69,7 @@ struct ProxiesView: View {
                 } else if filteredGroups.isEmpty {
                     VStack(spacing: 12) {
                         Image(systemName: "network.slash")
-                            .font(.system(size: 48))
+                            .font(.system(size: 48, weight: .medium))
                             .foregroundStyle(.secondary)
                         Text("No proxy groups available")
                             .foregroundStyle(.secondary)
@@ -133,6 +133,7 @@ struct SimpleProxyGroupCard: View {
             Button(action: onToggle) {
                 HStack {
                     Image(systemName: groupIcon)
+                        .font(.body.weight(.medium))
                         .foregroundStyle(.blue)
                     
                     Text(group.name)
@@ -222,7 +223,7 @@ struct SimpleProxyGroupCard: View {
     
     private var groupIcon: String {
         switch group.type {
-        case "Selector": return "checkmark.circle"
+        case "Selector": return "hand.tap"
         case "URLTest": return "speedometer"
         case "Fallback": return "arrow.triangle.2.circlepath"
         case "LoadBalance": return "scale.3d"

@@ -98,7 +98,14 @@ struct AresApp: App {
                     window.makeKeyAndOrderFront(nil)
                 }
             }) {
-                Label("Dashboard", systemImage: "gauge.with.dots.needle.bottom.50percent")
+                Label {
+                    Text("Dashboard")
+                } icon: {
+                    Image(systemName: "square.grid.2x2")
+                        .imageScale(.medium)
+                        .fontWeight(.light)
+                        .frame(width: 18)
+                }
             }
             .keyboardShortcut("d", modifiers: [.command])
 
@@ -113,7 +120,14 @@ struct AresApp: App {
                     }
                 }
             )) {
-                Label("System Proxy", systemImage: "network")
+                Label {
+                    Text("System Proxy")
+                } icon: {
+                    Image(systemName: "bolt.horizontal")
+                        .imageScale(.medium)
+                        .fontWeight(.light)
+                        .frame(width: 18)
+                }
             }
             .disabled(clashViewModel.isToggling)
             .keyboardShortcut("p", modifiers: [.command, .shift])
@@ -126,7 +140,14 @@ struct AresApp: App {
                     appState.toggleTUN()
                 }
             )) {
-                Label("TUN Mode", systemImage: "bolt.shield.fill")
+                Label {
+                    Text("TUN Mode")
+                } icon: {
+                    Image(systemName: "bolt.shield")
+                        .imageScale(.medium)
+                        .fontWeight(.light)
+                        .frame(width: 18)
+                }
             }
             .disabled(clashViewModel.isToggling)
             .keyboardShortcut("t", modifiers: [.command, .shift])
@@ -139,7 +160,14 @@ struct AresApp: App {
                     get: { appState.currentMode == .rule },
                     set: { _ in Task { await appState.setMode(.rule) } }
                 )) {
-                    Label("Rule", systemImage: "list.bullet.rectangle")
+                    Label {
+                        Text("Rule")
+                    } icon: {
+                        Image(systemName: "list.bullet.indent")
+                            .imageScale(.medium)
+                            .fontWeight(.light)
+                            .frame(width: 18)
+                    }
                 }
                 .keyboardShortcut("1", modifiers: [.command])
                 
@@ -147,7 +175,14 @@ struct AresApp: App {
                     get: { appState.currentMode == .global },
                     set: { _ in Task { await appState.setMode(.global) } }
                 )) {
-                    Label("Global", systemImage: "globe")
+                    Label {
+                        Text("Global")
+                    } icon: {
+                        Image(systemName: "map")
+                            .imageScale(.medium)
+                            .fontWeight(.light)
+                            .frame(width: 18)
+                    }
                 }
                 .keyboardShortcut("2", modifiers: [.command])
                 
@@ -155,11 +190,25 @@ struct AresApp: App {
                     get: { appState.currentMode == .direct },
                     set: { _ in Task { await appState.setMode(.direct) } }
                 )) {
-                    Label("Direct", systemImage: "arrow.up.right.circle")
+                    Label {
+                        Text("Direct")
+                    } icon: {
+                        Image(systemName: "arrow.turn.up.right")
+                            .imageScale(.medium)
+                            .fontWeight(.light)
+                            .frame(width: 18)
+                    }
                 }
                 .keyboardShortcut("3", modifiers: [.command])
             } label: {
-                Label("Mode", systemImage: "rhombus.fill")
+                Label {
+                    Text("Mode")
+                } icon: {
+                    Image(systemName: "arrow.triangle.branch")
+                        .imageScale(.medium)
+                        .fontWeight(.light)
+                        .frame(width: 18)
+                }
             }
             .keyboardShortcut("M", modifiers: [.command, .shift])
             

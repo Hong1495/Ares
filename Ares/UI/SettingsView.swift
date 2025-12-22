@@ -29,7 +29,7 @@ struct SettingsView: View {
             // General Settings
             Section("General") {
                 Toggle(isOn: $autoStart) {
-                    Label("Start with macOS", systemImage: "desktopcomputer")
+                    Label("Start with macOS", systemImage: "macwindow")
                         .fontWeight(.medium)
                 }
                 .onChange(of: autoStart) { _, newValue in
@@ -129,7 +129,8 @@ struct SettingsView: View {
                 }
                     .disabled(!tunEnabled)
             } header: {
-                Text("TUN Mode")
+                Label("TUN Mode", systemImage: "bolt.shield")
+                    .fontWeight(.medium)
             } footer: {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("• Requires administrator privileges")
@@ -141,7 +142,7 @@ struct SettingsView: View {
             }
             
             // System Proxy Bypass
-            Section("System Proxy Bypass") {
+            Section {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Bypass Domains")
                         .fontWeight(.medium)

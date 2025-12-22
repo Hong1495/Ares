@@ -21,8 +21,14 @@ struct CurrentProxyCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Label("Current Proxy", systemImage: "network")
-                    .font(.headline)
+                Label {
+                    Text("Current Proxy")
+                } icon: {
+                    Image(systemName: "server.rack")
+                        .fontWeight(.light)
+                        .frame(width: 20)
+                }
+                .font(.headline)
                 Spacer()
                 // Mode indicator
                 Text(appState.currentMode.rawValue.capitalized)
@@ -93,7 +99,7 @@ struct CurrentProxyCard: View {
         case "Selector": return "checkmark.circle"
         case "URLTest": return "speedometer"
         case "Fallback": return "arrow.triangle.2.circlepath"
-        default: return "network"
+        default: return "server.rack"
         }
     }
 }
@@ -107,8 +113,14 @@ struct IpInfoCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Label("IP Address", systemImage: "globe")
-                    .font(.headline)
+                Label {
+                    Text("IP Address")
+                } icon: {
+                    Image(systemName: "location")
+                        .fontWeight(.light)
+                        .frame(width: 20)
+                }
+                .font(.headline)
                 Spacer()
                 if isLoading {
                     ProgressView()
@@ -119,8 +131,10 @@ struct IpInfoCard: View {
             if let info = ipInfo {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Image(systemName: "network")
+                        Image(systemName: "link")
+                            .fontWeight(.light)
                             .foregroundStyle(.blue)
+                            .frame(width: 20)
                         Text(info.ip)
                             .font(.system(.body, design: .monospaced))
                     }
