@@ -5,12 +5,33 @@ import Combine
 // MARK: - 1. Sendable Data Models (Global Scope)
 // Ensure all models are Sendable for Swift 6 high-concurrency mode
 
+struct RequestHit: Identifiable, Codable, Equatable, Sendable {
+    var id = UUID()
+    let timestamp: Date
+    let statusCode: Int?
+    let duration: Double?
+    var requestBody: String?
+    var responseBody: String?
+    
+    func asRequest(original: BrowserRequest) -> BrowserRequest {
+        var copy = original
+        copy.timestamp = self.timestamp
+        copy.statusCode = self.statusCode
+        copy.duration = self.duration
+        if let rb = self.requestBody { copy.requestBody = rb }
+        if let sb = self.responseBody { copy.responseBody = sb }
+        copy.hits = [] // Prevent recursive "Hit History" inside a Hit Snapshot
+        return copy
+    }
+}
+
 struct BrowserRequest: Identifiable, Codable, Equatable, Sendable {
     let id: String
     let url: String
     let method: String
     let type: String
-    let timestamp: Date
+    let initiator: String? // Added for debugging duplicate sources
+    var timestamp: Date
     var status: RequestStatus
     var statusCode: Int?
     var mimeType: String?
@@ -24,6 +45,7 @@ struct BrowserRequest: Identifiable, Codable, Equatable, Sendable {
     var requestBody: String?
     var responseBody: String?
     var errorMessage: String?
+    var hits: [RequestHit] = []
     
     enum RequestStatus: String, Codable, Sendable {
         case pending = "pending"
@@ -33,11 +55,45 @@ struct BrowserRequest: Identifiable, Codable, Equatable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, url, method, type, timestamp, status, statusCode, mimeType, size, duration, remoteAddress, requestHeaders, responseHeaders, requestBody, responseBody, errorMessage
+        case id, url, method, type, initiator, timestamp, status, statusCode, mimeType, size, duration, remoteAddress, requestHeaders, responseHeaders, requestBody, responseBody, errorMessage, hits, hitCount, lastUpdateTimestamp
     }
 
-    init(id: String, url: String, method: String, type: String, timestamp: Date, status: RequestStatus) {
-        self.id = id; self.url = url; self.method = method; self.type = type; self.timestamp = timestamp; self.status = status
+    // Custom initializer for programmatic creation
+    init(id: String, url: String, method: String, type: String, initiator: String? = nil, timestamp: Date, status: RequestStatus) {
+        self.id = id; self.url = url; self.method = method; self.type = type; self.initiator = initiator; self.timestamp = timestamp; self.status = status
+        // Record the first hit on initialization
+        self.hits = [RequestHit(timestamp: timestamp, statusCode: nil, duration: nil, requestBody: nil, responseBody: nil)]
+    }
+    
+    // Custom Decodable initializer to handle missing fields from browser extension
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        // Required fields
+        id = try container.decode(String.self, forKey: .id)
+        url = try container.decode(String.self, forKey: .url)
+        method = try container.decode(String.self, forKey: .method)
+        type = try container.decode(String.self, forKey: .type)
+        timestamp = try container.decode(Date.self, forKey: .timestamp)
+        status = try container.decode(RequestStatus.self, forKey: .status)
+        
+        // Optional fields
+        initiator = try container.decodeIfPresent(String.self, forKey: .initiator)
+        statusCode = try container.decodeIfPresent(Int.self, forKey: .statusCode)
+        mimeType = try container.decodeIfPresent(String.self, forKey: .mimeType)
+        size = try container.decodeIfPresent(Int.self, forKey: .size)
+        duration = try container.decodeIfPresent(Double.self, forKey: .duration)
+        remoteAddress = try container.decodeIfPresent(String.self, forKey: .remoteAddress)
+        requestHeaders = try container.decodeIfPresent([String: String].self, forKey: .requestHeaders)
+        responseHeaders = try container.decodeIfPresent([String: String].self, forKey: .responseHeaders)
+        requestBody = try container.decodeIfPresent(String.self, forKey: .requestBody)
+        responseBody = try container.decodeIfPresent(String.self, forKey: .responseBody)
+        errorMessage = try container.decodeIfPresent(String.self, forKey: .errorMessage)
+        lastUpdateTimestamp = try container.decodeIfPresent(Date.self, forKey: .lastUpdateTimestamp)
+        
+        // New fields with defaults - these won't exist in browser extension JSON
+        hitCount = try container.decodeIfPresent(Int.self, forKey: .hitCount) ?? 1
+        hits = try container.decodeIfPresent([RequestHit].self, forKey: .hits) ?? []
     }
 
     var sortSize: Int { displaySize }
@@ -141,6 +197,15 @@ final class TelemetryWorker: @unchecked Sendable {
     }
 
     func start() {
+        // Cancel existing listener if any to prevent port conflicts
+        if listener != nil {
+            print("[TeleWorker] ⚠️ Stopping existing listener before restart...")
+            listener?.cancel()
+            listener = nil
+            // Small delay to allow port to be released
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        
         do {
             let params = NWParameters.tcp
             params.allowLocalEndpointReuse = true
@@ -161,6 +226,7 @@ final class TelemetryWorker: @unchecked Sendable {
             }
             
             listener?.start(queue: .global(qos: .utility))
+            print("[TeleWorker] 🚀 Listener started on port 10086")
         } catch {
             print("[TeleWorker] ❌ Failed to start listener: \(error)")
         }
@@ -209,6 +275,19 @@ final class TelemetryWorker: @unchecked Sendable {
         
         // 1. Try Batched (Array)
         if let updates = try? decoder.decode([PayloadWrapper].self, from: data) {
+            // Debug: Log received request methods
+            for update in updates {
+                if let req = update.request {
+                    // Highlight body capture requests
+                    if req.id.hasPrefix("body-") {
+                        let hasReqBody = req.requestBody != nil
+                        let hasResBody = req.responseBody != nil
+                        print("[TeleWorker] 📦 BODY CAPTURE: \(req.method) \(req.url.prefix(40))... reqBody:\(hasReqBody) resBody:\(hasResBody)")
+                    } else {
+                        print("[TeleWorker] 📥 Received: \(req.method) \(req.url.prefix(60))...")
+                    }
+                }
+            }
             Task { @MainActor in
                 BrowserAnalysisService.shared.handleBatchedUpdates(updates)
             }
@@ -217,6 +296,9 @@ final class TelemetryWorker: @unchecked Sendable {
         
         // 2. Try Single (Object)
         if let wrapper = try? decoder.decode(PayloadWrapper.self, from: data) {
+            if let req = wrapper.request {
+                print("[TeleWorker] 📥 Received: \(req.method) \(req.url.prefix(60))...")
+            }
             Task { @MainActor in
                 BrowserAnalysisService.shared.handleBatchedUpdates([wrapper])
             }
@@ -245,6 +327,15 @@ final class TelemetryWorker: @unchecked Sendable {
             conn.cancel() 
         }))
     }
+    
+    func stop() {
+        listener?.cancel()
+        listener = nil
+        Task { @MainActor in
+            BrowserAnalysisService.shared.isListening = false
+        }
+        print("[TeleWorker] 🛑 Listener stopped")
+    }
 }
 
 // MARK: - 3. UI Service (Main Actor)
@@ -265,6 +356,27 @@ class BrowserAnalysisService: ObservableObject {
     private init() {
         worker.start()
         startPruningTimer()
+    }
+    
+    /// Start listening for browser extension data
+    func startListening() {
+        guard !isListening else { return }
+        worker.start()
+    }
+    
+    /// Stop listening for browser extension data
+    func stopListening() {
+        guard isListening else { return }
+        worker.stop()
+    }
+    
+    /// Toggle listening state
+    func toggleListening() {
+        if isListening {
+            stopListening()
+        } else {
+            startListening()
+        }
     }
 
     func handleBatchedUpdates(_ wrappers: [PayloadWrapper]) {
@@ -316,29 +428,57 @@ class BrowserAnalysisService: ObservableObject {
             merge(request, into: &activeTabs[i].requests[ri])
         } 
         // 2. Heuristic Body Matching (IDs starting with "body-")
-        else if request.id.hasPrefix("body-"),
-                let mi = activeTabs[i].requests.lastIndex(where: {
-                    $0.url == request.url && $0.method == request.method && 
-                    abs($0.timestamp.timeIntervalSince(request.timestamp)) < 15.0 // More generous window for bodies
-                }) {
-            merge(request, into: &activeTabs[i].requests[mi])
+        // IMPORTANT: Body capture should ONLY merge, NEVER create new entries
+        // Only telemetry (chrome.webRequest) should create entries to avoid duplicates
+        else if request.id.hasPrefix("body-") {
+            // Find a matching request by URL and method within a reasonable time window
+            let bodyMatchWindow = 5.0
+            if let mi = activeTabs[i].requests.firstIndex(where: {
+                guard $0.url == request.url && $0.method == request.method else { return false }
+                // Check against either the original timestamp or last update
+                let refTime = $0.lastUpdateTimestamp ?? $0.timestamp
+                return abs(refTime.timeIntervalSince(request.timestamp)) < bodyMatchWindow
+            }) {
+                // print("[TeleWorker] ✅ Body merged into request: \(request.url.prefix(40))...")
+                merge(request, into: &activeTabs[i].requests[mi])
+            } else {
+                // No match found - discard body capture, don't create new entry
+                // This prevents duplicate entries from body capture + telemetry
+                // print("[TeleWorker] ⏳ Body capture waiting (no matching telemetry yet): \(request.url.prefix(40))...")
+            }
         } 
         // 3. New Entry or Polling Coalescing
         else {
             var nr = request; nr.lastUpdateTimestamp = Date()
             
-            // Smart polling merge: If the same request appears within 5s, increment hitCount
-            let recentThreshold = 5.0
-            if let ei = activeTabs[i].requests.firstIndex(where: {
+            // Only merge true duplicates/retries within 500ms - NOT normal polling
+            // CRITICAL: Do NOT merge POST/PUT/PATCH methods, as bodies might differ.
+            // Only merge GET/HEAD where parameters are fully visible in the URL.
+            let isSafeMethod = ["GET", "HEAD", "OPTIONS"].contains(request.method.uppercased())
+            
+            let recentThreshold = 0.5
+            if isSafeMethod, let ei = activeTabs[i].requests.firstIndex(where: {
                 $0.url == request.url && $0.method == request.method && 
                 abs($0.timestamp.timeIntervalSince(request.timestamp)) < recentThreshold
             }) {
+                // print("[TeleWorker] 🔄 POLLING MERGE: \(request.method) \(request.url.prefix(40))... (id: \(request.id.prefix(20)))")
                 activeTabs[i].requests[ei].hitCount += 1
-                activeTabs[i].requests[ei].lastUpdateTimestamp = Date()
-                activeTabs[i].requests[ei].status = request.status
-                // Merge status/codes if updated
-                if request.statusCode != nil { activeTabs[i].requests[ei].statusCode = request.statusCode }
+                
+                // Record the new hit in the history
+                // Record the new hit in the history with its specific body
+                let newHit = RequestHit(
+                    timestamp: request.timestamp,
+                    statusCode: request.statusCode,
+                    duration: request.duration,
+                    requestBody: request.requestBody,
+                    responseBody: request.responseBody
+                )
+                activeTabs[i].requests[ei].hits.append(newHit)
+                
+                // IMPORTANT: Use merge to preserve body data and other fields!
+                merge(request, into: &activeTabs[i].requests[ei])
             } else {
+                // print("[TeleWorker] ➕ NEW REQUEST: \(request.method) \(request.url.prefix(100))... (id: \(request.id.prefix(8))) [type: \(request.type)] [init: \(request.initiator ?? "nil")]")
                 activeTabs[i].requests.insert(nr, at: 0)
             }
         }
@@ -377,9 +517,31 @@ class BrowserAnalysisService: ObservableObject {
         if let ip = src.remoteAddress { dst.remoteAddress = ip }
         if let reqH = src.requestHeaders { dst.requestHeaders = reqH }
         if let resH = src.responseHeaders { dst.responseHeaders = resH }
-        if let reqB = src.requestBody { dst.requestBody = reqB }
-        if let resB = src.responseBody { dst.responseBody = resB }
+        if let reqB = src.requestBody {
+            if let existingBody = dst.requestBody, existingBody != reqB {
+                // print("[TeleWorker] ⚠️ BODY MISMATCH in merge! Keeping new body. (Old: \(existingBody.prefix(30))... New: \(reqB.prefix(30))...)")
+            } else {
+                // print("[TeleWorker] 📝 Merging requestBody: \(reqB.prefix(50))...")
+            }
+            dst.requestBody = reqB
+        }
+        if let resB = src.responseBody {
+            // print("[TeleWorker] 📝 Merging responseBody: \(resB.prefix(50))...")
+            dst.responseBody = resB
+        }
         if let msg = src.errorMessage { dst.errorMessage = msg }
+        
+        // Update the most recent hit with finalized status/duration if it was previously nil
+        if !dst.hits.isEmpty {
+            let lastIdx = dst.hits.count - 1
+            if let c = src.statusCode { dst.hits[lastIdx] = RequestHit(timestamp: dst.hits[lastIdx].timestamp, statusCode: c, duration: dst.hits[lastIdx].duration, requestBody: dst.hits[lastIdx].requestBody, responseBody: dst.hits[lastIdx].responseBody) }
+            if let d = src.duration { dst.hits[lastIdx] = RequestHit(timestamp: dst.hits[lastIdx].timestamp, statusCode: dst.hits[lastIdx].statusCode, duration: d, requestBody: dst.hits[lastIdx].requestBody, responseBody: dst.hits[lastIdx].responseBody) }
+            
+            // Also update body in the latest hit if captured
+            if let rb = src.requestBody { dst.hits[lastIdx].requestBody = rb }
+            if let sb = src.responseBody { dst.hits[lastIdx].responseBody = sb }
+        }
+        
         dst.lastUpdateTimestamp = Date()
     }
 }

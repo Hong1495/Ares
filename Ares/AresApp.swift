@@ -88,6 +88,15 @@ struct AresApp: App {
                 .preferredColorScheme(themeService.theme == "dark" ? .dark : (themeService.theme == "light" ? .light : nil))
         }
         
+        WindowGroup(id: "network-inspector", for: String.self) { $requestId in
+            if let id = requestId {
+                NetworkInspectorView(requestId: id)
+                    .environmentObject(appState) // Pass environment objects if needed
+            } else {
+               Text("No Request Selected")
+            }
+        }
+        
         // Enhanced Menu Bar
         // Enhanced Menu Bar
         MenuBarExtra {
