@@ -278,6 +278,14 @@ struct DetailContent: View {
         } label: {
             Label("Copy URL", systemImage: "doc.on.doc")
         }
+        
+        Button {
+            let curl = req.generateCurl()
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(curl, forType: .string)
+        } label: {
+            Label("Copy as cURL", systemImage: "terminal")
+        }
     }
     
     private func updateList() {

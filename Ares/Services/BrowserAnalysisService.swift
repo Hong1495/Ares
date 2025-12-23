@@ -547,3 +547,69 @@ class BrowserAnalysisService: ObservableObject {
         dst.lastUpdateTimestamp = Date()
     }
 }
+
+extension BrowserRequest {
+    func generateCurl() -> String {
+        var curl = "curl '\(self.url)'"
+        curl += " \\\n  -X \(self.method.uppercased())"
+        
+        if let headers = self.requestHeaders {
+            for (k, v) in headers {
+                curl += " \\\n  -H '\(k): \(v)'"
+            }
+        }
+        
+        if let body = self.requestBody, !body.isEmpty {
+            // Attempt to escape single quotes
+            let escapedBody = body.replacingOccurrences(of: "'", with: "'\\''")
+            curl += " \\\n  --data-raw '\(escapedBody)'"
+        }
+        
+        return curl
+    }
+    
+    var securityIssues: [String] {
+        var issues: [String] = []
+        let headers = self.responseHeaders ?? [:]
+        let keys = headers.keys.map { $0.lowercased() }
+        
+        // CORS
+        if !keys.contains("access-control-allow-origin") {
+            issues.append("Missing CORS Header (Access-Control-Allow-Origin)")
+        }
+        
+        // CSP
+        if !keys.contains("content-security-policy") {
+            issues.append("Missing Content-Security-Policy")
+        }
+        
+        // HSTS
+        if self.url.lowercased().hasPrefix("https") && !keys.contains("strict-transport-security") {
+            issues.append("Missing Strict-Transport-Security (HSTS)")
+        }
+        
+        // X-Content-Type
+        if !keys.contains("x-content-type-options") {
+            issues.append("Missing X-Content-Type-Options: nosniff")
+        }
+        
+        return issues
+    }
+    
+    var performanceInsights: [String] {
+        var insights: [String] = []
+        if let d = self.duration {
+            if d > 1.0 { insights.append("Slow Request (>1s). Consider optimizing backend or caching.") }
+            else if d > 0.5 { insights.append("Moderate Latency (>500ms).") }
+        }
+        
+        // Compression
+        let headers = self.responseHeaders ?? [:]
+        let encoding = headers.first { $0.key.lowercased() == "content-encoding" }?.value.lowercased()
+        if let size = self.size, size > 1024, encoding == nil {
+            insights.append("Large response (\(size) bytes) without Content-Encoding (gzip/br).")
+        }
+        
+        return insights
+    }
+}
