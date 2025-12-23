@@ -161,6 +161,19 @@ struct DetailContent: View {
             }
             .width(min: 45, ideal: 50, max: 60)
             
+            TableColumn("Sec", value: \.url) { req in
+                if req.url.lowercased().hasPrefix("https") {
+                    Image(systemName: "lock.fill") // Secure
+                        .font(.system(size: 10))
+                        .foregroundStyle(.green)
+                } else {
+                    Image(systemName: "lock.open.fill") // Insecure
+                        .font(.system(size: 10))
+                        .foregroundStyle(.orange)
+                }
+            }
+            .width(30)
+            
             TableColumn("Method", value: \.method) { req in
                 HStack(spacing: 4) {
                     Text(req.method)
@@ -200,9 +213,7 @@ struct DetailContent: View {
                             .font(.system(size: 9))
                             .help("Payload Captured")
                     } else if req.url.lowercased().hasPrefix("http://") {
-                        Text("🔓")
-                            .font(.system(size: 9))
-                            .help("Plaintext HTTP")
+                         // Removed confusing lock icon for HTTP plaintext
                     }
                     
                     Text(req.url)

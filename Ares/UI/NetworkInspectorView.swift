@@ -10,10 +10,19 @@ struct NetworkInspectorView: View {
         case payload = "Payload"
         case preview = "Preview"
         case response = "Response"
-        case timing = "Timing"
-        case ai = "Ares AI" // Feature
+        case analysis = "Analysis"
         
         var id: String { rawValue }
+        
+        var icon: String {
+            switch self {
+            case .headers: return "list.bullet.rectangle"
+            case .payload: return "doc.text.magnifyingglass"
+            case .preview: return "eye"
+            case .response: return "arrow.down.circle"
+            case .analysis: return "chart.xyaxis.line"
+            }
+        }
     }
     
     @State private var selectedTab: InspectorTab = .headers
@@ -24,11 +33,9 @@ struct NetworkInspectorView: View {
             if let req = tab.requests.first(where: { $0.id == requestId }) {
                 return req
             }
-            // Also check history inside merged requests (though merged POSTs are disabled now, GETs might still have them)
+            // Also check history even if merged
             for req in tab.requests {
                 if req.hits.contains(where: { $0.id.uuidString == requestId }) {
-                    // Logic to return specific hit would be complex here as we need a BrowserRequest. 
-                    // For now, return the parent.
                     return req 
                 }
             }
@@ -39,38 +46,39 @@ struct NetworkInspectorView: View {
     var body: some View {
         Group {
             if let req = request {
-                VStack(spacing: 0) {
-                    // 1. Top Bar: Overview
-                    InspectorHeader(request: req)
-                    
-                    Divider()
-                    
-                    // 2. Tab Bar
-                    InspectorTabBar(selectedTab: $selectedTab)
-                    
-                    Divider()
-                    
-                    // 3. Content Area
-                    // 3. Content Area
-                    ZStack {
-                        Color(nsColor: .textBackgroundColor) // Clean background
-                        
-                        switch selectedTab {
-                        case .headers:
-                            HeadersInspector(request: req)
-                        case .payload:
-                            PayloadInspector(request: req)
-                        case .preview:
-                            PreviewInspector(request: req)
-                        case .response:
-                            ResponseInspector(request: req)
-                        case .timing:
-                            TimingInspector(request: req)
-                        case .ai:
-                            AresAIInspector(request: req)
+                NavigationSplitView {
+                    List(InspectorTab.allCases, selection: $selectedTab) { tab in
+                        NavigationLink(value: tab) {
+                            Label(tab.rawValue, systemImage: tab.icon)
                         }
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .listStyle(.sidebar)
+                    .navigationTitle("Inspector")
+                } detail: {
+                    VStack(spacing: 0) {
+                        // Header
+                        InspectorHeader(request: req)
+                        Divider()
+                        
+                        // Main Inspector Content
+                        ZStack {
+                            Color(nsColor: .textBackgroundColor) // Clean background
+                            
+                            switch selectedTab {
+                            case .headers:
+                                HeadersInspector(request: req)
+                            case .payload:
+                                PayloadInspector(request: req)
+                            case .preview:
+                                PreviewInspector(request: req)
+                            case .response:
+                                ResponseInspector(request: req)
+                            case .analysis:
+                                AnalysisInspector(request: req)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
                 }
             } else {
                 VStack {
@@ -86,12 +94,11 @@ struct NetworkInspectorView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .frame(minWidth: 1000, minHeight: 700) // Larger default window
+        .frame(minWidth: 1000, minHeight: 700)
         .navigationTitle("Inspect Network Details")
         .onAppear {
-            // Hack to attempt maximization (limited in pure SwiftUI, but setting large frame helps)
              if let window = NSApp.windows.first(where: { $0.title == "Inspect Network Details" }) {
-                window.zoom(nil) // Toggle zoom (maximize)
+                window.zoom(nil)
             }
         }
     }
@@ -158,41 +165,7 @@ struct InspectorHeader: View {
     }
 }
 
-struct InspectorTabBar: View {
-    @Binding var selectedTab: NetworkInspectorView.InspectorTab
-    
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(NetworkInspectorView.InspectorTab.allCases) { tab in
-                Button {
-                    selectedTab = tab
-                } label: {
-                    ZStack {
-                        Rectangle()
-                            .fill(selectedTab == tab ? Color(nsColor: .controlBackgroundColor) : Color(nsColor: .windowBackgroundColor))
-                        
-                        VStack(spacing: 6) {
-                            Text(tab.rawValue)
-                                .font(.system(size: 13, weight: selectedTab == tab ? .medium : .regular))
-                                .foregroundColor(selectedTab == tab ? .primary : .secondary)
-                            
-                            Rectangle()
-                                .fill(selectedTab == tab ? Color.blue : Color.clear)
-                                .frame(height: 2)
-                        }
-                        .padding(.top, 10)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .frame(maxWidth: .infinity) // Equal width tabs
-            }
-        }
-        .frame(height: 36)
-        .background(Color(nsColor: .windowBackgroundColor))
-        .overlay(Rectangle().frame(height: 1).foregroundColor(Color(nsColor: .separatorColor)), alignment: .bottom)
-    }
-}
+
 
 // MARK: - Inspectors
 
@@ -275,22 +248,7 @@ struct PreviewInspector: View {
     let request: BrowserRequest
     
     var body: some View {
-         VStack(alignment: .leading, spacing: 0) {
-             if let body = request.responseBody, !body.isEmpty {
-                 // Try to guess type
-                  if body.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("{") || body.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("[") {
-                         JSONTreeView(jsonString: body)
-                 } else {
-                     ScrollView {
-                         Text(body)
-                            .font(.system(size: 13, design: .monospaced))
-                            .padding()
-                     }
-                 }
-             } else {
-                 EmptyState(text: "No Response Data to Preview")
-             }
-         }
+         RichContentPreview(request: request)
     }
 }
 
@@ -298,24 +256,102 @@ struct ResponseInspector: View {
     let request: BrowserRequest
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                if let body = request.responseBody, !body.isEmpty {
-                    SectionView(title: "Response Body (\(formatSize(body.count)))") {
-                         Text(body)
-                            .font(.system(size: 11, design: .monospaced))
-                            .textSelection(.enabled)
-                            .padding()
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color.secondary.opacity(0.05))
-                            .cornerRadius(6)
-                    }
+        RichContentPreview(request: request)
+    }
+}
+
+struct RichContentPreview: View {
+    let request: BrowserRequest
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let body = request.responseBody, !body.isEmpty {
+                // 1. Determine Content Type
+                let contentType = request.responseHeaders?.first(where: { $0.key.lowercased() == "content-type" })?.value.lowercased() ?? ""
+                
+                // 2. Dispatch to correct view
+                if contentType.contains("image") {
+                    renderImage(body, contentType: contentType)
+                } else if contentType.contains("css") || contentType.contains("javascript") || contentType.contains("html") || contentType.contains("xml") {
+                    CodeView(code: body, lang: languageFor(contentType))
+                } else if body.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("{") || body.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("[") {
+                    JSONTreeView(jsonString: body)
                 } else {
-                    EmptyState(text: "No Response Body available")
+                    // Default Text View
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Size: \(formatSize(body.count))")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            Text(body)
+                                .font(.system(size: 13, design: .monospaced))
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding()
+                    }
                 }
+            } else {
+                EmptyState(text: "No Content Available")
             }
-            .padding()
         }
+    }
+    
+    @ViewBuilder
+    func renderImage(_ body: String, contentType: String) -> some View {
+        
+        if contentType.contains("svg") {
+            // SVG Handling
+            // 1. Try treating as Base64 first (common from CDP)
+            if let data = Data(base64Encoded: body, options: .ignoreUnknownCharacters) {
+                // If it renders as image
+                if let nsImage = NSImage(data: data) {
+                    ImagePreview(image: nsImage, info: "SVG Image (Decoded)")
+                } 
+                // If not image, maybe it's text/xml?
+                else if let decodedString = String(data: data, encoding: .utf8) {
+                    CodeView(code: decodedString, lang: "svg")
+                } else {
+                     // Failed to decode to string, show raw
+                    CodeView(code: body, lang: "svg")
+                }
+            } 
+            // 2. Try treating as Raw XML String
+            else if let data = body.data(using: .utf8), let nsImage = NSImage(data: data) {
+                 ImagePreview(image: nsImage, info: "SVG Image")
+            } else {
+                // Fallback: Just show the text (it might be malformed XML)
+                CodeView(code: body, lang: "svg")
+            }
+        } else {
+            // Binary Image (Base64)
+            if let data = Data(base64Encoded: body, options: .ignoreUnknownCharacters), let nsImage = NSImage(data: data) {
+                ImagePreview(image: nsImage, info: "\(contentType) (Base64)")
+            } else {
+                // Last ditch: maybe it was NOT base64 but raw binary passed as string? (Unlikely in Swift/JSON)
+                VStack {
+                    Image(systemName: "photo.badge.exclamationmark")
+                        .font(.largeTitle)
+                        .foregroundColor(.secondary)
+                    Text("Image decode failed")
+                        .foregroundColor(.secondary)
+                        .padding()
+                    Text("Size: \(formatSize(body.count))")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+    }
+    
+    func languageFor(_ type: String) -> String {
+        if type.contains("css") { return "css" }
+        if type.contains("javascript") { return "js" }
+        if type.contains("html") { return "html" }
+        if type.contains("xml") { return "xml" }
+        return "text"
     }
     
     func formatSize(_ size: Int) -> String {
@@ -323,85 +359,165 @@ struct ResponseInspector: View {
     }
 }
 
-struct TimingInspector: View {
-    let request: BrowserRequest
+struct ImagePreview: View {
+    let image: NSImage
+    let info: String
     
     var body: some View {
         VStack {
-            LatencyAuditView(request: request)
+            Spacer()
+            Image(nsImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .padding()
+                .background(Color(nsColor: .textBackgroundColor))
+                .cornerRadius(8)
+                .shadow(radius: 2)
+            
+            Text("\(Int(image.size.width)) x \(Int(image.size.height)) - \(info)")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .padding(.top, 8)
             Spacer()
         }
-        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 }
 
-struct AresAIInspector: View {
-    let request: BrowserRequest
-    @State private var copiedCurl = false
+struct CodeView: View {
+    let code: String
+    let lang: String
+    @State private var formattedCode: String?
+    @State private var searchText = ""
+    @State private var isCopied = false
+    
+    var displayCode: String {
+        formattedCode ?? code
+    }
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                // 1. Actions
-                HStack(spacing: 12) {
-                    Button {
-                        let curl = generateCurl(request)
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(curl, forType: .string)
-                        copiedCurl = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copiedCurl = false }
-                    } label: {
-                        Label(copiedCurl ? "Copied cURL" : "Copy as cURL", systemImage: "terminal.fill")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    
-                    Spacer()
+        VStack(spacing: 0) {
+            // Toolbar
+            HStack {
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
+                    TextField("Search code...", text: $searchText)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 12))
                 }
+                .padding(6)
+                .background(Color(nsColor: .controlBackgroundColor))
+                .cornerRadius(6)
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.2)))
                 
-                // 2. Security Analysis
-                SectionView(title: "Security Analysis") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        if (request.responseHeaders?.keys.contains("Content-Security-Policy") ?? false) {
-                             Label("CSP Enabled", systemImage: "checkmark.shield.fill").foregroundColor(.green)
-                        } else {
-                             Label("Missing Content-Security-Policy", systemImage: "exclamationmark.shield").foregroundColor(.orange)
-                        }
-                        
-                         if (request.responseHeaders?.keys.contains("Strict-Transport-Security") ?? false) {
-                             Label("HSTS Enabled", systemImage: "checkmark.shield.fill").foregroundColor(.green)
-                        } else {
-                             Label("Missing HSTS Header", systemImage: "exclamationmark.shield").foregroundColor(.orange)
-                        }
-                    }
-                    .padding(12)
-                    .background(Color.secondary.opacity(0.05))
-                    .cornerRadius(8)
-                }
+                Spacer()
                 
-                // 3. Performance Insights
-                SectionView(title: "Performance Insights") {
-                    AresInsightsView(request: request)
+                Text(lang.uppercased())
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.secondary)
+                    .padding(4)
+                    .background(Color.secondary.opacity(0.1))
+                    .cornerRadius(4)
+                
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(displayCode, forType: .string)
+                    isCopied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { isCopied = false }
+                } label: {
+                    Label(isCopied ? "Copied" : "Copy", systemImage: isCopied ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 11))
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             }
-            .padding()
+            .padding(8)
+            .background(Color(nsColor: .windowBackgroundColor))
+            
+            Divider()
+            
+            ScrollView {
+                Text(highlightedCode)
+                    .font(.system(size: 13, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
+            .background(Color(nsColor: .textBackgroundColor))
+        }
+        .task {
+             formattedCode = BasicFormatter.format(code)
         }
     }
     
-    func generateCurl(_ r: BrowserRequest) -> String {
-        var curl = "curl '\(r.url)'"
-        curl += " \\\n  -X \(r.method.uppercased())"
-        if let headers = r.requestHeaders {
-            for (k, v) in headers {
-                curl += " \\\n  -H '\(k): \(v)'"
+    var highlightedCode: AttributedString {
+        let text = displayCode
+        var attributed = AttributedString(text)
+        attributed.foregroundColor = colorForLang(lang)
+        
+        if !searchText.isEmpty {
+            // Find all ranges (Case insensitive)
+            var range = attributed.startIndex..<attributed.endIndex
+            while let match = attributed[range].range(of: searchText, options: .caseInsensitive) {
+                attributed[match].backgroundColor = .yellow.opacity(0.3)
+                attributed[match].foregroundColor = .black
+                // Move search range forward
+                if match.upperBound == attributed.endIndex { break }
+                range = match.upperBound..<attributed.endIndex
             }
         }
-        if let body = r.requestBody, !body.isEmpty {
-            // minify body for curl
-            curl += " \\\n  --data-raw '\(body.replacingOccurrences(of: "'", with: "'\\''"))'"
+        
+        return attributed
+    }
+    
+    func colorForLang(_ lang: String) -> Color {
+        switch lang {
+        case "css": return .blue
+        case "js": return .orange
+        case "html", "xml", "svg": return .purple
+        default: return .primary
         }
-        return curl
     }
 }
+
+struct BasicFormatter {
+    static func format(_ code: String) -> String {
+        // Very basic brace-based formatter for JS/CSS
+        var formatted = ""
+        var indent = 0
+        let indentStr = "  "
+        
+        // Normalize newlines (Use with caution on code with comments)
+        let clean = code.replacingOccurrences(of: "\n", with: "")
+                        .replacingOccurrences(of: "\r", with: "")
+        
+        let charArray = Array(clean)
+        for i in 0..<charArray.count {
+            let char = charArray[i]
+            
+            if char == "{" {
+                formatted.append(" {\n")
+                indent += 1
+                formatted.append(String(repeating: indentStr, count: indent))
+            } else if char == "}" {
+                formatted.append("\n")
+                indent = max(0, indent - 1)
+                formatted.append(String(repeating: indentStr, count: indent))
+                formatted.append("}")
+            } else if char == ";" {
+                formatted.append(";\n")
+                formatted.append(String(repeating: indentStr, count: indent))
+            } else {
+                formatted.append(char)
+            }
+        }
+        return formatted
+    }
+}
+
+
 
 // MARK: - Helpers
 
@@ -453,6 +569,10 @@ struct EmptyState: View {
             Spacer()
             Text(text)
                 .foregroundColor(.secondary)
+            Text("Verify extension settings if content is missing.")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .padding(.top, 4)
             Spacer()
         }
         .frame(maxWidth: .infinity)

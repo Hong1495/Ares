@@ -4,23 +4,57 @@ struct JSONTreeView: View {
     let jsonString: String
     @State private var parsedData: Any?
     @State private var parseError: String?
+    @State private var searchText: String = ""
+    @State private var isCopied: Bool = false
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading) {
-                if let error = parseError {
-                    Text("Invalid JSON: \(error)")
-                        .foregroundColor(.red)
-                        .font(.system(size: 11, design: .monospaced))
-                } else if let data = parsedData {
-                    JSONNodeView(key: "root", value: data, isRoot: true)
-                } else {
-                    Text("Parsing...")
-                        .font(.caption)
+        VStack(spacing: 0) {
+            // Toolbar
+            HStack {
+                HStack {
+                    Image(systemName: "magnifyingglass")
                         .foregroundColor(.secondary)
+                    TextField("Filter via JSON path...", text: $searchText)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 12))
                 }
+                .padding(6)
+                .background(Color(nsColor: .controlBackgroundColor))
+                .cornerRadius(6)
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.2)))
+                
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(jsonString, forType: .string)
+                    isCopied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { isCopied = false }
+                } label: {
+                    Label(isCopied ? "Copied" : "Copy", systemImage: isCopied ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(.bordered)
             }
-            .padding()
+            .padding(8)
+            .background(Color(nsColor: .windowBackgroundColor))
+            
+            Divider()
+            
+            ScrollView {
+                VStack(alignment: .leading) {
+                    if let error = parseError {
+                        Text("Invalid JSON: \(error)")
+                            .foregroundColor(.red)
+                            .font(.system(size: 11, design: .monospaced))
+                    } else if let data = parsedData {
+                        JSONNodeView(key: "root", value: data, isRoot: true, searchText: searchText)
+                    } else {
+                        Text("Parsing...")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding()
+            }
         }
         .onAppear {
             parseJSON()
@@ -49,6 +83,7 @@ struct JSONNodeView: View {
     let key: String?
     let value: Any
     let isRoot: Bool
+    var searchText: String
     
     @State private var isExpanded: Bool = true
     
@@ -78,6 +113,7 @@ struct JSONNodeView: View {
                     Text("\(key):")
                         .font(.system(size: 13, weight: .semibold, design: .monospaced))
                         .foregroundColor(.purple)
+                        .background(highlightColor(for: key))
                 }
                 
                 // Value Display (Inline for primitives, braced for containers)
@@ -114,11 +150,11 @@ struct JSONNodeView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     if let dict = value as? [String: Any] {
                         ForEach(dict.keys.sorted(), id: \.self) { k in
-                            JSONNodeView(key: k, value: dict[k]!, isRoot: false)
+                            JSONNodeView(key: k, value: dict[k]!, isRoot: false, searchText: searchText)
                         }
                     } else if let array = value as? [Any] {
                         ForEach(Array(array.enumerated()), id: \.offset) { index, item in
-                             JSONNodeView(key: "\(index)", value: item, isRoot: false)
+                             JSONNodeView(key: "\(index)", value: item, isRoot: false, searchText: searchText)
                         }
                     }
                 }
@@ -136,6 +172,13 @@ struct JSONNodeView: View {
     }
     
     // MARK: - Helpers
+    
+    func highlightColor(for text: String) -> Color {
+        if !searchText.isEmpty && text.localizedCaseInsensitiveContains(searchText) {
+            return Color.yellow.opacity(0.3)
+        }
+        return Color.clear
+    }
     
     var isContainer: Bool {
         return value is [String: Any] || value is [Any]
@@ -166,6 +209,7 @@ struct JSONNodeView: View {
                 .font(.system(size: 13, design: .monospaced))
                 .foregroundColor(.green)
                 .lineLimit(isRoot ? nil : 5) 
+                .background(highlightColor(for: str)) 
         } else if let num = value as? NSNumber {
             if CFBooleanGetTypeID() == CFGetTypeID(num) {
                 Text(num.boolValue ? "true" : "false")
@@ -184,6 +228,7 @@ struct JSONNodeView: View {
             Text("\(String(describing: value))")
                 .font(.system(size: 13, design: .monospaced))
                 .foregroundColor(.primary)
+                .background(highlightColor(for: String(describing: value)))
         }
     }
 }

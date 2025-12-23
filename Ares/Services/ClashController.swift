@@ -460,14 +460,13 @@ class ClashController: ObservableObject {
         do {
             guard let url = URL(string: "\(baseURL)/connections") else { return }
             let (data, _) = try await URLSession.shared.data(from: url)
-            guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            guard let _ = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
                 return
             }
             
-            if let connections = json["connections"] as? [[String: Any]] {
-                let count = connections.count
+            // if let connections = json["connections"] as? [[String: Any]] {
+                // let count = connections.count
                 // Silence noisy heartbeat logs, only print to console for developers
-                print("[ClashController] 🔗 Active connections: \(count)")
                 
                 /*
                 ClashViewModel.shared.addLog("[ClashController] 🔗 Active connections: \(count)")
@@ -481,7 +480,7 @@ class ClashController: ObservableObject {
                     }
                 }
                 */
-            }
+            // }
         } catch {
             ClashViewModel.shared.addLog("[ClashController] ⚠️ Failed to get connections: \(error)")
         }

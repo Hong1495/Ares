@@ -280,11 +280,11 @@ final class TelemetryWorker: @unchecked Sendable {
                 if let req = update.request {
                     // Highlight body capture requests
                     if req.id.hasPrefix("body-") {
-                        let hasReqBody = req.requestBody != nil
-                        let hasResBody = req.responseBody != nil
-                        print("[TeleWorker] 📦 BODY CAPTURE: \(req.method) \(req.url.prefix(40))... reqBody:\(hasReqBody) resBody:\(hasResBody)")
+                        // let hasReqBody = req.requestBody != nil
+                        // let hasResBody = req.responseBody != nil
+                        // print("[TeleWorker] 📦 BODY CAPTURE: \(req.method) \(req.url.prefix(40))... reqBody:\(hasReqBody) resBody:\(hasResBody)")
                     } else {
-                        print("[TeleWorker] 📥 Received: \(req.method) \(req.url.prefix(60))...")
+                        // print("[TeleWorker] 📥 Received: \(req.method) \(req.url.prefix(60))...")
                     }
                 }
             }
@@ -296,9 +296,11 @@ final class TelemetryWorker: @unchecked Sendable {
         
         // 2. Try Single (Object)
         if let wrapper = try? decoder.decode(PayloadWrapper.self, from: data) {
+            /*
             if let req = wrapper.request {
-                print("[TeleWorker] 📥 Received: \(req.method) \(req.url.prefix(60))...")
+                // print("[TeleWorker] 📥 Received: \(req.method) \(req.url.prefix(60))...")
             }
+            */
             Task { @MainActor in
                 BrowserAnalysisService.shared.handleBatchedUpdates([wrapper])
             }

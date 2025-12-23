@@ -268,4 +268,111 @@ chrome.alarms.create("heartbeat", { periodInMinutes: 0.5 });
 
 chrome.tabs.query({}, (tabs) => {
   tabs.forEach(syncTab);
+  // Auto-attach debugger to existing tabs
+  tabs.forEach(attachDebuggerIfNeeded);
+});
+
+// --- CDP Body Capture (The "Heavy" Lifting) ---
+
+// Track CDP request metadata
+const cdpRequests = new Map(); // requestId -> { url, method, mimeType }
+const attachedTabs = new Set();
+
+function attachDebuggerIfNeeded(tab) {
+  if (
+    !tab ||
+    !tab.url ||
+    tab.url.startsWith("chrome://") ||
+    attachedTabs.has(tab.id)
+  )
+    return;
+
+  // Only attach if it's an HTTP/HTTPS page
+  if (tab.url.startsWith("http")) {
+    chrome.debugger.attach({ tabId: tab.id }, "1.3", () => {
+      if (chrome.runtime.lastError) {
+        // console.warn("[Ares] Debugger attach failed:", chrome.runtime.lastError.message);
+        return;
+      }
+      attachedTabs.add(tab.id);
+      chrome.debugger.sendCommand({ tabId: tab.id }, "Network.enable");
+    });
+  }
+}
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (
+    changeInfo.status === "loading" &&
+    tab.url &&
+    tab.url.startsWith("http")
+  ) {
+    attachDebuggerIfNeeded(tab);
+  }
+});
+
+chrome.debugger.onEvent.addListener((source, method, params) => {
+  if (method === "Network.requestWillBeSent") {
+    cdpRequests.set(params.requestId, {
+      url: params.request.url,
+      method: params.request.method,
+      timestamp: Date.now(),
+    });
+  } else if (method === "Network.responseReceived") {
+    const meta = cdpRequests.get(params.requestId);
+    if (meta) {
+      meta.mimeType = params.response.mimeType;
+      if (
+        meta.mimeType.includes("image") ||
+        meta.mimeType.includes("css") ||
+        meta.mimeType.includes("javascript") ||
+        meta.mimeType.includes("json") || // Sometimes JSON is loaded via tags?
+        meta.mimeType.includes("xml")
+      ) {
+        // Mark for capture
+        meta.shouldCapture = true;
+      }
+    }
+  } else if (method === "Network.loadingFinished") {
+    const meta = cdpRequests.get(params.requestId);
+    if (meta && meta.shouldCapture) {
+      chrome.debugger.sendCommand(
+        { tabId: source.tabId },
+        "Network.getResponseBody",
+        { requestId: params.requestId },
+        (result) => {
+          // Ignore errors (e.g. empty body, redirect)
+          if (chrome.runtime.lastError || !result || !result.body) {
+            cdpRequests.delete(params.requestId);
+            return;
+          }
+
+          // Transmit Body Capture
+          transmitTelemetry({
+            tabId: source.tabId.toString(),
+            request: {
+              id: `body-cdp-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+              url: meta.url,
+              method: meta.method,
+              status: "active",
+              responseBody: result.base64Encoded ? result.body : result.body, // Ares handles both String and Base64?
+              // Note: If Base64, we might need to prefix or just send raw.
+              // RichContentPreview detects Base64 for images.
+              // But for Text (CSS), we need raw text. CDP sends base64 for binary, text for text.
+              // Swift side:
+              // ImagePreview tries Data(base64Encoded: body).
+              // CodeView tries text.
+              // So sending raw result.body is correct.
+              timestamp: new Date().toISOString(),
+              type: "resource_capture",
+            },
+          });
+          cdpRequests.delete(params.requestId);
+        }
+      );
+    }
+  }
+});
+
+chrome.debugger.onDetach.addListener((source) => {
+  attachedTabs.delete(source.tabId);
 });
