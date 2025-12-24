@@ -4,79 +4,36 @@ struct AnalysisView: View {
     @ObservedObject private var service = BrowserAnalysisService.shared
     @State private var selectedTabId: String? = "all_requests"
     @State private var searchText: String = ""
-    @State private var selectedTypeFilter: String = "All"
+    @State private var selectedMethods: Set<String> = Set(["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"])
+    @State private var selectedTypes: Set<String> = Set(["Fetch", "XHR", "Image", "Script", "Stylesheet", "Document", "CONNECT"])
     @State private var sortOrder = [KeyPathComparator(\BrowserRequest.timestamp, order: .reverse)]
     
     // Sheet State
     @State private var selectedRequest: BrowserRequest? = nil
     @State private var showingDetails = false
     @State private var showingDiagnostics = false
+    @State private var showingMethodFilter = false
+    @State private var showingTypeFilter = false
     
-    let typeFilters = ["All", "Fetch", "XHR", "Image", "Script", "Stylesheet", "Document"]
+    let httpMethods = ["CONNECT", "GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"]
+    let resourceTypes = ["Fetch", "XHR", "Image", "Script", "Stylesheet", "Document", "CONNECT"]
     
     var body: some View {
-        HSplitView {
-            // Secondary Sidebar: Tabs List
-            VStack(spacing: 0) {
-                List(selection: $selectedTabId) {
-                    Group {
-                        NavigationLink(value: "all_requests") {
-                            Label("All Requests", systemImage: "clock.arrow.circlepath")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(selectedTabId == "all_requests" ? Color.primary : Color.secondary)
-                        }
-                        .padding(.vertical, 4)
-                        
-                        Text("Active Tabs")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(.tertiary)
-                            .padding(.top, 16)
-                            .padding(.bottom, 8)
-                            .padding(.leading, 4)
-                        
-                        if service.activeTabs.isEmpty {
-                            Text("No tabs active")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
-                                .padding(.leading, 12)
-                        } else {
-                            ForEach(service.activeTabs) { tab in
-                                NavigationLink(value: tab.id) {
-                                    TabRow(tab: tab, isSelected: selectedTabId == tab.id)
-                                }
-                                .listRowSeparator(.hidden)
-                            }
-                        }
-                    }
-                }
-                .listStyle(.sidebar)
-                .scrollIndicators(.hidden)
-                
-                StatusIndicator()
-            }
-            .frame(minWidth: 220, maxWidth: 350)
-            .background(Color(nsColor: .windowBackgroundColor).opacity(0.3))
-            
-            // Main Detail Content
-            VStack(spacing: 0) {
-                if let tabId = selectedTabId {
-                    DetailContent(
-                        tabId: tabId,
-                        service: service,
-                        searchText: searchText,
-                        typeFilter: selectedTypeFilter,
-                        sortOrder: $sortOrder,
-                        selectedRequest: $selectedRequest,
-                        showingDetails: $showingDetails,
-                        showingDiagnostics: $showingDiagnostics
-                    )
-                } else {
-                    EmptyStateView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            }
-            .toolbar { toolbarContent }
+        // Main Detail Content (Full Width)
+        VStack(spacing: 0) {
+            DetailContent(
+                tabId: "all_requests", // Always show all requests
+                service: service,
+                searchText: searchText,
+                selectedMethods: selectedMethods,
+                selectedTypes: selectedTypes,
+                sortOrder: $sortOrder,
+                selectedRequest: $selectedRequest,
+                showingDetails: $showingDetails,
+                showingDiagnostics: $showingDiagnostics
+            )
         }
+        .toolbar { toolbarContent }
         .navigationTitle("Analysis")
     }
     
@@ -96,10 +53,141 @@ struct AnalysisView: View {
             
             Divider()
             
-            Picker("Type", selection: $selectedTypeFilter) {
-                ForEach(typeFilters, id: \.self) { type in
-                    Text(type).tag(type)
+            // HTTP Method Filter
+            Button {
+                showingMethodFilter.toggle()
+            } label: {
+                Label {
+                    if selectedMethods.isEmpty {
+                        Text("No Methods")
+                    } else if selectedMethods.count == httpMethods.count {
+                        Text("All Methods")
+                    } else if selectedMethods.count == 1 {
+                        Text(selectedMethods.first!)
+                    } else {
+                        Text("\(selectedMethods.count) Methods")
+                    }
+                } icon: {
+                    Image(systemName: "arrow.left.arrow.right")
                 }
+            }
+            .popover(isPresented: $showingMethodFilter, arrowEdge: .bottom) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("HTTP Methods")
+                        .font(.headline)
+                        .padding(.horizontal, 12)
+                        .padding(.top, 8)
+                        .padding(.bottom, 4)
+                    
+                    Button(selectedMethods.count == httpMethods.count ? "Deselect All" : "Select All") {
+                        if selectedMethods.count == httpMethods.count {
+                            selectedMethods.removeAll()
+                        } else {
+                            selectedMethods = Set(httpMethods)
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 4)
+                    
+                    Divider()
+                    
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(httpMethods, id: \.self) { method in
+                                Button {
+                                    if selectedMethods.contains(method) {
+                                        selectedMethods.remove(method)
+                                    } else {
+                                        selectedMethods.insert(method)
+                                    }
+                                } label: {
+                                    HStack {
+                                        Image(systemName: selectedMethods.contains(method) ? "checkmark.square.fill" : "square")
+                                            .foregroundColor(selectedMethods.contains(method) ? .accentColor : .secondary)
+                                        Text(method)
+                                        Spacer()
+                                    }
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 300)
+                }
+                .frame(width: 200)
+            }
+            .controlSize(.small)
+            
+            // Resource Type Filter
+            Button {
+                showingTypeFilter.toggle()
+            } label: {
+                Label {
+                    if selectedTypes.isEmpty {
+                        Text("No Types")
+                    } else if selectedTypes.count == resourceTypes.count {
+                        Text("All Types")
+                    } else if selectedTypes.count == 1 {
+                        Text(selectedTypes.first!)
+                    } else {
+                        Text("\(selectedTypes.count) Types")
+                    }
+                } icon: {
+                    Image(systemName: "doc.text")
+                }
+            }
+            .popover(isPresented: $showingTypeFilter, arrowEdge: .bottom) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Resource Types")
+                        .font(.headline)
+                        .padding(.horizontal, 12)
+                        .padding(.top, 8)
+                        .padding(.bottom, 4)
+                    
+                    Button(selectedTypes.count == resourceTypes.count ? "Deselect All" : "Select All") {
+                        if selectedTypes.count == resourceTypes.count {
+                            selectedTypes.removeAll()
+                        } else {
+                            selectedTypes = Set(resourceTypes)
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 4)
+                    
+                    Divider()
+                    
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(resourceTypes, id: \.self) { type in
+                                Button {
+                                    if selectedTypes.contains(type) {
+                                        selectedTypes.remove(type)
+                                    } else {
+                                        selectedTypes.insert(type)
+                                    }
+                                } label: {
+                                    HStack {
+                                        Image(systemName: selectedTypes.contains(type) ? "checkmark.square.fill" : "square")
+                                            .foregroundColor(selectedTypes.contains(type) ? .accentColor : .secondary)
+                                        Text(type)
+                                        Spacer()
+                                    }
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 300)
+                }
+                .frame(width: 200)
             }
             .controlSize(.small)
             
@@ -119,7 +207,8 @@ struct DetailContent: View {
     let tabId: String
     @ObservedObject var service: BrowserAnalysisService
     let searchText: String
-    let typeFilter: String
+    let selectedMethods: Set<String>
+    let selectedTypes: Set<String>
     @Binding var sortOrder: [KeyPathComparator<BrowserRequest>]
     
     @Binding var selectedRequest: BrowserRequest?
@@ -145,14 +234,41 @@ struct DetailContent: View {
         return "Unknown Tab"
     }
     
-    @State private var displayRequests: [BrowserRequest] = []
-    @State private var isProcessing = false
     @State private var selectedRequestId: String? = nil
     
     @Environment(\.openWindow) private var openWindow
     
+    var filteredRequests: [BrowserRequest] {
+        var result = requests
+        
+        // Filter by search text
+        if !searchText.isEmpty {
+            result = result.filter { req in
+                req.url.localizedCaseInsensitiveContains(searchText) ||
+                req.method.localizedCaseInsensitiveContains(searchText)
+            }
+        }
+        
+        // Filter by HTTP method (if any selected)
+        if !selectedMethods.isEmpty {
+            result = result.filter { req in
+                selectedMethods.contains(req.method)
+            }
+        }
+        
+        // Filter by resource type (if any selected)
+        if !selectedTypes.isEmpty {
+            result = result.filter { req in
+                selectedTypes.contains(req.type)
+            }
+        }
+        
+        // Sort
+        return result.sorted(using: sortOrder)
+    }
+    
     var body: some View {
-        Table(displayRequests, selection: $selectedRequestId, sortOrder: $sortOrder) {
+        Table(filteredRequests, selection: $selectedRequestId, sortOrder: $sortOrder) {
             TableColumn("Status", value: \.sortStatus) { req in
                 StatusIcon(req: req)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -254,11 +370,7 @@ struct DetailContent: View {
             .width(60)
         }
 
-        .task(id: service.activeTabs) { updateList() }
-        .task(id: searchText) { updateList() }
-        .task(id: typeFilter) { updateList() }
-        .task(id: sortOrder) { updateList() }
-        .task(id: tabId) { updateList() }
+
     }
     
     @ViewBuilder
@@ -288,34 +400,7 @@ struct DetailContent: View {
         }
     }
     
-    private func updateList() {
-        let raw = requests
-        let filter = searchText
-        let type = typeFilter
-        let order = sortOrder
-        
-        // Background sorting to keep UI responsive
-        Task.detached(priority: .userInitiated) {
-            let filtered = raw.filter { req in
-                let matchesSearch = filter.isEmpty || req.url.localizedCaseInsensitiveContains(filter)
-                let matchesType: Bool
-                let t = req.type.lowercased()
-                if type == "All" { matchesType = true }
-                else if type == "XHR" { matchesType = t.contains("xmlhttprequest") || t.contains("xhr") }
-                else if type == "Fetch" { matchesType = t.contains("fetch") }
-                else if type == "Image" { matchesType = t.contains("image") || t.contains("svg") }
-                else if type == "Script" { matchesType = t.contains("script") }
-                else if type == "Stylesheet" { matchesType = t.contains("stylesheet") || t.contains("css") }
-                else if type == "Document" { matchesType = t.contains("main_frame") || t.contains("sub_frame") || t.contains("document") }
-                else { matchesType = t.contains(type.lowercased()) }
-                return matchesSearch && matchesType
-            }.sorted(using: order)
-            
-            await MainActor.run {
-                self.displayRequests = filtered
-            }
-        }
-    }
+
     
     private func methodColor(_ method: String) -> Color {
         switch method.uppercased() {

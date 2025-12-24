@@ -88,6 +88,11 @@ actor ConfigService {
         
         // Write to config.yaml (Async, non-blocking)
         do {
+            await MainActor.run {
+                ClashViewModel.shared.addLog("[Config] 📝 Writing config content (Preview lines 1-10):")
+                let preview = finalConfig.components(separatedBy: "\n").prefix(10).joined(separator: "\n")
+                ClashViewModel.shared.addLog(preview)
+            }
             try await fileManager.writeText(finalConfig, to: targetPath)
             await MainActor.run {
                 ClashViewModel.shared.addLog("[Config] ✅ Config written to: \(targetPath.lastPathComponent)")
@@ -102,8 +107,10 @@ actor ConfigService {
 
     
     /// Remove keys that conflict with our base config
+    /// Handles both single-line keys and multi-line blocks (like dns:, tun:, sniffer:)
     nonisolated private func removeConflictingKeys(from yaml: String) -> String {
-        let conflictingKeys = [
+        // Single-line conflicting keys
+        let singleLineKeys = [
             "mixed-port",
             "socks-port",
             "port",
@@ -113,30 +120,65 @@ actor ConfigService {
             "ipv6",
             "external-controller",
             "secret",
-            "tun"  // Use our own TUN config
+            "keep-alive-interval"
+        ]
+        
+        // Multi-line block keys (need to remove entire block including children)
+        let blockKeys = [
+            "tun",      // Use our own TUN config
+            "dns",      // CRITICAL: Avoid duplicate dns: key in TUN mode
+            "sniffer"   // Use our own sniffer config in TUN mode
         ]
         
         let lines = yaml.components(separatedBy: .newlines)
         var result: [String] = []
-        var removedCount = 0
+        var skipUntilIndent: Int? = nil  // Track when we're inside a block to skip
         
         for line in lines {
+            // Calculate current line's indentation (number of leading spaces)
+            let leadingSpaces = line.prefix(while: { $0 == " " || $0 == "\t" }).count
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             let lower = trimmed.lowercased()
             
-            // Check if line starts with a conflicting key
-            var isConflicting = false
-            for key in conflictingKeys {
-                // Check if line starts with key (ignoring indentation)
-                // Robust check: key + ":" or just key (for section headers like 'tun:')
-                if lower.hasPrefix(key + ":") || lower == key || lower.hasPrefix(key + " :") {
-                    isConflicting = true
-                    removedCount += 1
+            // If we're in skip mode, check if we should exit
+            if let blockIndent = skipUntilIndent {
+                // Empty lines stay in skip mode
+                if trimmed.isEmpty {
+                    continue
+                }
+                // If current line has same or less indentation than block start, exit skip mode
+                if leadingSpaces <= blockIndent {
+                    skipUntilIndent = nil
+                } else {
+                    // Still inside the block, skip this line
+                    continue
+                }
+            }
+            
+            // Check for block keys (multi-line sections)
+            var isBlockStart = false
+            for key in blockKeys {
+                if lower.hasPrefix(key + ":") || lower == key + ":" {
+                    isBlockStart = true
+                    skipUntilIndent = leadingSpaces
                     break
                 }
             }
             
-            if !isConflicting {
+            if isBlockStart {
+                continue  // Skip the block header line
+            }
+            
+            // Check for single-line conflicting keys
+            var isSingleLineConflict = false
+            for key in singleLineKeys {
+                if lower.hasPrefix(key + ":") || lower.hasPrefix(key + " :") {
+                    isSingleLineConflict = true
+                    break
+                }
+            }
+            
+            if !isSingleLineConflict {
                 result.append(line)
             }
         }

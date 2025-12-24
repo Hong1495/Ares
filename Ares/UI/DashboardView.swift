@@ -33,6 +33,7 @@ private struct MainGrid: View {
             NetworkTrafficCard()
             ProxyModeCard()
             TUNModeCard()
+            MITMModeCard()
             CurrentProxyCard()
         }
     }
@@ -335,5 +336,100 @@ struct SmallTrafficCard: View {
         
         let formatted = formatter.string(fromByteCount: bytes)
         return formatted == "Zero KB" ? "0 KB" : formatted
+    }
+}
+
+// MITM Mode Card
+struct MITMModeCard: View {
+    @EnvironmentObject var appState: AppState
+    
+    var body: some View {
+        VStack(alignment: .leading) {
+            Label {
+                Text("MITM Mode")
+            } icon: {
+                // "Simple line icon" replacement: eyeglasses (implies inspection/viewing)
+                Image(systemName: "eyeglasses")
+                    .fontWeight(.light)
+                    .frame(width: 20)
+            }
+            .font(.headline.weight(.medium))
+            
+            Spacer()
+            
+            Toggle("Enable MITM", isOn: Binding(
+                get: { appState.mitmEnabled },
+                set: { _ in
+                    appState.toggleMITM()
+                }
+            ))
+            .toggleStyle(SwitchToggleStyle(tint: .purple))
+            
+            HStack {
+                // Port Display
+                let portText = appState.mitmEnabled ? "Active (Port \(NetworkMITMService.shared.currentPort))" : "Inactive"
+                Text("MITM \(portText)")
+                    .font(.footnote)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+                
+                Spacer()
+                
+                Button(action: {
+                    Task {
+                        do {
+                            try await CertificateManager.shared.installToKeychain()
+                            // Show success with instructions
+                            await MainActor.run {
+                                let alert = NSAlert()
+                                alert.messageText = "Certificate Added to Keychain"
+                                alert.informativeText = """
+                                The Ares MITM certificate has been added to your keychain.
+                                
+                                ⚠️ Important: You must now trust it manually:
+                                
+                                1. Open "Keychain Access" app (press OK to open)
+                                2. Find "Ares MITM Proxy CA" in your login keychain
+                                3. Double-click the certificate
+                                4. Expand "Trust" section
+                                5. Set "When using this certificate" to "Always Trust"
+                                6. Close the window and enter your password
+                                """
+                                alert.alertStyle = .informational
+                                alert.addButton(withTitle: "Open Keychain Access")
+                                alert.addButton(withTitle: "OK")
+                                
+                                let response = alert.runModal()
+                                if response == .alertFirstButtonReturn {
+                                    // Open Keychain Access
+                                    NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Keychain Access.app"))
+                                }
+                            }
+                        } catch {
+                            // Show error alert
+                            await MainActor.run {
+                                let alert = NSAlert()
+                                alert.messageText = "Installation Failed"
+                                alert.informativeText = "Failed to install CA certificate: \(error.localizedDescription)"
+                                alert.alertStyle = .warning
+                                alert.addButton(withTitle: "OK")
+                                alert.runModal()
+                            }
+                        }
+                    }
+                }) {
+                    Text("Install CA")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+                .help("Export Root CA to Downloads for installation")
+            }
+        }
+        .padding()
+        .frame(height: 150)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .cornerRadius(12)
     }
 }

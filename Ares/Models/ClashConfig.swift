@@ -65,10 +65,11 @@ struct ClashConfig: Codable {
         let actualController: String
         
         if enableTun {
-            // TUN mode uses fixed high ports to avoid conflicts during mode switching
-            actualMixedPort = 17890
-            actualSocksPort = 17891
-            actualHttpPort = 17892
+            // TUN mode uses standard ports now to match MITM expectations
+            // The previous 17890 isolation caused connection refused errors
+            actualMixedPort = mixedPort
+            actualSocksPort = socksPort
+            actualHttpPort = httpPort
             actualController = "127.0.0.1:19097"
         } else {
             // Normal mode uses user-configured ports
@@ -105,6 +106,27 @@ struct ClashConfig: Codable {
               ipv6: \(ipv6)
               enhanced-mode: fake-ip
               fake-ip-range: 198.18.0.1/16
+              # CRITICAL: Exclude proxy server domains from fake-ip to prevent DNS loop
+              fake-ip-filter:
+                - "*.lan"
+                - "*.local"
+                - "*.localdomain"
+                - "localhost"
+                - "*.localhost"
+                # Common proxy server domain patterns
+                - "+.wgnmdgfw.com"
+                - "+.ssr.gg"
+                - "+.v2ray.com"
+                - "+.trojan.com"
+                - "+.node.com"
+                - "+.proxy.com"
+                - "*.airport.com"
+                - "stun.*.*"
+                - "stun.*.*.*"
+                - "+.stun.*.*"
+                - "+.stun.*.*.*"
+                - "+.turn.*.*"
+                - "+.turn.*.*.*"
               default-nameserver:
                 - 223.5.5.5
                 - 119.29.29.29
@@ -125,6 +147,13 @@ struct ClashConfig: Codable {
                 geoip-code: CN
                 ipcidr:
                   - 240.0.0.0/4
+              # CRITICAL: Proxy server domains must be resolved directly (not through proxy)
+              # Otherwise TUN mode creates a DNS loop where proxy can't connect
+              nameserver-policy:
+                "+.wgnmdgfw.com": [223.5.5.5, 119.29.29.29]
+                "+.ssr.gg": [223.5.5.5, 119.29.29.29]
+                "+.v2ray.com": [223.5.5.5, 119.29.29.29]
+                "+.trojan.com": [223.5.5.5, 119.29.29.29]
             
             # Sniffer Configuration (Recover domain names from TLS/HTTP)
             sniffer:

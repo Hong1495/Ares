@@ -136,15 +136,54 @@ struct ConnectivityTestView: View {
         let start = Date()
         
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
+            // DIAGNOSTIC: Use shared session
+            let session = URLSession.shared
+            // let session = URLSession(configuration: .ephemeral, delegate: ConnectivityDelegate(), delegateQueue: nil)
+            // defer { session.finishTasksAndInvalidate() }
+            
+            let (_, response) = try await session.data(for: request)
             if let httpResponse = response as? HTTPURLResponse, (200...499).contains(httpResponse.statusCode) {
                 let elapsed = Date().timeIntervalSince(start)
                 return Int(elapsed * 1000)
             }
             return nil
         } catch {
-            print("[Connectivity] Error testing \(url): \(error.localizedDescription)")
+            let nsError = error as NSError
+            print("[Connectivity] Error testing \(url): \(error.localizedDescription) (Code: \(nsError.code), Domain: \(nsError.domain))")
             return nil
         }
     }
 }
+
+/// Delegate to pin/trust the internal MITM Root CA
+class ConnectivityDelegate: NSObject, URLSessionDelegate {
+    func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+        if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+           let serverTrust = challenge.protectionSpace.serverTrust {
+            
+            // Allow if it's our own MITM CA
+            let caPath = CertificateManager.shared.rootCAPath.path
+            if let caData = try? Data(contentsOf: URL(fileURLWithPath: caPath)),
+               let caCert = SecCertificateCreateWithData(nil, caData as CFData) {
+                
+                // Set our CA as the anchor
+                SecTrustSetAnchorCertificates(serverTrust, [caCert] as CFArray)
+                SecTrustSetAnchorCertificatesOnly(serverTrust, false) // Allow system roots too
+                
+                var error: CFError?
+                if SecTrustEvaluateWithError(serverTrust, &error) {
+                    print("[Connectivity] ✅ Trust evaluation succeeded for internal CA")
+                    completionHandler(.useCredential, URLCredential(trust: serverTrust))
+                    return
+                } else {
+                     print("[Connectivity] ❌ Trust evaluation failed: \(error?.localizedDescription ?? "Unknown error")")
+                }
+            }
+        }
+
+        
+        // Fallback to default handling
+        completionHandler(.performDefaultHandling, nil)
+    }
+}
+

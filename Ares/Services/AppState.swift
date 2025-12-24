@@ -41,6 +41,11 @@ class AppState: ObservableObject {
     @Published var systemProxyEnabled = false
     @Published var tunEnabled = false
     
+    // Computed property for UI binding
+    var mitmEnabled: Bool {
+        NetworkMITMService.shared.isRunning
+    }
+    
     // Statistics
     @Published var activeConnectionsCount = 0
     
@@ -174,6 +179,12 @@ class AppState: ObservableObject {
         let newState = !systemProxyEnabled
         clashViewModel.addLog("[AppState] 🌐 \(newState ? "Enabling" : "Disabling") system proxy...")
         
+        // CRITICAL: If disabling proxy while MITM is running, stop MITM first to avoid crashes
+        if !newState && NetworkMITMService.shared.isRunning {
+            clashViewModel.addLog("[AppState] ⚠️ MITM is running - stopping MITM before disabling system proxy")
+            await NetworkMITMService.shared.stop()
+        }
+        
         // Optimistic Update
         systemProxyEnabled = newState
         objectWillChange.send()
@@ -306,6 +317,33 @@ class AppState: ObservableObject {
         // 6. Final verification - non-blocking but ensures state is correct
         try? await self.verifyTUNStatus()
     }
+
+    // MARK: - MITM Toggle
+    
+    /// Toggle MITM mode
+    func toggleMITM() {
+        print("[AppState] switch MITM mode")
+        
+        let isRunning = NetworkMITMService.shared.isRunning
+        let newState = !isRunning
+        
+        Task { @MainActor in
+            if newState {
+                await NetworkMITMService.shared.start()
+            } else {
+                await NetworkMITMService.shared.stop()
+            }
+            
+            // Trigger UI update
+            self.objectWillChange.send()
+            
+            // Refresh system proxy if it is enabled to apply new port rules
+            // Now this happens AFTER MITM is ready, so getProxyPorts() will return correct port
+            if self.systemProxyEnabled {
+                await self.enableSystemProxy()
+            }
+        }
+    }
     
     /// Verify TUN status from Clash API
     nonisolated private func verifyTUNStatus() async throws {
@@ -384,8 +422,28 @@ class AppState: ObservableObject {
     
     /// Helper to get proxy ports based on TUN mode state
     private func getProxyPorts() -> (Int, Int) {
-        if tunEnabled {
-            return (17890, 17891) // Isolated high ports for TUN
+        // PRIORITIZE MITM if it's running!
+        // This ensures system proxy traffic goes to MITM first.
+        // We use MainActor.assumeIsolated because AppState is MainActor and isRunning is updated on MainActor.
+        if NetworkMITMService.shared.isRunning {
+             // Use the dynamic port assigned by the OS
+             // Fallback to 9090 only if 0 (shouldn't happen if isRunning is true)
+             let mitmPort = Int(NetworkMITMService.shared.currentPort)
+             let httpPort = mitmPort > 0 ? mitmPort : 9090
+             
+             // 7891 is the Clash SOCKS port (MITM doesn't handle SOCKS yet, so bypass it to Clash).
+             return (httpPort, 7891)
+        }
+        
+        // Pass the calculated port to MITM backend if it's running
+        let tun = tunEnabled
+        
+        if tun {
+            // Fix: Use configured ports even in TUN mode
+            let defaults = UserDefaults.standard
+            let http = Int(defaults.string(forKey: "mixedPort") ?? "7890") ?? 7890
+            let socks = Int(defaults.string(forKey: "socksPort") ?? "7891") ?? 7891
+            return (http, socks)
         } else {
             let defaults = UserDefaults.standard
             let http = Int(defaults.string(forKey: "mixedPort") ?? "7890") ?? 7890

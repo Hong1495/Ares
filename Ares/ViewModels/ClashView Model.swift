@@ -68,6 +68,9 @@ class ClashViewModel: ObservableObject {
         let cleanMessage = message.replacingOccurrences(of: "\n", with: " ")
         let logEntry = "[\(timestamp)] \(cleanMessage)"
         
+        // Also print to console for debugging
+        print(logEntry)
+        
         DispatchQueue.main.async {
             self.logs.append(logEntry)
             

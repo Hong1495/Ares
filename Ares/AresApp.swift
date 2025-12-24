@@ -209,6 +209,7 @@ struct AresApp: App {
                     }
                 }
                 .keyboardShortcut("3", modifiers: [.command])
+
             } label: {
                 Label {
                     Text("Mode")
@@ -220,6 +221,22 @@ struct AresApp: App {
                 }
             }
             .keyboardShortcut("M", modifiers: [.command, .shift])
+            
+            // MITM Mode Toggle (Top Level)
+            Toggle(isOn: Binding(
+                get: { appState.mitmEnabled },
+                set: { _ in appState.toggleMITM() }
+            )) {
+                Label {
+                    Text("MITM Mode")
+                } icon: {
+                    Image(systemName: "eyeglasses")
+                        .imageScale(.medium)
+                        .fontWeight(.light)
+                        .frame(width: 18)
+                }
+            }
+            .keyboardShortcut("m", modifiers: [.command, .shift])
             
             Divider()
             
