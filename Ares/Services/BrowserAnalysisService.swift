@@ -427,6 +427,7 @@ class BrowserAnalysisService: ObservableObject {
     private func addRequestToTabIndex(_ i: Int, request: BrowserRequest) {
         // 1. Precise ID Matching (Internal tracking)
         if let ri = activeTabs[i].requests.firstIndex(where: { $0.id == request.id }) {
+            print("[BrowserAnalysisService] ✅ Found matching request by ID: \(request.id)")
             merge(request, into: &activeTabs[i].requests[ri])
         } 
         // 2. Heuristic Body Matching (IDs starting with "body-")

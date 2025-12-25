@@ -26,9 +26,14 @@ final class NetworkMITMService: ObservableObject {
                     self?.updateStatus(isRunning: isRunning, port: port)
                 }
             },
-            interception: { [weak self] host, method, path in
+            interception: { [weak self] data in
                 Task { @MainActor in
-                    self?.recordRequest(host: host, method: method, path: path)
+                    self?.recordRequest(data)
+                }
+            },
+            response: { [weak self] requestId, data in
+                Task { @MainActor in
+                    self?.updateRequestWithResponse(requestId: requestId, data: data)
                 }
             }
         )
@@ -77,27 +82,98 @@ final class NetworkMITMService: ObservableObject {
         self.currentPort = port
     }
     
-    private func recordRequest(host: String, method: String, path: String) {
-        let request = InterceptedRequest(host: host, method: method, path: path, timestamp: Date())
+    private func recordRequest(_ data: MITMInterceptedData) {
+        // Skip CONNECT method for now (just establishes tunnel)
+        guard data.method != "CONNECT" else { return }
+        
+        let request = InterceptedRequest(host: data.host, method: data.method, path: data.path, timestamp: data.timestamp)
         self.interceptedRequests.append(request)
         if self.interceptedRequests.count > 1000 {
             self.interceptedRequests.removeFirst(self.interceptedRequests.count - 1000)
         }
         
-        // Ensure path starts with / for valid URL construction
-        let normalizedPath = path.isEmpty || path == "/" ? "/" : (path.hasPrefix("/") ? path : "/\(path)")
+        // Determine resource type based on Accept header or path
+        let type: String
+        if let acceptHeader = data.requestHeaders?.first(where: { $0.key.lowercased() == "accept" })?.value.lowercased() {
+            if acceptHeader.contains("json") {
+                type = "Fetch"
+            } else if acceptHeader.contains("html") {
+                type = "Document"
+            } else if acceptHeader.contains("image") {
+                type = "Image"
+            } else if acceptHeader.contains("css") {
+                type = "Stylesheet"
+            } else if acceptHeader.contains("javascript") {
+                type = "Script"
+            } else {
+                type = "XHR"
+            }
+        } else {
+            type = "XHR"
+        }
         
-        let type = method == "CONNECT" ? "CONNECT" : "XHR"
-        let browserReq = BrowserRequest(
-            id: request.id.uuidString,
-            url: "https://\(host)\(normalizedPath)",
-            method: method,
+        // Create rich BrowserRequest with full HTTP data
+        var browserReq = BrowserRequest(
+            id: data.id,
+            url: data.url,
+            method: data.method,
             type: type,
             initiator: "MITM Proxy",
-            timestamp: request.timestamp,
-            status: .active
+            timestamp: data.timestamp,
+            status: .pending
         )
+        
+        // Populate request headers
+        browserReq.requestHeaders = data.requestHeaders
+        browserReq.size = data.requestSize
+        
+        // Populate request body if captured
+        if let bodyData = data.requestBody, let bodyString = String(data: bodyData, encoding: .utf8) {
+            browserReq.requestBody = bodyString
+        }
+        
         BrowserAnalysisService.shared.addRequestToTab(tabId: "mitm_proxy_session", request: browserReq)
+    }
+    
+    private func updateRequestWithResponse(requestId: String, data: MITMInterceptedData) {
+        print("[NetworkMITMService] 📥 Updating request \(requestId) with response data")
+        
+        // Create an update request with response data
+        var updateReq = BrowserRequest(
+            id: requestId,
+            url: "",  // Will be ignored in merge
+            method: "RESPONSE",
+            type: "XHR",
+            initiator: nil,
+            timestamp: Date(),
+            status: data.statusCode.map { $0 >= 400 ? .error : .success } ?? .success
+        )
+        
+        updateReq.statusCode = data.statusCode
+        updateReq.responseHeaders = data.responseHeaders
+        updateReq.duration = data.duration
+        updateReq.size = data.responseSize
+        
+        // Populate response body if captured
+        if let bodyData = data.responseBody {
+            print("[NetworkMITMService] 📦 Response body data: \(bodyData.count) bytes")
+            if let bodyString = String(data: bodyData, encoding: .utf8) {
+                updateReq.responseBody = bodyString
+                print("[NetworkMITMService] ✅ Response body converted to string: \(bodyString.prefix(80))...")
+            } else {
+                print("[NetworkMITMService] ❌ Failed to convert response body to UTF-8 string")
+            }
+        } else {
+            print("[NetworkMITMService] ⚠️ No response body data in MITMInterceptedData")
+        }
+        
+        // Determine MIME type from response headers
+        if let contentType = data.responseHeaders?.first(where: { $0.key.lowercased() == "content-type" })?.value {
+            updateReq.mimeType = contentType
+        }
+        
+        print("[NetworkMITMService] 📤 Sending update with responseBody=\(updateReq.responseBody != nil ? "SET(\(updateReq.responseBody!.count) chars)" : "nil")")
+        BrowserAnalysisService.shared.addRequestToTab(tabId: "mitm_proxy_session", request: updateReq)
     }
 }
 
@@ -108,3 +184,4 @@ struct InterceptedRequest: Identifiable {
     let path: String
     let timestamp: Date
 }
+

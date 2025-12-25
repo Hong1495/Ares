@@ -309,6 +309,7 @@ struct SectionHeader: View {
 
 struct BodyTextView: View {
     let text: String
+    var contentType: String? = nil
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -316,6 +317,16 @@ struct BodyTextView: View {
             if text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("{") ||
                text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("[") {
                 JSONTreeView(jsonString: text)
+                    .padding(8)
+            } 
+            // Check if it's multipart/form-data
+            else if isMultipartFormData(text, contentType: contentType) {
+                MultipartFormDataView(content: text, boundary: extractBoundary(contentType))
+                    .padding(8)
+            }
+            // Check if it looks like URL-encoded form data
+            else if isURLEncodedFormData(text) {
+                FormDataView(formData: text)
                     .padding(8)
             } else {
                 Text(text)
@@ -328,7 +339,404 @@ struct BodyTextView: View {
         .background(Color.secondary.opacity(0.05))
         .cornerRadius(6)
     }
+    
+    /// Check if text appears to be URL-encoded form data
+    private func isURLEncodedFormData(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Must contain = and likely contains & or common encoded chars
+        guard trimmed.contains("=") else { return false }
+        // Check for URL encoding patterns
+        let hasAmpersand = trimmed.contains("&")
+        let hasPercentEncoding = trimmed.contains("%")
+        let hasJsonPrefix = trimmed.hasPrefix("{") || trimmed.hasPrefix("[")
+        return (hasAmpersand || hasPercentEncoding) && !hasJsonPrefix
+    }
+    
+    /// Check if content is multipart/form-data
+    private func isMultipartFormData(_ text: String, contentType: String?) -> Bool {
+        // Check content type header
+        if let ct = contentType?.lowercased(), ct.contains("multipart/form-data") {
+            return true
+        }
+        // Check for boundary pattern in content
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.hasPrefix("--") && trimmed.contains("Content-Disposition")
+    }
+    
+    /// Extract boundary from content-type header
+    private func extractBoundary(_ contentType: String?) -> String? {
+        guard let ct = contentType else { return nil }
+        if let range = ct.range(of: "boundary=", options: .caseInsensitive) {
+            var boundary = String(ct[range.upperBound...])
+            // Remove quotes if present
+            boundary = boundary.trimmingCharacters(in: .init(charactersIn: "\""))
+            // Take until semicolon or end
+            if let semi = boundary.firstIndex(of: ";") {
+                boundary = String(boundary[..<semi])
+            }
+            return boundary.trimmingCharacters(in: .whitespaces)
+        }
+        return nil
+    }
 }
+
+
+/// View to display parsed URL-encoded form data
+struct FormDataView: View {
+    let formData: String
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Header
+            HStack {
+                Image(systemName: "list.bullet.rectangle")
+                    .foregroundStyle(.blue)
+                Text("Form Data")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            
+            Divider()
+            
+            // Parse and display form data
+            let items = parseFormData(formData)
+            ForEach(items, id: \.key) { item in
+                FormDataRow(key: item.key, value: item.value)
+            }
+        }
+    }
+    
+    /// Parse URL-encoded form data into key-value pairs
+    private func parseFormData(_ data: String) -> [(key: String, value: String)] {
+        var result: [(key: String, value: String)] = []
+        
+        let pairs = data.split(separator: "&", omittingEmptySubsequences: true)
+        for pair in pairs {
+            let keyValue = pair.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            if keyValue.count >= 1 {
+                let key = String(keyValue[0]).removingPercentEncoding ?? String(keyValue[0])
+                let value = keyValue.count > 1 ? (String(keyValue[1]).removingPercentEncoding ?? String(keyValue[1])) : ""
+                result.append((key: key, value: value))
+            }
+        }
+        
+        return result
+    }
+}
+
+/// Row for displaying a single form data key-value pair
+struct FormDataRow: View {
+    let key: String
+    let value: String
+    @State private var isExpanded = false
+    
+    private var isJSON: Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.hasPrefix("{") || trimmed.hasPrefix("[")
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .top) {
+                // Key
+                Text(key)
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.blue)
+                    .frame(minWidth: 80, alignment: .leading)
+                
+                Text("=")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                
+                // Value or expand button for JSON
+                if isJSON {
+                    Button(action: { isExpanded.toggle() }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                                .font(.system(size: 8))
+                            Text(isExpanded ? "JSON Object" : "JSON Object (tap to expand)")
+                                .font(.system(size: 10))
+                        }
+                        .foregroundStyle(.orange)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Text(value)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(.primary)
+                        .textSelection(.enabled)
+                        .lineLimit(3)
+                }
+                
+                Spacer()
+            }
+            
+            // Expanded JSON view
+            if isJSON && isExpanded {
+                JSONTreeView(jsonString: value)
+                    .padding(.leading, 16)
+                    .padding(.vertical, 4)
+                    .background(Color.orange.opacity(0.05))
+                    .cornerRadius(4)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+// MARK: - Hex Dump View for Binary Data
+
+/// View to display binary data as hex dump with ASCII sidebar
+struct HexDumpView: View {
+    let data: Data
+    let bytesPerRow: Int = 16
+    let maxRows: Int = 64 // Limit to ~1KB display
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Header
+            HStack {
+                Image(systemName: "01.square")
+                    .foregroundStyle(.purple)
+                Text("Binary Data")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("\(data.count) bytes")
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+            }
+            
+            Divider()
+            
+            ScrollView {
+                VStack(alignment: .leading, spacing: 2) {
+                    // Column headers
+                    HStack(spacing: 0) {
+                        Text("Offset")
+                            .frame(width: 60, alignment: .leading)
+                        Text("00 01 02 03 04 05 06 07  08 09 0A 0B 0C 0D 0E 0F")
+                            .frame(width: 380, alignment: .leading)
+                        Text("ASCII")
+                            .frame(width: 140, alignment: .leading)
+                    }
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                    .padding(.bottom, 4)
+                    
+                    // Data rows
+                    let totalRows = min((data.count + bytesPerRow - 1) / bytesPerRow, maxRows)
+                    ForEach(0..<totalRows, id: \.self) { rowIndex in
+                        HexRow(data: data, rowIndex: rowIndex, bytesPerRow: bytesPerRow)
+                    }
+                    
+                    if data.count > maxRows * bytesPerRow {
+                        Text("... \(data.count - maxRows * bytesPerRow) more bytes truncated")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                            .padding(.top, 4)
+                    }
+                }
+            }
+        }
+        .padding(8)
+        .background(Color.secondary.opacity(0.05))
+        .cornerRadius(6)
+    }
+}
+
+/// Single row in hex dump view
+struct HexRow: View {
+    let data: Data
+    let rowIndex: Int
+    let bytesPerRow: Int
+    
+    var body: some View {
+        let startOffset = rowIndex * bytesPerRow
+        let endOffset = min(startOffset + bytesPerRow, data.count)
+        let rowData = data[startOffset..<endOffset]
+        
+        HStack(spacing: 0) {
+            // Offset
+            Text(String(format: "%06X", startOffset))
+                .frame(width: 60, alignment: .leading)
+                .foregroundStyle(.blue)
+            
+            // Hex bytes
+            HStack(spacing: 0) {
+                ForEach(0..<bytesPerRow, id: \.self) { i in
+                    let byteIndex = startOffset + i
+                    if byteIndex < data.count {
+                        Text(String(format: "%02X ", data[byteIndex]))
+                            .foregroundStyle(isPrintable(data[byteIndex]) ? .primary : .secondary)
+                    } else {
+                        Text("   ")
+                    }
+                    if i == 7 {
+                        Text(" ")
+                    }
+                }
+            }
+            .frame(width: 380, alignment: .leading)
+            
+            // ASCII
+            Text(asciiRepresentation(rowData))
+                .frame(width: 140, alignment: .leading)
+                .foregroundStyle(.green.opacity(0.8))
+        }
+        .font(.system(size: 9, design: .monospaced))
+    }
+    
+    private func isPrintable(_ byte: UInt8) -> Bool {
+        byte >= 32 && byte < 127
+    }
+    
+    private func asciiRepresentation(_ data: Data.SubSequence) -> String {
+        String(data.map { isPrintable($0) ? Character(UnicodeScalar($0)) : "." })
+    }
+}
+
+// MARK: - Multipart Form Data View
+
+/// View to display parsed multipart/form-data content
+struct MultipartFormDataView: View {
+    let content: String
+    let boundary: String?
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Header
+            HStack {
+                Image(systemName: "doc.on.doc")
+                    .foregroundStyle(.green)
+                Text("Multipart Form Data")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if let boundary = boundary {
+                    Text("boundary: \(boundary.prefix(20))...")
+                        .font(.system(size: 8, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            
+            Divider()
+            
+            let parts = parseMultipart(content, boundary: boundary)
+            if parts.isEmpty {
+                Text("Unable to parse multipart data")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(parts.indices, id: \.self) { index in
+                    MultipartPartView(part: parts[index], index: index)
+                }
+            }
+        }
+        .padding(8)
+        .background(Color.secondary.opacity(0.05))
+        .cornerRadius(6)
+    }
+    
+    private func parseMultipart(_ content: String, boundary: String?) -> [(name: String, filename: String?, contentType: String?, value: String)] {
+        guard let boundary = boundary else { return [] }
+        var result: [(name: String, filename: String?, contentType: String?, value: String)] = []
+        
+        let parts = content.components(separatedBy: "--\(boundary)")
+        for part in parts {
+            let trimmed = part.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty || trimmed == "--" { continue }
+            
+            // Split headers and body
+            if let headerEnd = trimmed.range(of: "\r\n\r\n") ?? trimmed.range(of: "\n\n") {
+                let headers = String(trimmed[..<headerEnd.lowerBound])
+                let body = String(trimmed[headerEnd.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                // Parse Content-Disposition
+                var name = "unknown"
+                var filename: String? = nil
+                var contentType: String? = nil
+                
+                for line in headers.components(separatedBy: .newlines) {
+                    let lower = line.lowercased()
+                    if lower.contains("content-disposition") {
+                        if let nameMatch = line.range(of: "name=\"", options: .caseInsensitive) {
+                            let start = nameMatch.upperBound
+                            if let end = line[start...].firstIndex(of: "\"") {
+                                name = String(line[start..<end])
+                            }
+                        }
+                        if let fnMatch = line.range(of: "filename=\"", options: .caseInsensitive) {
+                            let start = fnMatch.upperBound
+                            if let end = line[start...].firstIndex(of: "\"") {
+                                filename = String(line[start..<end])
+                            }
+                        }
+                    } else if lower.contains("content-type") {
+                        contentType = line.components(separatedBy: ":").last?.trimmingCharacters(in: .whitespaces)
+                    }
+                }
+                
+                result.append((name: name, filename: filename, contentType: contentType, value: body))
+            }
+        }
+        
+        return result
+    }
+}
+
+/// View for a single multipart part
+struct MultipartPartView: View {
+    let part: (name: String, filename: String?, contentType: String?, value: String)
+    let index: Int
+    @State private var isExpanded = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("\(index + 1).")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.tertiary)
+                
+                Text(part.name)
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.blue)
+                
+                if let filename = part.filename {
+                    Text("(\(filename))")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.orange)
+                }
+                
+                if let ct = part.contentType {
+                    Text("[\(ct)]")
+                        .font(.system(size: 8))
+                        .foregroundStyle(.tertiary)
+                }
+                
+                Spacer()
+                
+                Button(action: { isExpanded.toggle() }) {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 8))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            
+            if isExpanded {
+                Text(part.value.prefix(500) + (part.value.count > 500 ? "..." : ""))
+                    .font(.system(size: 9, design: .monospaced))
+                    .padding(6)
+                    .background(Color.secondary.opacity(0.05))
+                    .cornerRadius(4)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+}
+
 
 
 

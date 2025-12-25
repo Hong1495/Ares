@@ -12,7 +12,8 @@ actor MITMBackend {
     private var connections: [UUID: MITMBoundConnection] = [:]
     
     private var onStatusUpdate: ((Bool, UInt16) -> Void)?
-    private var onInterception: ((String, String, String) -> Void)?
+    private var onInterception: ((MITMInterceptedData) -> Void)?
+    private var onResponse: ((String, MITMInterceptedData) -> Void)?
     
     private init() {}
     
@@ -20,10 +21,12 @@ actor MITMBackend {
     
     func setCallbacks(
         statusUpdate: @escaping (Bool, UInt16) -> Void,
-        interception: @escaping (String, String, String) -> Void
+        interception: @escaping (MITMInterceptedData) -> Void,
+        response: @escaping (String, MITMInterceptedData) -> Void
     ) {
         self.onStatusUpdate = statusUpdate
         self.onInterception = interception
+        self.onResponse = response
     }
     
     func start(clashPort: UInt16) async {
@@ -91,10 +94,12 @@ actor MITMBackend {
         connections.removeValue(forKey: id)
     }
     
-    func reportInterception(host: String, method: String, path: String) {
-        // Debug Log
-        // Reporting interception
-        onInterception?(host, method, path)
+    func reportInterception(_ data: MITMInterceptedData) {
+        onInterception?(data)
+    }
+    
+    func reportResponse(requestId: String, data: MITMInterceptedData) {
+        onResponse?(requestId, data)
     }
     
     private func handleListenerState(_ state: NWListener.State, listener: NWListener) {
@@ -289,7 +294,7 @@ actor MITMBoundConnection: Identifiable {
                 self.targetHost = hp[0]
                 self.targetPort = NWEndpoint.Port(rawValue: p)!
                 
-                await MITMBackend.shared.reportInterception(host: targetHost, method: "CONNECT", path: "/")
+                await MITMBackend.shared.reportInterception(MITMInterceptedData(host: targetHost, method: "CONNECT", path: "/"))
                 
                 // Check if this domain should bypass MITM
                 if shouldBypassMITM(targetHost) {
@@ -302,7 +307,7 @@ actor MITMBoundConnection: Identifiable {
                     
                     // CRITICAL: Extract remaining data (e.g. ClientHello) that came with CONNECT
                     let remainingData = buffer.count > range.upperBound ? buffer[range.upperBound...] : Data()
-                    await MITMBackend.shared.reportInterception(host: targetHost, method: "DEBUG", path: "Extracted \(remainingData.count) bytes of initial data")
+                    // DEBUG: await MITMBackend.shared.reportInterception(MITMInterceptedData(host: targetHost, method: "DEBUG", path: "Extracted \(remainingData.count) bytes"))
                     startTLS(initialData: remainingData)
                 } else {
                     connectUpstream(isPlain: false)
@@ -323,7 +328,7 @@ actor MITMBoundConnection: Identifiable {
             
             // HTTP Target parsed
             
-            await MITMBackend.shared.reportInterception(host: targetHost, method: "HTTP", path: "/")
+            await MITMBackend.shared.reportInterception(MITMInterceptedData(host: targetHost, method: "HTTP", path: "/"))
             connectUpstream(isPlain: true)
         }
     }
@@ -598,7 +603,7 @@ actor MITMBoundConnection: Identifiable {
         decrypted.start(queue: .global())
     }
     
-    private func setupPipe(c: NWConnection, s: NWConnection, log: Bool = false) {
+    private func setupPipe(c: NWConnection, s: NWConnection, log: Bool = true) {
         // CRITICAL: Check if stopped before starting pipe
         guard !isStopped else { return }
         self.isPiping = true
@@ -608,6 +613,13 @@ actor MITMBoundConnection: Identifiable {
             // Synchronous check for isStopped (can't await in receive callback)
             return self == nil
         }
+        
+        // Track if we've already reported the first HTTP request/response
+        var firstRequestReported = false
+        var currentRequestId: String?
+        var firstResponseReported = false
+        let requestStartTime = Date()
+        var responseAccumulator = Data()  // Accumulate response data for chunked encoding
         
         print("[MITMBackend] 🔄 setupPipe: Starting bidirectional relay for \(capturedHost)")
         print("[MITMBackend] 🔄 setupPipe: c.state=\(c.state), s.state=\(s.state)")
@@ -620,24 +632,46 @@ actor MITMBoundConnection: Identifiable {
                 
                 if let d = d {
                     print("[MITMBackend] 📤 Pipe c→s: \(d.count) bytes for \(capturedHost)")
-                    if log {
-                        // Try to parse HTTP Method and Path from the decrypted data
-                        if let firstChunk = String(data: d, encoding: .utf8) {
-                            // Look for standard HTTP methods
-                            let lines = firstChunk.components(separatedBy: "\r\n")
-                            if let firstLine = lines.first, !firstLine.isEmpty {
-                                 let parts = firstLine.components(separatedBy: " ")
-                                 if parts.count >= 3 {
-                                     let method = parts[0]
-                                     let path = parts[1]
-                                     // Basic filtering for common methods to avoid noise
-                                     if ["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"].contains(method) {
-                                         Task.detached { await MITMBackend.shared.reportInterception(host: capturedHost, method: method, path: path) }
-                                     }
-                                 }
+                    
+                    // Parse HTTP request for Analysis view (only first request in connection)
+                    if log && !firstRequestReported {
+                        print("[MITMBackend] 🔍 Attempting to parse HTTP request...")
+                        if let parsed = HTTPParser.parseRequest(d) {
+                            print("[MITMBackend] 📝 Parsed: \(parsed.method) \(parsed.path.prefix(50))")
+                            let validMethods = ["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"]
+                            if validMethods.contains(parsed.method) {
+                                firstRequestReported = true
+                                
+                                var interceptedData = MITMInterceptedData(host: capturedHost, method: parsed.method, path: parsed.path)
+                                currentRequestId = interceptedData.id
+                                interceptedData.requestHeaders = parsed.headers
+                                interceptedData.requestSize = d.count
+                                
+                                print("[MITMBackend] ✅ Recording request: \(parsed.method) \(interceptedData.url.prefix(60))")
+                                
+                                // Capture request body for text content (POST/PUT with JSON, form data, etc.)
+                                if ["POST", "PUT", "PATCH"].contains(parsed.method) {
+                                    let contentType = parsed.headers.first { $0.key.lowercased() == "content-type" }?.value
+                                    if HTTPParser.isTextContent(contentType) && d.count > parsed.bodyOffset {
+                                        let bodyData = d[parsed.bodyOffset...]
+                                        if bodyData.count <= HTTPParser.maxBodyCapture {
+                                            interceptedData.requestBody = bodyData
+                                            print("[MITMBackend] 📝 Request body captured: \(bodyData.count) bytes")
+                                        }
+                                    }
+                                }
+                                
+                                Task.detached { await MITMBackend.shared.reportInterception(interceptedData) }
+                            } else {
+                                print("[MITMBackend] ⚠️ Invalid method: \(parsed.method)")
                             }
+                        } else {
+                            // Log first few bytes to help debug
+                            let preview = String(data: d.prefix(50), encoding: .utf8) ?? d.prefix(50).map { String(format: "%02X", $0) }.joined()
+                            print("[MITMBackend] ❌ HTTP parse failed. Data preview: \(preview)")
                         }
                     }
+                    
                     s.send(content: d, completion: .contentProcessed({ sendErr in
                         if let sendErr = sendErr {
                             print("[MITMBackend] ❌ Pipe c→s send error: \(sendErr)")
@@ -665,6 +699,114 @@ actor MITMBoundConnection: Identifiable {
                 
                 if let d = d {
                     print("[MITMBackend] 📥 Pipe s→c: \(d.count) bytes for \(capturedHost)")
+                    
+                    // Parse HTTP response for Analysis view (only first response in connection)
+                    if log && firstRequestReported && !firstResponseReported {
+                        // Accumulate response data
+                        responseAccumulator.append(d)
+                        
+                        // Try to parse when we have enough data
+                        if responseAccumulator.count >= 100 {  // Wait for at least some data
+                            print("[MITMBackend] 🔍 Attempting to parse HTTP response (\(responseAccumulator.count) bytes accumulated)...")
+                            if let parsed = HTTPParser.parseResponse(responseAccumulator), let reqId = currentRequestId {
+                                let hasBody = responseAccumulator.count > parsed.bodyOffset
+                                
+                                // For chunked encoding, wait for body data (up to a reasonable limit)
+                                let isChunked = parsed.headers.contains { $0.key.lowercased() == "transfer-encoding" && $0.value.lowercased().contains("chunked") }
+                                let contentLengthStr = parsed.headers.first { $0.key.lowercased() == "content-length" }?.value
+                                let contentLength = contentLengthStr.flatMap { Int($0) }
+                                
+                                // Determine if we should wait for more data
+                                let shouldWaitForMore: Bool
+                                if isChunked {
+                                    // For chunked, wait until we see at least some body data (check for "0\r\n" terminator or reasonable size)
+                                    let bodyData = responseAccumulator.count > parsed.bodyOffset ? responseAccumulator[parsed.bodyOffset...] : Data()
+                                    shouldWaitForMore = bodyData.count < 10 && responseAccumulator.count < 10000
+                                } else if let cl = contentLength {
+                                    let actualBodySize = responseAccumulator.count - parsed.bodyOffset
+                                    shouldWaitForMore = actualBodySize < cl && responseAccumulator.count < 10000
+                                } else {
+                                    // No content-length, no chunked - just use what we have if there's any body
+                                    shouldWaitForMore = !hasBody && responseAccumulator.count < 5000
+                                }
+                                
+                                if shouldWaitForMore {
+                                    print("[MITMBackend] ⏳ Waiting for more response data (chunked=\(isChunked), hasBody=\(hasBody))")
+                                    // Don't mark as reported yet, continue accumulating
+                                } else {
+                                    // We have enough data, report the response
+                                    firstResponseReported = true
+                                    
+                                    let duration = Date().timeIntervalSince(requestStartTime)
+                                    print("[MITMBackend] 📝 Response parsed: status=\(parsed.statusCode), bodyOffset=\(parsed.bodyOffset), totalSize=\(responseAccumulator.count)")
+                                    
+                                    // Create response update
+                                    var responseData = MITMInterceptedData(host: capturedHost, method: "RESPONSE", path: "/")
+                                    responseData.statusCode = parsed.statusCode
+                                    responseData.responseHeaders = parsed.headers
+                                    responseData.duration = duration
+                                    responseData.responseSize = responseAccumulator.count
+                                    
+                                    // Capture response body for text content
+                                    let contentType = parsed.headers.first { $0.key.lowercased() == "content-type" }?.value
+                                    print("[MITMBackend] 📝 Content-Type: \(contentType ?? "nil"), isText=\(HTTPParser.isTextContent(contentType))")
+                                    
+                                    if HTTPParser.isTextContent(contentType) && responseAccumulator.count > parsed.bodyOffset {
+                                        var bodyData = Data(responseAccumulator[parsed.bodyOffset...])
+                                        
+                                        // For chunked encoding, try to decode the chunks
+                                        if isChunked {
+                                            bodyData = HTTPParser.decodeChunkedBody(bodyData) ?? bodyData
+                                        }
+                                        
+                                        // Check for Content-Encoding and decompress if needed
+                                        let contentEncoding = parsed.headers.first { $0.key.lowercased() == "content-encoding" }?.value.lowercased()
+                                        if let encoding = contentEncoding {
+                                            print("[MITMBackend] 📦 Content-Encoding: \(encoding)")
+                                            if encoding.contains("gzip") || encoding.contains("deflate") {
+                                                if let decompressed = HTTPParser.decompressGzip(bodyData) {
+                                                    print("[MITMBackend] ✅ Decompressed GZIP: \(bodyData.count) -> \(decompressed.count) bytes")
+                                                    bodyData = decompressed
+                                                } else {
+                                                    print("[MITMBackend] ⚠️ GZIP decompression failed, using raw data")
+                                                }
+                                            } else if encoding.contains("br") {
+                                                if let decompressed = HTTPParser.decompressBrotli(bodyData) {
+                                                    print("[MITMBackend] ✅ Decompressed Brotli: \(bodyData.count) -> \(decompressed.count) bytes")
+                                                    bodyData = decompressed
+                                                } else {
+                                                    print("[MITMBackend] ⚠️ Brotli decompression failed, using raw data")
+                                                }
+                                            }
+                                        }
+                                        
+                                        print("[MITMBackend] 📝 Body size: \(bodyData.count) bytes")
+                                        if bodyData.count <= HTTPParser.maxBodyCapture {
+                                            responseData.responseBody = bodyData
+                                            // Preview body content
+                                            if let bodyStr = String(data: bodyData.prefix(100), encoding: .utf8) {
+                                                print("[MITMBackend] ✅ Response body captured: \(bodyStr.prefix(80))...")
+                                            }
+                                        }
+                                    } else {
+                                        print("[MITMBackend] ⚠️ No body captured: isText=\(HTTPParser.isTextContent(contentType)), offset=\(parsed.bodyOffset), count=\(responseAccumulator.count)")
+                                    }
+                                    
+                                    Task.detached {
+                                        await MITMBackend.shared.reportResponse(requestId: reqId, data: responseData)
+                                    }
+                                }
+                            } else if responseAccumulator.count > 50 {
+                                let preview = String(data: responseAccumulator.prefix(50), encoding: .utf8) ?? "binary"
+                                print("[MITMBackend] ❌ Response parse failed. Preview: \(preview)")
+                                // Don't keep accumulating if we can't parse after 50 bytes
+                                if responseAccumulator.count > 1000 {
+                                    firstResponseReported = true  // Give up
+                                }
+                            }
+                        }
+                    }
+                    
                     c.send(content: d, completion: .contentProcessed({ sendErr in
                         if let sendErr = sendErr {
                             print("[MITMBackend] ❌ Pipe s→c send error: \(sendErr)")
@@ -688,3 +830,4 @@ actor MITMBoundConnection: Identifiable {
         rs()
     }
 }
+
