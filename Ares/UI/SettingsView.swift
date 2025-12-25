@@ -163,10 +163,15 @@ struct SettingsView: View {
                 
                 Button("Apply Proxy Rules") {
                     Task {
-                        // Refresh system proxy with new rules if currently enabled
+                        // 1. Refresh system proxy with new rules if currently enabled
                         if appState.systemProxyEnabled {
                             await appState.toggleSystemProxy() // Off
                             await appState.toggleSystemProxy() // On with new rules
+                        }
+                        
+                        // 2. If TUN mode is active, we MUST restart Clash to rebuild config with new bypass rules
+                        if tunEnabled {
+                            await clashViewModel.restart()
                         }
                     }
                 }
