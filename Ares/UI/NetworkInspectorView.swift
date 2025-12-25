@@ -6,26 +6,26 @@ struct NetworkInspectorView: View {
     
     // Tab State
     enum InspectorTab: String, CaseIterable, Identifiable {
+        case overview = "Overview"
         case headers = "Headers"
         case payload = "Payload"
         case preview = "Preview"
         case response = "Response"
-        case analysis = "Analysis"
         
         var id: String { rawValue }
         
         var icon: String {
             switch self {
+            case .overview: return "chart.bar.doc.horizontal"
             case .headers: return "list.bullet.rectangle"
             case .payload: return "doc.text.magnifyingglass"
             case .preview: return "eye"
             case .response: return "arrow.down.circle"
-            case .analysis: return "chart.xyaxis.line"
             }
         }
     }
     
-    @State private var selectedTab: InspectorTab = .headers
+    @State private var selectedTab: InspectorTab = .overview
     
     var request: BrowserRequest? {
         // Search all tabs to find the request by ID
@@ -65,6 +65,8 @@ struct NetworkInspectorView: View {
                             Color(nsColor: .textBackgroundColor) // Clean background
                             
                             switch selectedTab {
+                            case .overview:
+                                AnalysisInspector(request: req)
                             case .headers:
                                 HeadersInspector(request: req)
                             case .payload:
@@ -73,8 +75,6 @@ struct NetworkInspectorView: View {
                                 PreviewInspector(request: req)
                             case .response:
                                 ResponseInspector(request: req)
-                            case .analysis:
-                                AnalysisInspector(request: req)
                             }
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
