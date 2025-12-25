@@ -130,6 +130,41 @@ actor MITMBoundConnection: Identifiable {
     private var isStopped = false  // CRITICAL: Prevent recursive stop calls
     private var isPiping = false   // CRITICAL: Prevent conflicting reads during pipe handover
     
+    // MARK: - MITM Bypass List
+    // Domains in this list will be tunneled directly through Clash without MITM interception.
+    // This is useful for:
+    // 1. Domains with routing issues (e.g. Google Ads resolving to blocked Chinese IPs)
+    // 2. Domains that cause infinite retry loops
+    // 3. Domains we don't need to inspect
+    private static let bypassDomains: Set<String> = [
+        "googleads.g.doubleclick.net",
+        "pagead2.googlesyndication.com",
+        "adservice.google.com",
+        "google-analytics.com",
+        "googleadservices.com",
+        "static.doubleclick.net",
+        "ad.doubleclick.net",
+        "cm.g.doubleclick.net",
+        "ade.googlesyndication.com",
+        "tpc.googlesyndication.com",
+        "mads.amazon-adsystem.com",
+        "securepubads.g.doubleclick.net"
+    ]
+    
+    private func shouldBypassMITM(_ host: String) -> Bool {
+        // Check exact match
+        if Self.bypassDomains.contains(host) {
+            return true
+        }
+        // Check if host ends with any bypass domain (for subdomains)
+        for domain in Self.bypassDomains {
+            if host.hasSuffix("." + domain) {
+                return true
+            }
+        }
+        return false
+    }
+    
     init(connection: NWConnection, clashPort: UInt16) {
         self.clientConnection = connection
         self.clashPort = clashPort
@@ -256,7 +291,12 @@ actor MITMBoundConnection: Identifiable {
                 
                 await MITMBackend.shared.reportInterception(host: targetHost, method: "CONNECT", path: "/")
                 
-                if targetPort == 443 {
+                // Check if this domain should bypass MITM
+                if shouldBypassMITM(targetHost) {
+                    print("[MITMBackend] ⏭️ Bypassing MITM for \(targetHost) - tunneling directly")
+                    self.isPiping = true
+                    connectUpstream(isPlain: false)
+                } else if targetPort == 443 {
                     // CRITICAL: Stop readClient from stealing subsequent data (ServerHello/ClientHello)
                     self.isPiping = true
                     
@@ -365,22 +405,31 @@ actor MITMBoundConnection: Identifiable {
         // SecIdentity can be used directly with sec_protocol_options
         sec_protocol_options_set_local_identity(options.securityProtocolOptions, sec_identity_create(identity)!)
         
-        // Disable session tickets/resumption
+        // Disable session tickets
         sec_protocol_options_set_tls_tickets_enabled(options.securityProtocolOptions, false)
-        // REMOVED: sec_protocol_options_set_tls_is_fallback_attempt - this might be causing issues
         
-        // Disable Client Authentication (Peer Verification)
+        // Strategy: Force Cache Miss via Server Name mechanism
+        // We set a unique server name for this listener instance.
+        // NWListener might use this as a cache key.
+        // Chrome sends "google.com". We set "session-isolation-<UUID>".
+        // Risk: SNI verification might fail if default behavior enforces it.
+        sec_protocol_options_set_tls_server_name(options.securityProtocolOptions, "session-isolation-\(UUID().uuidString)")
+        
+        // Explicitly disable peer authentication
         sec_protocol_options_set_peer_authentication_required(options.securityProtocolOptions, false)
         
         // Enforce TLS 1.2 or 1.3
         sec_protocol_options_set_min_tls_protocol_version(options.securityProtocolOptions, .TLSv12)
         sec_protocol_options_set_max_tls_protocol_version(options.securityProtocolOptions, .TLSv13)
         
-        // Force HTTP/1.1 to stabilize ALPN negotiation
+        // DISABLED: H2 causes webpage loading issues due to incompatible multiplexing
+        // The MITM architecture assumes one request per connection, but H2 multiplexes
+        // sec_protocol_options_add_tls_application_protocol(options.securityProtocolOptions, "h2")
         sec_protocol_options_add_tls_application_protocol(options.securityProtocolOptions, "http/1.1")
         
-        // Help BoringSSL match the session by providing the Server Name (SNI) we expect
-        sec_protocol_options_set_tls_server_name(options.securityProtocolOptions, self.targetHost)
+        // Removed explicit SNI setting to avoid BoringSSL session lookup errors
+        // "Unable to extract cached certificates from the SSL_SESSION object"
+        // sec_protocol_options_set_tls_server_name(options.securityProtocolOptions, self.targetHost)
         
         let params = NWParameters(tls: options)
         params.allowLocalEndpointReuse = true
@@ -429,6 +478,8 @@ actor MITMBoundConnection: Identifiable {
                 // CRITICAL: Check if stopped inside the async context
                 guard await !self.isStopped else { return }
                 
+                // Use plain TCP for loopback - the listener will terminate the TLS
+                // from the original client's stream. Do NOT add TLS here or we get double-TLS.
                 let params = NWParameters.tcp
                 params.allowLocalEndpointReuse = true
                 let conn = NWConnection(to: .hostPort(host: "127.0.0.1", port: port), using: params)
@@ -474,6 +525,7 @@ actor MITMBoundConnection: Identifiable {
         
         let host = self.targetHost
         let port = self.targetPort
+        print("[MITMBackend] 📥 handleDecrypted called for \(host):\(port)")
         
         // Use NWProxyConfig to tunnel through Clash
         Task.detached {
@@ -482,6 +534,7 @@ actor MITMBoundConnection: Identifiable {
     }
     
     private func connectUpstreamTLS(host: String, port: NWEndpoint.Port, decrypted: NWConnection) async {
+        print("[MITMBackend] 🌐 connectUpstreamTLS: Connecting to \(host):\(port)")
         // Use System Proxy to route valid upstream traffic
         // This acts as a robust fallback for all macOS versions.
         // It relies on the System Proxy (managed by Clash) to handle the actual routing.
@@ -500,11 +553,45 @@ actor MITMBoundConnection: Identifiable {
         self.decryptedConnection = decrypted
         self.upstreamConnection = upstream
         
-        upstream.stateUpdateHandler = { [weak self] state in
+        // Track readiness of both connections
+        var upstreamReady = false
+        var decryptedReady = false
+        
+        let checkAndStartPipe = { [weak self] in
             guard let self = self else { return }
-            Task.detached {
-                if case .ready = state { await self.setupPipe(c: decrypted, s: upstream) }
-                else if case .failed = state { await self.stop() }
+            if upstreamReady && decryptedReady {
+                print("[MITMBackend] ✅ Both connections ready, starting pipe")
+                Task.detached { await self.setupPipe(c: decrypted, s: upstream) }
+            }
+        }
+        
+        upstream.stateUpdateHandler = { [weak self] state in
+            guard self != nil else { return }
+            switch state {
+            case .ready:
+                print("[MITMBackend] ✅ Upstream connection READY")
+                upstreamReady = true
+                checkAndStartPipe()
+            case .failed(let error):
+                print("[MITMBackend] ❌ Upstream connection FAILED: \(error)")
+                Task.detached { await self?.stop() }
+            default:
+                break
+            }
+        }
+        
+        decrypted.stateUpdateHandler = { [weak self] state in
+            guard self != nil else { return }
+            switch state {
+            case .ready:
+                print("[MITMBackend] ✅ Decrypted connection READY")
+                decryptedReady = true
+                checkAndStartPipe()
+            case .failed(let error):
+                print("[MITMBackend] ❌ Decrypted connection FAILED: \(error)")
+                Task.detached { await self?.stop() }
+            default:
+                break
             }
         }
         
@@ -522,6 +609,9 @@ actor MITMBoundConnection: Identifiable {
             return self == nil
         }
         
+        print("[MITMBackend] 🔄 setupPipe: Starting bidirectional relay for \(capturedHost)")
+        print("[MITMBackend] 🔄 setupPipe: c.state=\(c.state), s.state=\(s.state)")
+        
         func rc() {
             // CRITICAL: Don't schedule new receives if stopped
             c.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] d, _, i, err in
@@ -529,6 +619,7 @@ actor MITMBoundConnection: Identifiable {
                 guard self != nil else { return }
                 
                 if let d = d {
+                    print("[MITMBackend] 📤 Pipe c→s: \(d.count) bytes for \(capturedHost)")
                     if log {
                         // Try to parse HTTP Method and Path from the decrypted data
                         if let firstChunk = String(data: d, encoding: .utf8) {
@@ -547,11 +638,18 @@ actor MITMBoundConnection: Identifiable {
                             }
                         }
                     }
-                    s.send(content: d, completion: .contentProcessed({_ in}))
+                    s.send(content: d, completion: .contentProcessed({ sendErr in
+                        if let sendErr = sendErr {
+                            print("[MITMBackend] ❌ Pipe c→s send error: \(sendErr)")
+                        }
+                    }))
                 }
                 
                 // CRITICAL: Stop loop on error or completion
                 if i || err != nil {
+                    if let err = err {
+                        print("[MITMBackend] ⚠️ Pipe c receive ended: \(err)")
+                    }
                     Task.detached { await self?.stop() }
                 } else if !capturedStoppedCheck() {
                     rc()
@@ -566,11 +664,19 @@ actor MITMBoundConnection: Identifiable {
                 guard self != nil else { return }
                 
                 if let d = d {
-                    c.send(content: d, completion: .contentProcessed({_ in}))
+                    print("[MITMBackend] 📥 Pipe s→c: \(d.count) bytes for \(capturedHost)")
+                    c.send(content: d, completion: .contentProcessed({ sendErr in
+                        if let sendErr = sendErr {
+                            print("[MITMBackend] ❌ Pipe s→c send error: \(sendErr)")
+                        }
+                    }))
                 }
                 
                 // CRITICAL: Stop loop on error or completion
                 if i || err != nil {
+                    if let err = err {
+                        print("[MITMBackend] ⚠️ Pipe s receive ended: \(err)")
+                    }
                     Task.detached { await self?.stop() }
                 } else if !capturedStoppedCheck() {
                     rs()
