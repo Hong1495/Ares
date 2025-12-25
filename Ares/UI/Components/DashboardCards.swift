@@ -1,9 +1,12 @@
 import SwiftUI
 
-// Current Proxy Card - Shows active proxy selections
+// Current Proxy Card - Shows active proxy selections with latency
 struct CurrentProxyCard: View {
     @EnvironmentObject var clashController: ClashController
     @EnvironmentObject var appState: AppState
+    
+    // Auto-refresh latency
+    @State private var latencies: [String: Int] = [:]
     
     // Display groups based on mode
     var displayGroups: [ProxyGroup] {
@@ -13,7 +16,6 @@ struct CurrentProxyCard: View {
         case .direct:
             return []
         case .rule:
-            // Rule mode: ONLY show 节点选择
             return clashController.proxyGroups.filter { $0.name == "🚀 节点选择" }
         }
     }
@@ -40,24 +42,36 @@ struct CurrentProxyCard: View {
                     .foregroundStyle(modeColor)
                     .cornerRadius(6)
             }
+            .frame(height: 24) // Align header height
             
             Divider()
             
             if appState.currentMode == .direct {
                 // Direct mode
-                HStack {
-                    Image(systemName: "arrow.forward.circle")
-                        .foregroundStyle(.green)
-                    Text("Direct Connection")
-                        .font(.subheadline)
+                VStack {
+                    Spacer()
+                    HStack {
+                        Image(systemName: "arrow.forward.circle")
+                            .foregroundStyle(.green)
+                        Text("Direct Connection")
+                            .font(.subheadline)
+                        Spacer()
+                    }
                     Spacer()
                 }
             } else if displayGroups.isEmpty {
-                Text("No proxy configured")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                 VStack {
+                    Spacer()
+                    Text("No proxy configured")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Spacer()
+                }
             } else {
                 // Show groups
+                // Bottom align
+                Spacer()
                 ForEach(displayGroups) { group in
                     HStack {
                         Image(systemName: groupIcon(for: group.type))
@@ -66,11 +80,31 @@ struct CurrentProxyCard: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(group.name)
                                 .font(.subheadline)
+                                .lineLimit(1)
                             if let current = group.now {
-                                Text(current)
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                                    .foregroundStyle(.primary)
+                                HStack(spacing: 6) {
+                                    Text(current)
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .foregroundStyle(.primary)
+                                        .lineLimit(1)
+                                    
+                                    // Latency Badge
+                                    if let ms = latencies[current] {
+                                        Text("\(ms)ms")
+                                            .font(.caption2)
+                                            .fontWeight(.bold)
+                                            .foregroundStyle(latencyColor(ms))
+                                            .padding(.horizontal, 4)
+                                            .padding(.vertical, 2)
+                                            .background(latencyColor(ms).opacity(0.1))
+                                            .cornerRadius(4)
+                                    } else {
+                                        Text("- ms")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
                             }
                         }
                         
@@ -84,6 +118,39 @@ struct CurrentProxyCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
+        .task {
+            // Initial delay wait
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            await updateLatencies()
+            
+            // Periodic update
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5s
+                await updateLatencies()
+            }
+        }
+    }
+    
+    private func updateLatencies() async {
+        for group in displayGroups {
+            if let current = group.now {
+                // Skip if we already tested recently (< 5s)? No, auto-refresh is explicit.
+                do {
+                    let ms = try await clashController.testProxyDelay(name: current, timeout: 2000)
+                    withAnimation {
+                        latencies[current] = ms
+                    }
+                } catch {
+                    // ignore
+                }
+            }
+        }
+    }
+    
+    private func latencyColor(_ ms: Int) -> Color {
+        if ms < 200 { return .green }
+        if ms < 500 { return .orange }
+        return .red
     }
     
     private var modeColor: Color {

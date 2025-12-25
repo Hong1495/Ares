@@ -12,7 +12,6 @@ struct DashboardView: View {
                 StatusHeader()
                 MainGrid()
                 EnhancedTrafficGraphView()
-                SmallStatsGrid()
                 ConnectivityTestView()
                 InfoGrid()
             }
@@ -100,6 +99,9 @@ struct NetworkTrafficCard: View {
                         .frame(width: 20)
                 }
                 .font(.headline.weight(.medium))
+                .frame(height: 24) // Align Header
+            
+            Divider()
             
             Spacer()
             
@@ -137,6 +139,8 @@ struct NetworkTrafficCard: View {
                 .font(.footnote)
                 .fontWeight(.medium)
                 .foregroundStyle(.secondary)
+            
+            // Spacer() removed for bottom alignment
         }
         .padding()
         .frame(height: 150)
@@ -159,6 +163,9 @@ struct ProxyModeCard: View {
                     .frame(width: 20)
             }
             .font(.headline.weight(.medium))
+            .frame(height: 24) // Align Header
+            
+            Divider()
             
             Spacer()
             
@@ -177,7 +184,7 @@ struct ProxyModeCard: View {
                                 .fontWeight(.semibold)
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
+                        .padding(.vertical, 8)
                         .background(
                             appState.currentMode == mode ?
                             LinearGradient(colors: [Color.blue, Color.blue.opacity(0.8)], startPoint: .top, endPoint: .bottom) :
@@ -195,11 +202,8 @@ struct ProxyModeCard: View {
                 }
             }
             
-            Text(modeDescription)
-                .font(.footnote)
-                .fontWeight(.medium)
-                .foregroundStyle(.secondary)
-                .padding(.top, 4)
+            // Spacer() removed for bottom alignment
+            // Removed mode description to save space/align
         }
         .padding()
         .frame(height: 150)
@@ -214,14 +218,6 @@ struct ProxyModeCard: View {
         case .direct: return "arrow.turn.up.right"
         }
     }
-    
-    private var modeDescription: String {
-        switch appState.currentMode {
-        case .rule: return "Rule: Auto-select based on rules"
-        case .global: return "Global: All traffic through proxy"
-        case .direct: return "Direct: No proxy, direct connection"
-        }
-    }
 }
 
 // TUN Mode Card
@@ -230,7 +226,7 @@ struct TUNModeCard: View {
     @EnvironmentObject var clashViewModel: ClashViewModel
     
     var body: some View {
-        VStack(alignment: .leading) {
+        VStack(alignment: .leading, spacing: 12) {
                 Label {
                     Text("TUN Mode")
                 } icon: {
@@ -239,6 +235,10 @@ struct TUNModeCard: View {
                         .frame(width: 20)
                 }
                 .font(.headline.weight(.medium))
+                .frame(height: 24) // Align Header
+            
+            Divider()
+            
             Spacer()
             
             Toggle("Enable TUN", isOn: Binding(
@@ -254,6 +254,8 @@ struct TUNModeCard: View {
                 .font(.footnote)
                 .fontWeight(.medium)
                 .foregroundStyle(.secondary)
+            
+            // Spacer() removed for bottom alignment
         }
         .padding()
         .frame(height: 150)
@@ -280,71 +282,14 @@ struct ModeButton: View {
     }
 }
 
-struct SmallStatsGrid: View {
-    @EnvironmentObject var clashController: ClashController
-    
-    var body: some View {
-        HStack(spacing: 16) {
-            SmallTrafficCard(title: "Total Upload", value: clashController.traffic.up, icon: "arrow.up", color: .orange, showRate: false)
-            SmallTrafficCard(title: "Total Download", value: clashController.traffic.down, icon: "arrow.down", color: .blue, showRate: false)
-        }
-    }
-}
 
-struct SmallTrafficCard: View {
-    let title: String
-    let value: Int64
-    let icon: String
-    let color: Color
-    var unit: String? = nil
-    var showRate: Bool = true // Default to showing rate (/s)
-    
-    var body: some View {
-        HStack {
-            Image(systemName: icon)
-                .foregroundStyle(color)
-                .padding(8)
-                .background(color.opacity(0.1))
-                .clipShape(Circle())
-            
-            VStack(alignment: .leading) {
-                Text(title)
-                    .font(.footnote)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-                if let unit = unit {
-                    Text("\(value) \(unit)")
-                        .font(.headline)
-                } else {
-                    Text(formatBytes(value) + (showRate ? "/s" : ""))
-                        .font(.headline)
-                        .monospacedDigit()
-                }
-            }
-            Spacer()
-        }
-        .padding(12)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(12)
-    }
-    
-    func formatBytes(_ bytes: Int64) -> String {
-        let formatter = ByteCountFormatter()
-        formatter.allowedUnits = [.useKB, .useMB, .useGB]
-        formatter.countStyle = .file
-        formatter.zeroPadsFractionDigits = true // Ensure 0 is treated standardly
-        
-        let formatted = formatter.string(fromByteCount: bytes)
-        return formatted == "Zero KB" ? "0 KB" : formatted
-    }
-}
 
 // MITM Mode Card
 struct MITMModeCard: View {
     @EnvironmentObject var appState: AppState
     
     var body: some View {
-        VStack(alignment: .leading) {
+        VStack(alignment: .leading, spacing: 12) {
             Label {
                 Text("MITM Mode")
             } icon: {
@@ -354,6 +299,9 @@ struct MITMModeCard: View {
                     .frame(width: 20)
             }
             .font(.headline.weight(.medium))
+            .frame(height: 24) // Align Header
+            
+            Divider()
             
             Spacer()
             
@@ -425,6 +373,8 @@ struct MITMModeCard: View {
                 .controlSize(.mini)
                 .help("Export Root CA to Downloads for installation")
             }
+            
+            // Spacer() removed for bottom alignment
         }
         .padding()
         .frame(height: 150)

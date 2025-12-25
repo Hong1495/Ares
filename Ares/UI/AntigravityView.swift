@@ -1,5 +1,5 @@
 import SwiftUI
-import Charts
+
 import Combine
 
 /// Specialized Dashboard for Google Antigravity Stats
@@ -11,75 +11,238 @@ struct AntigravityView: View {
     
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 32) {
-
-                
-                // 2. HERO METRICS (Tokens / Quotas)
-                VStack(alignment: .leading, spacing: 16) {
-                    HStack {
-                        Label("Neural Link Quotas", systemImage: "bolt.ring.closed")
-                            .font(.headline)
-                        Spacer()
-                        
-                        if !trafficAnalyzer.quotaStatus.isEmpty {
-                            Text("Real-time")
-                                .font(.caption2)
+            VStack(alignment: .leading, spacing: 20) {
+                // 1. AVAILABLE MODELS (From IDE)
+                if !trafficAnalyzer.availableModels.isEmpty {
+                    VStack(alignment: .leading, spacing: 16) {
+                        HStack {
+                            Label("Available Models", systemImage: "sparkles.rectangle.stack")
+                                .font(.headline)
+                            Spacer()
+                            Text("\(trafficAnalyzer.availableModels.count) Models")
+                                .font(.caption)
                                 .foregroundStyle(.secondary)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.green.opacity(0.1))
-                                .cornerRadius(4)
-                        } else {
-                            HStack(spacing: 4) {
-                                ProgressView()
-                                    .scaleEffect(0.5)
-                                    .frame(width: 12, height: 12)
-                                Text("Scanning traffic...")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                        }
+                        
+                        ForEach(groupedModels, id: \.key) { provider, models in
+                            Section {
+                                LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 12)], spacing: 12) {
+                                    ForEach(models) { model in
+                                        ModelCard(model: model)
+                                    }
+                                }
+                            } header: {
+                                HStack {
+                                    Image(systemName: providerIcon(for: provider))
+                                    Text(provider)
+                                        .font(.subheadline)
+                                        .fontWeight(.semibold)
+                                        .foregroundStyle(.secondary)
+                                }
+                                .padding(.vertical, 8)
                             }
                         }
                     }
-                    
-                    if !trafficAnalyzer.quotaStatus.isEmpty {
-                        QuotaMonitorView(quotas: Array(trafficAnalyzer.quotaStatus.values).sorted { $0.provider < $1.provider })
-                    } else {
-                        // Empty State / Placeholder
-                        VStack(spacing: 12) {
-                            Image(systemName: "waveform.path.ecg")
-                                .font(.system(size: 32))
-                                .foregroundStyle(.secondary.opacity(0.3))
-                            Text("Waiting for AI headers...")
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                            Text("Trigger an AI action in Antigravity IDE to capture quotas.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary.opacity(0.7))
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 32)
+                    .padding(20)
+                    .background(Color(nsColor: .controlBackgroundColor))
+                    .cornerRadius(12)
+                } else {
+                    // Empty State / Placeholder
+                    VStack(spacing: 12) {
+                        Image(systemName: "server.rack")
+                            .font(.system(size: 32))
+                            .foregroundStyle(.secondary.opacity(0.3))
+                        Text("Waiting for model list...")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                        Text("Open the model picker in Antigravity to sync.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary.opacity(0.7))
                     }
-                }
-                .padding(20)
-                .frame(maxWidth: .infinity)
-                .background(Color(nsColor: .controlBackgroundColor))
-                .cornerRadius(12)
-                
-                // Discovery Log (Debug Mode)
-                if !trafficAnalyzer.discoveryLogs.isEmpty {
-                    DiscoveryLogView(logs: trafficAnalyzer.discoveryLogs)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 40)
+                    .background(Color(nsColor: .controlBackgroundColor))
+                    .cornerRadius(12)
                 }
                 
-
+                // Discovery Log removed per user request
+                
             }
             .padding(20)
-        }
+        } // End ScrollView
         .background(Color(nsColor: .windowBackgroundColor))
         .navigationTitle("Antigravity")
 
         .task {
             // Kick off initial poll if needed
             await trafficAnalyzer.poll()
+        }
+    }
+    private var groupedModels: [(key: String, value: [AntigravityModelInfo])] {
+        let filtered = trafficAnalyzer.availableModels.filter { model in
+            let name = model.displayName
+            return name.hasPrefix("Gemini") || name.hasPrefix("Claude") || name.hasPrefix("GPT")
+        }
+        
+        let grouped = Dictionary(grouping: filtered) { model -> String in
+            let name = model.displayName
+            if name.hasPrefix("Gemini") { return "Google Gemini" }
+            if name.hasPrefix("Claude") { return "Anthropic Claude" }
+            if name.hasPrefix("GPT") { return "OpenAI GPT" }
+            return "Other" // Should not happen given filter
+        }
+        
+        // Sort keys: Google, then Claude, then OpenAI
+        let sortedKeys = grouped.keys.sorted { k1, k2 in
+            let order = ["Google Gemini": 0, "Anthropic Claude": 1, "OpenAI GPT": 2]
+            return (order[k1] ?? 99) < (order[k2] ?? 99)
+        }
+        
+        return sortedKeys.map { key in
+            (key: key, value: grouped[key]?.sorted(by: sortModels) ?? [])
+        }
+    }
+    
+    private func sortModels(_ m1: AntigravityModelInfo, _ m2: AntigravityModelInfo) -> Bool {
+        // High level sort: Recommended first
+        // if (m1.recommended == true) != (m2.recommended == true) { return m1.recommended == true }
+        
+        // Version sort heuristic
+        // "Gemini 3" > "Gemini 2"
+        // "Pro" > "Flash"
+        // "High" > "Low"
+        return m1.displayName > m2.displayName // Simple string sort often works for "3" vs "2", but for special suffixes we might need more
+    }
+    
+    private func providerIcon(for provider: String) -> String {
+        switch provider {
+        case "Google Gemini": return "sparkles"
+        case "Anthropic Claude": return "brain.head.profile"
+        case "OpenAI GPT": return "bolt.fill"
+        default: return "cube.box"
+        }
+    }
+}
+
+struct ModelCard: View {
+    let model: AntigravityModelInfo
+    @State private var timeRemaining: String = ""
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Header
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(model.displayName)
+                        .font(.headline)
+                        .lineLimit(1)
+                    
+                    if let provider = model.apiProvider {
+                        Text(provider.replacingOccurrences(of: "API_PROVIDER_", with: "").replacingOccurrences(of: "_", with: " ").capitalized)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                
+                Spacer()
+                
+                if model.recommended == true {
+                    Image(systemName: "star.fill")
+                        .foregroundStyle(.yellow)
+                        .font(.caption)
+                }
+            }
+            
+            Divider()
+            
+            // Quota Info
+            if let quota = model.quotaInfo {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Quota Remaining")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        if let frac = quota.remainingFraction {
+                            Text("\(Int(frac * 100))%")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(quotaColor(frac))
+                        }
+                    }
+                    
+                    if let frac = quota.remainingFraction {
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(Color.gray.opacity(0.2))
+                                
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(quotaColor(frac))
+                                    .frame(width: geo.size.width * CGFloat(frac))
+                            }
+                        }
+                        .frame(height: 6)
+                    }
+                    
+                    if !timeRemaining.isEmpty {
+                        HStack(spacing: 4) {
+                            Image(systemName: "clock")
+                            Text("Resets in \(timeRemaining)")
+                        }
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 2)
+                    }
+                }
+            } else {
+                Text("No quota info")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 8)
+            }
+        }
+        .padding(12)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.gray.opacity(0.1), lineWidth: 1)
+        )
+        .onAppear {
+            updateTimeRemaining()
+        }
+        .task {
+             // Periodically update timer
+             while !Task.isCancelled {
+                 try? await Task.sleep(nanoseconds: 60 * 1_000_000_000) // 1 min
+                 updateTimeRemaining()
+             }
+        }
+    }
+    
+    private func quotaColor(_ fraction: Double) -> Color {
+        if fraction > 0.5 { return .green }
+        if fraction > 0.2 { return .orange }
+        return .red
+    }
+    
+    private func updateTimeRemaining() {
+        guard let resetStr = model.quotaInfo?.resetTime else { return }
+        // Format: 2025-12-25T12:33:22Z
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime]
+        
+        if let date = isoFormatter.date(from: resetStr) {
+            let diff = date.timeIntervalSinceNow
+            if diff > 0 {
+                let formatter = DateComponentsFormatter()
+                formatter.allowedUnits = [.hour, .minute]
+                formatter.unitsStyle = .abbreviated
+                timeRemaining = formatter.string(from: diff) ?? ""
+            } else {
+                timeRemaining = "Now"
+            }
         }
     }
 }
@@ -112,6 +275,14 @@ class TrafficAnalyzer: ObservableObject {
     @Published var speedHistory: [SpeedPoint] = []
     @Published var debugLogs: [(String, String, String, Int64)] = []
     
+    // Latency Tracking
+    struct LatencyPoint: Identifiable {
+        let id = UUID()
+        let time: Date
+        let latency: Double
+    }
+    @Published var latencyHistory: [LatencyPoint] = []
+    
     // Advanced Metrics
     @Published var currentTPS: Double = 0.0
     @Published var healthScore: Int = 100
@@ -123,6 +294,9 @@ class TrafficAnalyzer: ObservableObject {
     // Quota & Discovery
     @Published var quotaStatus: [String: AIQuotaStatus] = [:]
     @Published var discoveryLogs: [String] = []
+    
+    // New: Authoritative Model List
+    @Published var availableModels: [AntigravityModelInfo] = []
     
     struct TrafficItem: Identifiable, Equatable {
         let id = UUID()
@@ -147,6 +321,11 @@ class TrafficAnalyzer: ObservableObject {
         
         loadStats()
         setupAnalysisSubscription()
+        
+        // Model List Update Callback
+        AIAnalysisService.shared.onModelListUpdate = { [weak self] models in
+            self?.availableModels = models
+        }
         
         // Discovery Callback
         AIAnalysisService.shared.onDiscoveryLog = { [weak self] msg in
@@ -274,6 +453,11 @@ class TrafficAnalyzer: ObservableObject {
         let tps = Double(usage.outputTokens) / (usage.latency > 0 ? usage.latency : 1.0)
         currentTPS = tps 
         
+        // Track Latency (New)
+        if usage.latency > 0 {
+            updateLatencyHistory(latency: usage.latency)
+        }
+        
         // Update Health
         if usage.status >= 400 {
             healthScore = max(0, healthScore - 10)
@@ -290,6 +474,17 @@ class TrafficAnalyzer: ObservableObject {
         speedHistory.append(SpeedPoint(time: now, down: down, up: up))
         if speedHistory.count > 60 {
             speedHistory.removeFirst()
+        }
+    }
+    
+    private func updateLatencyHistory(latency: TimeInterval) {
+        guard latency > 0 else { return }
+        let now = Date()
+        latencyHistory.append(LatencyPoint(time: now, latency: latency))
+        
+        // Keep last 50 points
+        if latencyHistory.count > 50 {
+            latencyHistory.removeFirst()
         }
     }
     
