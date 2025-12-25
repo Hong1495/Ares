@@ -12,7 +12,13 @@ struct DashboardView: View {
                 StatusHeader()
                 MainGrid()
                 EnhancedTrafficGraphView()
-                ConnectivityTestView()
+                
+                // Subscription & Connectivity Row
+                HStack(alignment: .top, spacing: 16) {
+                    SubscriptionCard()
+                    ConnectivityTestView()
+                }
+                
                 InfoGrid()
             }
             .padding()

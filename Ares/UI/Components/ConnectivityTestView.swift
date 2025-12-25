@@ -6,65 +6,82 @@ struct ConnectivityTestView: View {
     @State private var loadingStates: [String: Bool] = [:]
     
     let sites = [
-        ("Apple", "apple.com", "applelogo"),
-        ("Github", "github.com", "network"),
-        ("Google", "google.com", "globe"),
-        ("Youtube", "youtube.com", "play.rectangle.fill")
+        ("Gateway", "http://10.10.24.111", "server.rack"),
+        ("Google", "https://www.google.com", "globe"),
+        ("Github", "https://github.com", "chevron.left.forwardslash.chevron.right"),
+        ("Gemini", "https://gemini.google.com", "sparkles")
     ]
     
     var body: some View {
-        VStack(alignment: .leading) {
+        VStack(alignment: .leading, spacing: 12) {
+            // Header
             HStack {
-                Text("Connectivity")
-                    .font(.headline)
+                Label {
+                    Text("Connectivity")
+                } icon: {
+                    Image(systemName: "antenna.radiowaves.left.and.right")
+                        .fontWeight(.light)
+                        .frame(width: 20)
+                }
+                .font(.headline.weight(.medium))
+                
                 Spacer()
+                
                 Button(action: testAll) {
                     Image(systemName: "arrow.clockwise")
+                        .font(.caption)
                 }
                 .buttonStyle(.plain)
+                .help("Refresh Connectivity")
             }
-            .padding(.bottom, 8)
+            .frame(height: 24) // Standard Header Height
+            
+            Divider()
+            
+            Spacer()
             
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                 ForEach(sites, id: \.0) { site in
-                    VStack {
+                    VStack(spacing: 4) {
                         Image(systemName: site.2)
-                            .font(.title2)
+                            .font(.title3) // Slightly smaller icon
                             .foregroundStyle(.primary)
-                            .frame(height: 30)
+                            .frame(height: 24)
                         
                         Text(site.0)
-                            .font(.footnote)
+                            .font(.caption2)
                             .fontWeight(.medium)
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
                         
                         if loadingStates[site.0] == true {
                             ProgressView().scaleEffect(0.5)
+                                .frame(height: 16)
                         } else if let ms = latencies[site.0] {
                             if ms < 0 {
-                                Text("Error")
-                                    .font(.footnote)
-                                    .fontWeight(.semibold)
+                                Text("Err")
+                                    .font(.caption2)
+                                    .fontWeight(.bold)
                                     .foregroundStyle(.red)
                             } else {
-                                Text("\(ms) ms")
-                                    .font(.footnote)
-                                    .fontWeight(.semibold)
+                                Text("\(ms)ms")
+                                    .font(.caption2)
+                                    .fontWeight(.bold)
                                     .monospacedDigit()
                                     .foregroundStyle(ms < 200 ? .green : (ms < 500 ? .orange : .red))
                             }
                         } else {
                             Text("Test")
-                                .font(.footnote)
-                                .fontWeight(.medium)
-                                .foregroundStyle(.blue)
+                                .font(.caption2)
+                                .foregroundStyle(.blue.opacity(0.8))
                         }
                     }
                     .frame(maxWidth: .infinity)
-                    .padding()
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 4)
                     .background(Color(nsColor: .windowBackgroundColor))
                     .cornerRadius(8)
-                    .contentShape(Rectangle()) // Make entire area tappable
+                    .contentShape(Rectangle())
                     .onTapGesture {
                         testSite(name: site.0, url: site.1)
                     }
@@ -77,8 +94,10 @@ struct ConnectivityTestView: View {
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
         .task {
-            await Task.yield()
+            // Trigger test once on appear
             if latencies.isEmpty {
+                // Short delay to let UI settle
+                try? await Task.sleep(nanoseconds: 500_000_000)
                 testAll()
             }
         }
@@ -94,24 +113,20 @@ struct ConnectivityTestView: View {
     @MainActor
     func testSite(name: String, url: String) {
         loadingStates[name] = true
-        latencies[name] = nil // Clear previous result
+        latencies[name] = nil 
         
         Task {
-            // Retry logic for connectivity tests
             var finalLatency: Int? = nil
-            let maxAttempts = 3
-            for i in 1...maxAttempts { // 3 attempts
+            // 2 attempts for responsiveness
+            for _ in 1...2 { 
                 if let latency = await measureLatency(url: url) {
                     finalLatency = latency
                     break
                 }
-                if i < maxAttempts {
-                    try? await Task.sleep(nanoseconds: 2_000_000_000) // Wait 2s
-                }
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
             }
             
             let result = finalLatency ?? -1
-            
             await MainActor.run {
                 self.loadingStates[name] = false
                 self.latencies[name] = result
@@ -120,26 +135,28 @@ struct ConnectivityTestView: View {
     }
     
     private func measureLatency(url: String) async -> Int? {
-        // Guard: Don't test if Clash is not running
         let isRunning = await MainActor.run { ClashViewModel.shared.isRunning }
         guard isRunning else { return nil }
 
-        // Must use HTTPS to avoid ATS blocking
-        guard let targetURL = URL(string: "https://\(url)") else { return nil }
+        // Smart scheme handling
+        var urlString = url
+        if !urlString.hasPrefix("http") {
+             urlString = "https://\(urlString)"
+        }
+        
+        guard let targetURL = URL(string: urlString) else { return nil }
         
         var request = URLRequest(url: targetURL)
         request.httpMethod = "HEAD"
-        request.timeoutInterval = 5.0 // Slightly longer timeout for startup stability
-        // Add cache policy to ensure real network request
+        request.timeoutInterval = 3.0 // Snappy timeout
         request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
         
         let start = Date()
         
         do {
-            // DIAGNOSTIC: Use shared session
-            let session = URLSession.shared
-            // let session = URLSession(configuration: .ephemeral, delegate: ConnectivityDelegate(), delegateQueue: nil)
-            // defer { session.finishTasksAndInvalidate() }
+            let config = URLSessionConfiguration.ephemeral
+            config.timeoutIntervalForRequest = 3.0
+            let session = URLSession(configuration: config)
             
             let (_, response) = try await session.data(for: request)
             if let httpResponse = response as? HTTPURLResponse, (200...499).contains(httpResponse.statusCode) {
@@ -148,9 +165,7 @@ struct ConnectivityTestView: View {
             }
             return nil
         } catch {
-            let nsError = error as NSError
-            print("[Connectivity] Error testing \(url): \(error.localizedDescription) (Code: \(nsError.code), Domain: \(nsError.domain))")
-            return nil
+            return nil // silent fail
         }
     }
 }
