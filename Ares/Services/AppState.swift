@@ -329,16 +329,48 @@ class AppState: ObservableObject {
         
         Task { @MainActor in
             if newState {
+                // STEP 1: Start MITM first to get the port number
                 await NetworkMITMService.shared.start()
+                
+                // STEP 2: If TUN mode is active, restart Clash with MITM routing rules
+                // Now MITM is running, so ConfigService.buildConfig() will inject MITM rules
+                if self.tunEnabled && self.clashViewModel.isRunning {
+                    let mitmPort = NetworkMITMService.shared.currentPort
+                    self.clashViewModel.addLog("[MITM] 🔄 TUN mode active - restarting Clash with MITM routing to port \(mitmPort)...")
+                    
+                    await self.clashViewModel.stopCore(intendedRestart: true)
+                    await self.clashViewModel.startCore(isRestart: true)
+                    
+                    let isReady = await ClashController.shared.waitForAPIReady(timeout: 5.0)
+                    if isReady {
+                        self.clashViewModel.addLog("[MITM] ✅ Clash restarted with MITM routing rules")
+                    } else {
+                        self.clashViewModel.addLog("[MITM] ⚠️ Clash restart timeout")
+                    }
+                }
             } else {
                 await NetworkMITMService.shared.stop()
+                
+                // If TUN mode is active and TURNING OFF MITM, restart Clash to remove MITM config
+                if self.tunEnabled && self.clashViewModel.isRunning {
+                    self.clashViewModel.addLog("[MITM] 🔄 TUN mode active - rebuilding Clash config after MITM disabled...")
+                    
+                    await self.clashViewModel.stopCore(intendedRestart: true)
+                    await self.clashViewModel.startCore(isRestart: true)
+                    
+                    let isReady = await ClashController.shared.waitForAPIReady(timeout: 5.0)
+                    if isReady {
+                        self.clashViewModel.addLog("[MITM] ✅ Clash restarted without MITM routing")
+                    }
+                }
             }
             
             // Trigger UI update
             self.objectWillChange.send()
             
             // Refresh system proxy if it is enabled to apply new port rules
-            // Now this happens AFTER MITM is ready, so getProxyPorts() will return correct port
+            // In TUN mode: system proxy points to Clash, traffic flows TUN->Clash->MITM
+            // In non-TUN mode: system proxy points to MITM, traffic flows SystemProxy->MITM->Clash
             if self.systemProxyEnabled {
                 await self.enableSystemProxy()
             }
@@ -422,33 +454,26 @@ class AppState: ObservableObject {
     
     /// Helper to get proxy ports based on TUN mode state
     private func getProxyPorts() -> (Int, Int) {
-        // PRIORITIZE MITM if it's running!
-        // This ensures system proxy traffic goes to MITM first.
-        // We use MainActor.assumeIsolated because AppState is MainActor and isRunning is updated on MainActor.
+        let defaults = UserDefaults.standard
+        let clashHttpPort = Int(defaults.string(forKey: "mixedPort") ?? "7890") ?? 7890
+        let clashSocksPort = Int(defaults.string(forKey: "socksPort") ?? "7891") ?? 7891
+        
+        // In TUN mode: System proxy points to Clash, traffic flows TUN->Clash->MITM (via rules)
+        // MITM routing is handled by Clash rules, not system proxy
+        if tunEnabled {
+            return (clashHttpPort, clashSocksPort)
+        }
+        
+        // In non-TUN mode: If MITM is running, system proxy points to MITM
+        // Traffic flows SystemProxy->MITM->Clash
         if NetworkMITMService.shared.isRunning {
-             // Use the dynamic port assigned by the OS
-             // Fallback to 9090 only if 0 (shouldn't happen if isRunning is true)
-             let mitmPort = Int(NetworkMITMService.shared.currentPort)
-             let httpPort = mitmPort > 0 ? mitmPort : 9090
-             
-             // 7891 is the Clash SOCKS port (MITM doesn't handle SOCKS yet, so bypass it to Clash).
-             return (httpPort, 7891)
+            let mitmPort = Int(NetworkMITMService.shared.currentPort)
+            let httpPort = mitmPort > 0 ? mitmPort : clashHttpPort
+            // SOCKS still goes to Clash (MITM doesn't handle SOCKS)
+            return (httpPort, clashSocksPort)
         }
         
-        // Pass the calculated port to MITM backend if it's running
-        let tun = tunEnabled
-        
-        if tun {
-            // Fix: Use configured ports even in TUN mode
-            let defaults = UserDefaults.standard
-            let http = Int(defaults.string(forKey: "mixedPort") ?? "7890") ?? 7890
-            let socks = Int(defaults.string(forKey: "socksPort") ?? "7891") ?? 7891
-            return (http, socks)
-        } else {
-            let defaults = UserDefaults.standard
-            let http = Int(defaults.string(forKey: "mixedPort") ?? "7890") ?? 7890
-            let socks = Int(defaults.string(forKey: "socksPort") ?? "7891") ?? 7891
-            return (http, socks)
-        }
+        // Default: System proxy points to Clash
+        return (clashHttpPort, clashSocksPort)
     }
 }

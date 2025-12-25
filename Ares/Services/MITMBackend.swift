@@ -15,7 +15,14 @@ actor MITMBackend {
     private var onInterception: ((MITMInterceptedData) -> Void)?
     private var onResponse: ((String, MITMInterceptedData) -> Void)?
     
-    private init() {}
+    // MARK: - Connection Limits
+    private static let maxConnections = 500  // Maximum concurrent connections
+    private static let connectionTimeout: TimeInterval = 15  // 15 seconds timeout (reduced for faster cleanup of failed TLS handshakes)
+    private static let cleanupInterval: UInt64 = 30_000_000_000  // 30 seconds (safety net, connections self-cleanup)
+    private var connectionCount = 0  // Track total connections created
+    private var cleanupTask: Task<Void, Never>?
+    
+    // MARK: - Network Monitor (Reset)
     
     // MARK: - API
     
@@ -32,24 +39,27 @@ actor MITMBackend {
     func start(clashPort: UInt16) async {
         await stop()
         
+        // Start periodic cleanup task - runs frequently to catch failed TLS handshakes quickly
+        cleanupTask = Task.detached { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: Self.cleanupInterval)
+                await self?.cleanupStaleConnections()
+            }
+        }
+
+        
         do {
             let params = NWParameters.tcp
             params.allowLocalEndpointReuse = true
             let listener = try NWListener(using: params, on: .any)
             
-            // Debug Log
-            // listener created successfully
-            
             listener.newConnectionHandler = { [weak self] nwConn in
-                // Use Task.detached to prevent any accidental actor context inheritance
                 Task.detached {
                     await self?.createNewConnection(nwConn, clashPort: clashPort)
                 }
             }
             
             listener.stateUpdateHandler = { [weak self] state in
-                // Debug Log
-                // Listener state update
                 Task.detached {
                     await self?.handleListenerState(state, listener: listener)
                 }
@@ -64,16 +74,19 @@ actor MITMBackend {
     }
     
     func stop() async {
+        // Cancel cleanup task
+        cleanupTask?.cancel()
+        cleanupTask = nil
+        
         listener?.cancel()
         listener = nil
         
-        // Copy values to avoid concurrent access issues during iteration ?
-        // Actually we are ON the actor, so access is safe.
+        // Stop all connections
         let conns = connections.values
         connections.removeAll()
+        connectionCount = 0
         
         for conn in conns {
-            // This is an async call to another actor
             await conn.stop()
         }
         
@@ -84,6 +97,17 @@ actor MITMBackend {
     
     // Actor-isolated method
     func createNewConnection(_ nwConn: NWConnection, clashPort: UInt16) async {
+        // Reject new connections if at capacity
+        let currentCount = connections.count
+        if currentCount >= Self.maxConnections {
+            print("[MITMBackend] ⚠️ Connection limit reached (\(currentCount)/\(Self.maxConnections)), rejecting new connection")
+            nwConn.cancel()
+            return
+        }
+        
+        // Log connection count periodically for monitoring
+        connectionCount += 1
+        
         let conn = MITMBoundConnection(connection: nwConn, clashPort: clashPort)
         let id = conn.id
         connections[id] = conn
@@ -92,6 +116,39 @@ actor MITMBackend {
     
     func removeConnection(id: UUID) {
         connections.removeValue(forKey: id)
+    }
+    
+    // MARK: - Cleanup and Monitoring
+    
+    private func cleanupStaleConnections() async {
+        let staleIds = await withTaskGroup(of: UUID?.self) { group in
+            for (id, conn) in connections {
+                group.addTask {
+                    let isStale = await conn.isStale(timeout: Self.connectionTimeout)
+                    return isStale ? id : nil
+                }
+            }
+            var ids: [UUID] = []
+            for await id in group {
+                if let id = id {
+                    ids.append(id)
+                }
+            }
+            return ids
+        }
+        
+        if !staleIds.isEmpty {
+            print("[MITMBackend] 🧹 Cleaning up \(staleIds.count) stale connections (active: \(connections.count - staleIds.count))")
+            for id in staleIds {
+                if let conn = connections.removeValue(forKey: id) {
+                    await conn.stop()
+                }
+            }
+        }
+    }
+    
+    func getConnectionCount() -> (active: Int, total: Int) {
+        return (connections.count, connectionCount)
     }
     
     func reportInterception(_ data: MITMInterceptedData) {
@@ -134,6 +191,38 @@ actor MITMBoundConnection: Identifiable {
     private var targetPort: NWEndpoint.Port = 80
     private var isStopped = false  // CRITICAL: Prevent recursive stop calls
     private var isPiping = false   // CRITICAL: Prevent conflicting reads during pipe handover
+    
+    // MARK: - Connection Lifecycle Tracking
+    private let createdAt = Date()
+    private var lastActivity = Date()
+    private var handshakeComplete = false  // Track if we've successfully established the pipe
+    
+    func isStale(timeout: TimeInterval) -> Bool {
+        // Already stopped - definitely stale
+        if isStopped { return true }
+        
+        // Check time since last activity
+        let idleTime = Date().timeIntervalSince(lastActivity)
+        if idleTime > timeout { return true }
+        
+        // Check time since creation - catch stuck handshakes
+        // If handshake hasn't completed in 10 seconds, it's likely stuck
+        if !handshakeComplete {
+            let age = Date().timeIntervalSince(createdAt)
+            if age > 10.0 { return true }
+        }
+        
+        return false
+    }
+    
+    private func updateActivity() {
+        lastActivity = Date()
+    }
+    
+    private func markHandshakeComplete() {
+        handshakeComplete = true
+        updateActivity()
+    }
     
     // MARK: - MITM Bypass List
     // Domains in this list will be tunneled directly through Clash without MITM interception.
@@ -298,10 +387,21 @@ actor MITMBoundConnection: Identifiable {
                 
                 // Check if this domain should bypass MITM
                 if shouldBypassMITM(targetHost) {
-                    print("[MITMBackend] ⏭️ Bypassing MITM for \(targetHost) - tunneling directly")
+                    // Bypass MITM silently for known domains
                     self.isPiping = true
                     connectUpstream(isPlain: false)
                 } else if targetPort == 443 {
+                    // Reduced logging for performance
+                    // DEBUG: Log AI-related domains OR IP addresses
+                    // if targetHost.contains("googleapis") || targetHost.contains("anthropic") {
+                    //     print("[MITMBackend] 🤖 AI TRAFFIC DETECTED: \(targetHost) - Starting TLS interception")
+                    // }
+                    // DEBUG: Log ALL HTTPS connections to catch IP-based ones
+                    // Check if targetHost looks like an IP address
+                    // let isIP = targetHost.first?.isNumber ?? false
+                    // if isIP {
+                    //     print("[MITMBackend] 📡 HTTPS via IP: \(targetHost) - TLS will intercept")
+                    // }
                     // CRITICAL: Stop readClient from stealing subsequent data (ServerHello/ClientHello)
                     self.isPiping = true
                     
@@ -351,7 +451,8 @@ actor MITMBoundConnection: Identifiable {
     }
     
     private func handleServerState(_ state: NWConnection.State, conn: NWConnection, isPlain: Bool) {
-        if case .ready = state {
+        switch state {
+        case .ready:
             if isPlain {
                 conn.send(content: self.buffer, completion: .contentProcessed({ [weak self] _ in
                     guard let self = self else { return }
@@ -360,8 +461,10 @@ actor MITMBoundConnection: Identifiable {
             } else {
                 handshake(conn)
             }
-        } else if case .failed = state {
+        case .failed, .cancelled:
             stop()
+        default:
+            break
         }
     }
     
@@ -396,7 +499,8 @@ actor MITMBoundConnection: Identifiable {
         Task.detached {
             do {
                 let identity = try await CertificateManager.shared.getIdentity(for: host)
-                print("[MITMBackend] 🔐 Identity loaded for \(host)")
+                // Reduced logging for performance
+                // print("[MITMBackend] 🔐 Identity loaded for \(host)")
                 await self.finalizeTLS(identity, initialData: initialData)
             } catch {
                 print("[MITMBackend] ❌ Failed to load identity for \(host): \(error)")
@@ -452,7 +556,8 @@ actor MITMBoundConnection: Identifiable {
             
             self.loopbackListener = listener
             listener.start(queue: .global())
-            print("[MITMBackend] 👂 Loopback TLS listener started")
+            // Reduced logging for performance
+            // print("[MITMBackend] 👂 Loopback TLS listener started")
         } catch {
             print("[MITMBackend] ❌ Failed to start loopback listener: \(error)")
             stop()
@@ -462,7 +567,8 @@ actor MITMBoundConnection: Identifiable {
 
     private func handleLoopbackState(_ state: NWListener.State, listener: NWListener, initialData: Data) {
         if case .ready = state, let port = listener.port {
-             print("[MITMBackend] ✅ Loopback Listener Ready on port \(port)")
+             // Reduced logging for performance
+             // print("[MITMBackend] ✅ Loopback Listener Ready on port \(port)")
              connectLoopback(port: port, initialData: initialData)
         } else if case .failed(let error) = state {
              print("[MITMBackend] ❌ Loopback Listener Failed: \(error)")
@@ -493,8 +599,10 @@ actor MITMBoundConnection: Identifiable {
                 conn.stateUpdateHandler = { [weak self] state in
                     guard let self = self else { return }
                     Task.detached {
-                        if case .ready = state {
-                             print("[MITMBackend] 🔗 Loopback Connection READY")
+                        switch state {
+                        case .ready:
+                             // Reduced logging for performance
+                             // print("[MITMBackend] 🔗 Loopback Connection READY")
                              // CRITICAL: If we have initial data (ClientHello), send it to loopback first!
                              if !initialData.isEmpty {
                                  conn.send(content: initialData, completion: .contentProcessed({ _ in
@@ -503,15 +611,16 @@ actor MITMBoundConnection: Identifiable {
                              } else {
                                  await self.setupPipe(c: self.clientConnection, s: conn)
                              }
-                        }
-                        else if case .failed(let error) = state { 
-                            print("[MITMBackend] ❌ Loopback Connection Failed: \(error)")
-                            await self.stop() 
+                        case .failed, .cancelled:
+                            await self.stop()
+                        default:
+                            break
                         }
                     }
                 }
                 conn.start(queue: .global())
-                print("[MITMBackend] 🔄 ConnectLoopback: Connecting to \(port)...")
+                // Reduced logging for performance
+                // print("[MITMBackend] 🔄 ConnectLoopback: Connecting to \(port)...")
             }
         }))
     }
@@ -528,9 +637,13 @@ actor MITMBoundConnection: Identifiable {
             return
         }
         
+        // OPTIMIZATION: Cancel the loopback listener immediately after accepting the connection
+        // This releases the port back to the system, preventing port exhaustion
+        loopbackListener?.cancel()
+        loopbackListener = nil
+        
         let host = self.targetHost
         let port = self.targetPort
-        print("[MITMBackend] 📥 handleDecrypted called for \(host):\(port)")
         
         // Use NWProxyConfig to tunnel through Clash
         Task.detached {
@@ -539,16 +652,17 @@ actor MITMBoundConnection: Identifiable {
     }
     
     private func connectUpstreamTLS(host: String, port: NWEndpoint.Port, decrypted: NWConnection) async {
-        print("[MITMBackend] 🌐 connectUpstreamTLS: Connecting to \(host):\(port)")
+        // print("[MITMBackend] 🌐 connectUpstreamTLS: Connecting to \(host):\(port)")
         // Use System Proxy to route valid upstream traffic
         // This acts as a robust fallback for all macOS versions.
         // It relies on the System Proxy (managed by Clash) to handle the actual routing.
         let options = NWProtocolTLS.Options()
         let params = NWParameters(tls: options)
-        // CRITICAL: Bypass System Proxy to prevent infinite loop (MITM -> SystemProxy -> MITM).
-        // This relies on Clash TUN mode to intercept the traffic at the network interface level.
-        params.preferNoProxies = true
-        
+        // CRITICAL: Prevent Loop by relying on Clash Logic Rules (PROCESS-NAME check).
+        // We allow System Proxy (default) or Direct (if System Proxy unset).
+        // The Loop is broken in the Clash Config "rules" section.
+        params.preferNoProxies = false 
+
         let upstream = NWConnection(to: .hostPort(host: .init(host), port: port), using: params)
         self.setUpstreamConnection(upstream: upstream, decrypted: decrypted)
         upstream.start(queue: .global())
@@ -558,42 +672,54 @@ actor MITMBoundConnection: Identifiable {
         self.decryptedConnection = decrypted
         self.upstreamConnection = upstream
         
-        // Track readiness of both connections
-        var upstreamReady = false
-        var decryptedReady = false
+        // Use a class for thread-safe state tracking (Swift 6 compatible)
+        final class ConnectionState: @unchecked Sendable {
+            private let lock = NSLock()
+            private var _upstreamReady = false
+            private var _decryptedReady = false
+            
+            var upstreamReady: Bool {
+                get { lock.withLock { _upstreamReady } }
+                set { lock.withLock { _upstreamReady = newValue } }
+            }
+            
+            var decryptedReady: Bool {
+                get { lock.withLock { _decryptedReady } }
+                set { lock.withLock { _decryptedReady = newValue } }
+            }
+            
+            var bothReady: Bool { lock.withLock { _upstreamReady && _decryptedReady } }
+        }
+        
+        let state = ConnectionState()
         
         let checkAndStartPipe = { [weak self] in
             guard let self = self else { return }
-            if upstreamReady && decryptedReady {
-                print("[MITMBackend] ✅ Both connections ready, starting pipe")
+            if state.bothReady {
                 Task.detached { await self.setupPipe(c: decrypted, s: upstream) }
             }
         }
         
-        upstream.stateUpdateHandler = { [weak self] state in
+        upstream.stateUpdateHandler = { [weak self] stateValue in
             guard self != nil else { return }
-            switch state {
+            switch stateValue {
             case .ready:
-                print("[MITMBackend] ✅ Upstream connection READY")
-                upstreamReady = true
+                state.upstreamReady = true
                 checkAndStartPipe()
-            case .failed(let error):
-                print("[MITMBackend] ❌ Upstream connection FAILED: \(error)")
+            case .failed, .cancelled:
                 Task.detached { await self?.stop() }
             default:
                 break
             }
         }
         
-        decrypted.stateUpdateHandler = { [weak self] state in
+        decrypted.stateUpdateHandler = { [weak self] stateValue in
             guard self != nil else { return }
-            switch state {
+            switch stateValue {
             case .ready:
-                print("[MITMBackend] ✅ Decrypted connection READY")
-                decryptedReady = true
+                state.decryptedReady = true
                 checkAndStartPipe()
-            case .failed(let error):
-                print("[MITMBackend] ❌ Decrypted connection FAILED: \(error)")
+            case .failed, .cancelled:
                 Task.detached { await self?.stop() }
             default:
                 break
@@ -607,6 +733,7 @@ actor MITMBoundConnection: Identifiable {
         // CRITICAL: Check if stopped before starting pipe
         guard !isStopped else { return }
         self.isPiping = true
+        markHandshakeComplete()  // Mark handshake as complete - connection is now active
         
         let capturedHost = self.targetHost
         let capturedStoppedCheck = { [weak self] () -> Bool in
@@ -621,8 +748,8 @@ actor MITMBoundConnection: Identifiable {
         let requestStartTime = Date()
         var responseAccumulator = Data()  // Accumulate response data for chunked encoding
         
-        print("[MITMBackend] 🔄 setupPipe: Starting bidirectional relay for \(capturedHost)")
-        print("[MITMBackend] 🔄 setupPipe: c.state=\(c.state), s.state=\(s.state)")
+//        print("[MITMBackend] 🔄 setupPipe: Starting bidirectional relay for \(capturedHost)")
+//        print("[MITMBackend] 🔄 setupPipe: c.state=\(c.state), s.state=\(s.state)")
         
         func rc() {
             // CRITICAL: Don't schedule new receives if stopped
@@ -631,13 +758,14 @@ actor MITMBoundConnection: Identifiable {
                 guard self != nil else { return }
                 
                 if let d = d {
-                    print("[MITMBackend] 📤 Pipe c→s: \(d.count) bytes for \(capturedHost)")
+//                    print("[MITMBackend] 📤 Pipe c→s: \(d.count) bytes for \(capturedHost)")
                     
                     // Parse HTTP request for Analysis view (only first request in connection)
                     if log && !firstRequestReported {
-                        print("[MITMBackend] 🔍 Attempting to parse HTTP request...")
+                        // Reduced logging for performance
+                        // print("[MITMBackend] 🔍 Attempting to parse HTTP request...")
                         if let parsed = HTTPParser.parseRequest(d) {
-                            print("[MITMBackend] 📝 Parsed: \(parsed.method) \(parsed.path.prefix(50))")
+                            // print("[MITMBackend] 📝 Parsed: \(parsed.method) \(parsed.path.prefix(50))")
                             let validMethods = ["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"]
                             if validMethods.contains(parsed.method) {
                                 firstRequestReported = true
@@ -647,7 +775,8 @@ actor MITMBoundConnection: Identifiable {
                                 interceptedData.requestHeaders = parsed.headers
                                 interceptedData.requestSize = d.count
                                 
-                                print("[MITMBackend] ✅ Recording request: \(parsed.method) \(interceptedData.url.prefix(60))")
+                                // Reduced logging for performance
+                                // print("[MITMBackend] ✅ Recording request: \(parsed.method) \(interceptedData.url.prefix(60))")
                                 
                                 // Capture request body for text content (POST/PUT with JSON, form data, etc.)
                                 if ["POST", "PUT", "PATCH"].contains(parsed.method) {
@@ -656,34 +785,31 @@ actor MITMBoundConnection: Identifiable {
                                         let bodyData = d[parsed.bodyOffset...]
                                         if bodyData.count <= HTTPParser.maxBodyCapture {
                                             interceptedData.requestBody = bodyData
-                                            print("[MITMBackend] 📝 Request body captured: \(bodyData.count) bytes")
+                                            // Reduced logging for performance
+                                            // print("[MITMBackend] 📝 Request body captured: \(bodyData.count) bytes")
                                         }
                                     }
                                 }
                                 
                                 Task.detached { await MITMBackend.shared.reportInterception(interceptedData) }
                             } else {
-                                print("[MITMBackend] ⚠️ Invalid method: \(parsed.method)")
+                                // Reduced logging for performance
+                                // print("[MITMBackend] ⚠️ Invalid method: \(parsed.method)")
                             }
                         } else {
-                            // Log first few bytes to help debug
-                            let preview = String(data: d.prefix(50), encoding: .utf8) ?? d.prefix(50).map { String(format: "%02X", $0) }.joined()
-                            print("[MITMBackend] ❌ HTTP parse failed. Data preview: \(preview)")
+                            // HTTP parse failed, skip logging
                         }
                     }
                     
-                    s.send(content: d, completion: .contentProcessed({ sendErr in
-                        if let sendErr = sendErr {
-                            print("[MITMBackend] ❌ Pipe c→s send error: \(sendErr)")
+                    s.send(content: d, completion: .contentProcessed({ [weak self] sendErr in
+                        if sendErr != nil {
+                            Task.detached { await self?.stop() }
                         }
                     }))
                 }
                 
                 // CRITICAL: Stop loop on error or completion
                 if i || err != nil {
-                    if let err = err {
-                        print("[MITMBackend] ⚠️ Pipe c receive ended: \(err)")
-                    }
                     Task.detached { await self?.stop() }
                 } else if !capturedStoppedCheck() {
                     rc()
@@ -698,7 +824,7 @@ actor MITMBoundConnection: Identifiable {
                 guard self != nil else { return }
                 
                 if let d = d {
-                    print("[MITMBackend] 📥 Pipe s→c: \(d.count) bytes for \(capturedHost)")
+//                    print("[MITMBackend] 📥 Pipe s→c: \(d.count) bytes for \(capturedHost)")
                     
                     // Parse HTTP response for Analysis view (only first response in connection)
                     if log && firstRequestReported && !firstResponseReported {
@@ -707,7 +833,8 @@ actor MITMBoundConnection: Identifiable {
                         
                         // Try to parse when we have enough data
                         if responseAccumulator.count >= 100 {  // Wait for at least some data
-                            print("[MITMBackend] 🔍 Attempting to parse HTTP response (\(responseAccumulator.count) bytes accumulated)...")
+                            // Reduced logging for performance
+                            // print("[MITMBackend] 🔍 Attempting to parse HTTP response (\(responseAccumulator.count) bytes accumulated)...")
                             if let parsed = HTTPParser.parseResponse(responseAccumulator), let reqId = currentRequestId {
                                 let hasBody = responseAccumulator.count > parsed.bodyOffset
                                 
@@ -731,14 +858,16 @@ actor MITMBoundConnection: Identifiable {
                                 }
                                 
                                 if shouldWaitForMore {
-                                    print("[MITMBackend] ⏳ Waiting for more response data (chunked=\(isChunked), hasBody=\(hasBody))")
+                                    // Reduced logging for performance
+                                    // print("[MITMBackend] ⏳ Waiting for more response data (chunked=\(isChunked), hasBody=\(hasBody))")
                                     // Don't mark as reported yet, continue accumulating
                                 } else {
                                     // We have enough data, report the response
                                     firstResponseReported = true
                                     
                                     let duration = Date().timeIntervalSince(requestStartTime)
-                                    print("[MITMBackend] 📝 Response parsed: status=\(parsed.statusCode), bodyOffset=\(parsed.bodyOffset), totalSize=\(responseAccumulator.count)")
+                                    // Reduced logging for performance
+                                    // print("[MITMBackend] 📝 Response parsed: status=\(parsed.statusCode), bodyOffset=\(parsed.bodyOffset), totalSize=\(responseAccumulator.count)")
                                     
                                     // Create response update
                                     var responseData = MITMInterceptedData(host: capturedHost, method: "RESPONSE", path: "/")
@@ -749,7 +878,8 @@ actor MITMBoundConnection: Identifiable {
                                     
                                     // Capture response body for text content
                                     let contentType = parsed.headers.first { $0.key.lowercased() == "content-type" }?.value
-                                    print("[MITMBackend] 📝 Content-Type: \(contentType ?? "nil"), isText=\(HTTPParser.isTextContent(contentType))")
+                                    // Reduced logging for performance
+                                    // print("[MITMBackend] 📝 Content-Type: \(contentType ?? "nil"), isText=\(HTTPParser.isTextContent(contentType))")
                                     
                                     if HTTPParser.isTextContent(contentType) && responseAccumulator.count > parsed.bodyOffset {
                                         var bodyData = Data(responseAccumulator[parsed.bodyOffset...])
@@ -762,34 +892,35 @@ actor MITMBoundConnection: Identifiable {
                                         // Check for Content-Encoding and decompress if needed
                                         let contentEncoding = parsed.headers.first { $0.key.lowercased() == "content-encoding" }?.value.lowercased()
                                         if let encoding = contentEncoding {
-                                            print("[MITMBackend] 📦 Content-Encoding: \(encoding)")
+                                            // Reduced logging for performance
+                                            // print("[MITMBackend] 📦 Content-Encoding: \(encoding)")
                                             if encoding.contains("gzip") || encoding.contains("deflate") {
                                                 if let decompressed = HTTPParser.decompressGzip(bodyData) {
-                                                    print("[MITMBackend] ✅ Decompressed GZIP: \(bodyData.count) -> \(decompressed.count) bytes")
+                                                    // print("[MITMBackend] ✅ Decompressed GZIP: \(bodyData.count) -> \(decompressed.count) bytes")
                                                     bodyData = decompressed
                                                 } else {
-                                                    print("[MITMBackend] ⚠️ GZIP decompression failed, using raw data")
+                                                    // print("[MITMBackend] ⚠️ GZIP decompression failed, using raw data")
                                                 }
                                             } else if encoding.contains("br") {
                                                 if let decompressed = HTTPParser.decompressBrotli(bodyData) {
-                                                    print("[MITMBackend] ✅ Decompressed Brotli: \(bodyData.count) -> \(decompressed.count) bytes")
+                                                    // print("[MITMBackend] ✅ Decompressed Brotli: \(bodyData.count) -> \(decompressed.count) bytes")
                                                     bodyData = decompressed
                                                 } else {
-                                                    print("[MITMBackend] ⚠️ Brotli decompression failed, using raw data")
+                                                    // print("[MITMBackend] ⚠️ Brotli decompression failed, using raw data")
                                                 }
                                             }
                                         }
                                         
-                                        print("[MITMBackend] 📝 Body size: \(bodyData.count) bytes")
+                                        // print("[MITMBackend] 📝 Body size: \(bodyData.count) bytes")
                                         if bodyData.count <= HTTPParser.maxBodyCapture {
                                             responseData.responseBody = bodyData
                                             // Preview body content
-                                            if let bodyStr = String(data: bodyData.prefix(100), encoding: .utf8) {
-                                                print("[MITMBackend] ✅ Response body captured: \(bodyStr.prefix(80))...")
-                                            }
+                                            // if let bodyStr = String(data: bodyData.prefix(100), encoding: .utf8) {
+                                            //     print("[MITMBackend] ✅ Response body captured: \(bodyStr.prefix(80))...")
+                                            // }
                                         }
                                     } else {
-                                        print("[MITMBackend] ⚠️ No body captured: isText=\(HTTPParser.isTextContent(contentType)), offset=\(parsed.bodyOffset), count=\(responseAccumulator.count)")
+                                        // print("[MITMBackend] ⚠️ No body captured: isText=\(HTTPParser.isTextContent(contentType)), offset=\(parsed.bodyOffset), count=\(responseAccumulator.count)")
                                     }
                                     
                                     Task.detached {
@@ -797,8 +928,9 @@ actor MITMBoundConnection: Identifiable {
                                     }
                                 }
                             } else if responseAccumulator.count > 50 {
-                                let preview = String(data: responseAccumulator.prefix(50), encoding: .utf8) ?? "binary"
-                                print("[MITMBackend] ❌ Response parse failed. Preview: \(preview)")
+                                // Reduced logging for performance
+                                // let preview = String(data: responseAccumulator.prefix(50), encoding: .utf8) ?? "binary"
+                                // print("[MITMBackend] ❌ Response parse failed. Preview: \(preview)")
                                 // Don't keep accumulating if we can't parse after 50 bytes
                                 if responseAccumulator.count > 1000 {
                                     firstResponseReported = true  // Give up
@@ -807,18 +939,15 @@ actor MITMBoundConnection: Identifiable {
                         }
                     }
                     
-                    c.send(content: d, completion: .contentProcessed({ sendErr in
-                        if let sendErr = sendErr {
-                            print("[MITMBackend] ❌ Pipe s→c send error: \(sendErr)")
+                    c.send(content: d, completion: .contentProcessed({ [weak self] sendErr in
+                        if sendErr != nil {
+                            Task.detached { await self?.stop() }
                         }
                     }))
                 }
                 
                 // CRITICAL: Stop loop on error or completion
                 if i || err != nil {
-                    if let err = err {
-                        print("[MITMBackend] ⚠️ Pipe s receive ended: \(err)")
-                    }
                     Task.detached { await self?.stop() }
                 } else if !capturedStoppedCheck() {
                     rs()

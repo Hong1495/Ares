@@ -60,12 +60,23 @@ actor ConfigService {
         }
         
         // Parse profile YAML to remove conflicting keys (Performed on Actor background thread)
-        let cleanedProfile = removeConflictingKeys(from: profileContent)
+        var cleanedProfile = removeConflictingKeys(from: profileContent)
+        
+        // MITM Integration: Inject MITM proxy and rules into profile sections
+        let (mitmEnabled, mitmPort) = await MainActor.run {
+            let mitmService = NetworkMITMService.shared
+            return (mitmService.isRunning, Int(mitmService.currentPort))
+        }
+        
+        if tunEnabled && mitmEnabled && mitmPort > 0 {
+            cleanedProfile = injectMITMConfig(into: cleanedProfile, mitmPort: mitmPort)
+        }
         
         // Build base Clash config with TUN setting (MainActor required for ClashConfig)
         let baseConfig = await MainActor.run {
             var clashConfig = ClashConfig(fromUserDefaults: true)
             clashConfig.enableTun = tunEnabled
+            // Note: mitmEnabled/mitmPort no longer used in toYAML()
             return clashConfig.toYAML()
         }
         
@@ -184,6 +195,47 @@ actor ConfigService {
         }
         
         return result.joined(separator: "\n")
+    }
+    
+    /// Inject MITM proxy and rules into existing profile sections
+    /// This avoids duplicate YAML top-level keys by modifying existing sections
+    nonisolated private func injectMITMConfig(into yaml: String, mitmPort: Int) -> String {
+        var result = yaml
+        
+        // 1. Inject MITM proxy after "proxies:" line
+        let mitmProxy = """
+          - name: MITM-Intercept
+            type: http
+            server: 127.0.0.1
+            port: \(mitmPort)
+        """
+        
+        // Find "proxies:" and insert after it
+        if let proxiesRange = result.range(of: "proxies:", options: .caseInsensitive) {
+            // Find the end of the line
+            if let lineEnd = result[proxiesRange.upperBound...].firstIndex(of: "\n") {
+                result.insert(contentsOf: "\n" + mitmProxy, at: lineEnd)
+            }
+        }
+        
+        // 2. Inject MITM rules at the beginning of "rules:" section
+        // Rules need to be at the START so they have priority
+        let mitmRules = """
+          - DST-PORT,\(mitmPort),DIRECT
+          - AND,((DST-PORT,80),(NOT,((PROCESS-NAME,Ares)))),MITM-Intercept
+          - AND,((DST-PORT,443),(NOT,((PROCESS-NAME,Ares)))),MITM-Intercept
+          - AND,((DST-PORT,8080),(NOT,((PROCESS-NAME,Ares)))),MITM-Intercept
+          - AND,((DST-PORT,8443),(NOT,((PROCESS-NAME,Ares)))),MITM-Intercept
+        """
+        
+        // Find "rules:" and insert after it
+        if let rulesRange = result.range(of: "rules:", options: .caseInsensitive) {
+            if let lineEnd = result[rulesRange.upperBound...].firstIndex(of: "\n") {
+                result.insert(contentsOf: "\n" + mitmRules, at: lineEnd)
+            }
+        }
+        
+        return result
     }
     
     /// Build a safe fallback config when no profile is available

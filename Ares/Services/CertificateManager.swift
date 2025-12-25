@@ -231,7 +231,6 @@ final class CertificateManager: ObservableObject {
             identityCache[host] = identity
             return identity
         }
-
         private func _getIdentity(for host: String) async throws -> SecIdentity {
             // Use FileManager from non-isolated context if needed, but actor isolation is fine here
             let fileManager = FileManager.default
@@ -345,9 +344,7 @@ final class CertificateManager: ObservableObject {
                let itemsArray = items as? [[String: Any]],
                let firstItem = itemsArray.first,
                let identity = firstItem[kSecImportItemIdentity as String] {
-                
                 // Success! The import worked
-                print("[CertificateManager] ✅ Loaded identity via SecPKCS12Import with permissive access")
                 return (identity as! SecIdentity)
             }
             
@@ -377,7 +374,6 @@ final class CertificateManager: ObservableObject {
                    let itemsArray = items2 as? [[String: Any]],
                    let firstItem = itemsArray.first,
                    let identity = firstItem[kSecImportItemIdentity as String] {
-                    print("[CertificateManager] ✅ Loaded identity via temp Keychain")
                     return (identity as! SecIdentity)
                 }
                 

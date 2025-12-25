@@ -27,6 +27,10 @@ struct ClashConfig: Codable {
     // TUN settings
     var enableTun: Bool = false
     
+    // MITM Integration (for TUN mode)
+    var mitmEnabled: Bool = false
+    var mitmPort: Int = 0
+    
     /// Initialize with default values
     init() {}
     
@@ -179,6 +183,9 @@ struct ClashConfig: Codable {
               auto-detect-interface: true
             """
         }
+        
+        // NOTE: MITM integration is handled by ConfigService.injectMITMConfig()
+        // to properly merge with profile's existing proxies/rules sections
         
         return yaml
     }

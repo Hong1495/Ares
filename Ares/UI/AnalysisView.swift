@@ -4,8 +4,8 @@ struct AnalysisView: View {
     @ObservedObject private var service = BrowserAnalysisService.shared
     @State private var selectedTabId: String? = "all_requests"
     @State private var searchText: String = ""
-    @State private var selectedMethods: Set<String> = Set(["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"])
-    @State private var selectedTypes: Set<String> = Set(["Fetch", "XHR", "Image", "Script", "Stylesheet", "Document", "CONNECT"])
+    @State private var selectedMethods: Set<String> = Set(["CONNECT", "GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"])
+    @State private var selectedTypes: Set<String> = Set(["Fetch", "XHR", "Image", "Script", "Stylesheet", "Document", "Font", "Media", "WebSocket", "Other"])
     @State private var sortOrder = [KeyPathComparator(\BrowserRequest.timestamp, order: .reverse)]
     
     // Sheet State
@@ -16,11 +16,93 @@ struct AnalysisView: View {
     @State private var showingTypeFilter = false
     
     let httpMethods = ["CONNECT", "GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"]
-    let resourceTypes = ["Fetch", "XHR", "Image", "Script", "Stylesheet", "Document", "CONNECT"]
+    let resourceTypes = ["Fetch", "XHR", "Image", "Script", "Stylesheet", "Document", "Font", "Media", "WebSocket", "Other"]
+    
+    // Computed statistics
+    private var allRequests: [BrowserRequest] {
+        service.activeTabs.flatMap { $0.requests }
+    }
+    
+    private var totalSize: Int {
+        allRequests.reduce(0) { $0 + ($1.displaySize) }
+    }
+    
+    private var successCount: Int {
+        allRequests.filter { $0.status == .success }.count
+    }
+    
+    private var errorCount: Int {
+        allRequests.filter { $0.status == .error }.count
+    }
     
     var body: some View {
         // Main Detail Content (Full Width)
         VStack(spacing: 0) {
+            // Statistics Bar
+            HStack(spacing: 16) {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.up.arrow.down")
+                        .foregroundStyle(.secondary)
+                    Text("\(allRequests.count)")
+                        .fontWeight(.semibold)
+                    Text("requests")
+                        .foregroundStyle(.secondary)
+                }
+                
+                Divider()
+                    .frame(height: 14)
+                
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(.green)
+                        .frame(width: 8, height: 8)
+                    Text("\(successCount)")
+                        .foregroundStyle(.green)
+                    Text("ok")
+                        .foregroundStyle(.secondary)
+                }
+                
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(.red)
+                        .frame(width: 8, height: 8)
+                    Text("\(errorCount)")
+                        .foregroundStyle(.red)
+                    Text("error")
+                        .foregroundStyle(.secondary)
+                }
+                
+                Divider()
+                    .frame(height: 14)
+                
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.down.doc")
+                        .foregroundStyle(.secondary)
+                    Text(formatTotalSize(totalSize))
+                        .fontWeight(.medium)
+                    Text("transferred")
+                        .foregroundStyle(.secondary)
+                }
+                
+                Spacer()
+                
+                if service.isListening {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(.green)
+                            .frame(width: 6, height: 6)
+                        Text("Listening")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .font(.system(size: 11))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Color(nsColor: .windowBackgroundColor))
+            
+            Divider()
+            
             DetailContent(
                 tabId: "all_requests", // Always show all requests
                 service: service,
@@ -35,6 +117,16 @@ struct AnalysisView: View {
         }
         .toolbar { toolbarContent }
         .navigationTitle("Analysis")
+    }
+    
+    private func formatTotalSize(_ size: Int) -> String {
+        if size > 1024 * 1024 {
+            return String(format: "%.1f MB", Double(size) / 1024.0 / 1024.0)
+        } else if size > 1024 {
+            return String(format: "%.1f KB", Double(size) / 1024.0)
+        } else {
+            return "\(size) B"
+        }
     }
     
     @ToolbarContentBuilder
@@ -241,26 +333,23 @@ struct DetailContent: View {
     var filteredRequests: [BrowserRequest] {
         var result = requests
         
-        // Filter by search text
+        // Filter by search text (supports URL, method, and domain search)
         if !searchText.isEmpty {
             result = result.filter { req in
                 req.url.localizedCaseInsensitiveContains(searchText) ||
-                req.method.localizedCaseInsensitiveContains(searchText)
+                req.method.localizedCaseInsensitiveContains(searchText) ||
+                req.type.localizedCaseInsensitiveContains(searchText)
             }
         }
         
-        // Filter by HTTP method (if any selected)
-        if !selectedMethods.isEmpty {
-            result = result.filter { req in
-                selectedMethods.contains(req.method)
-            }
+        // Filter by HTTP method - always apply (empty selection = show nothing)
+        result = result.filter { req in
+            selectedMethods.contains(req.method)
         }
         
-        // Filter by resource type (if any selected)
-        if !selectedTypes.isEmpty {
-            result = result.filter { req in
-                selectedTypes.contains(req.type)
-            }
+        // Filter by resource type - always apply (empty selection = show nothing)
+        result = result.filter { req in
+            selectedTypes.contains(req.type)
         }
         
         // Sort

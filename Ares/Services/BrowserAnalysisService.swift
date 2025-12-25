@@ -410,6 +410,9 @@ class BrowserAnalysisService: ObservableObject {
     }
     
     func addRequestToTab(tabId: String, request: BrowserRequest) {
+        // Ensure subscribers know an update occurred, crucial for TrafficAnalyzer
+        self.lastReceived = Date()
+        
         if let i = activeTabs.firstIndex(where: { $0.id == tabId }) {
             addRequestToTabIndex(i, request: request)
         } else {
