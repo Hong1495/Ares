@@ -360,7 +360,7 @@ struct ClashInfoCard: View {
                         version = "Offline"
                         try? await Task.sleep(nanoseconds: 3_000_000_000) // Retry every 3s if failed
                     } else {
-                        try? await Task.sleep(nanoseconds: 10_000_000_000) // Refresh every 10s if success
+                        try? await Task.sleep(nanoseconds: 30_000_000_000) // Refresh every 30s if success
                     }
                 } else {
                     // Periodic update to keep memory fresh
@@ -371,7 +371,7 @@ struct ClashInfoCard: View {
                          // Let's retry sooner if it failed.
                          try? await Task.sleep(nanoseconds: 3_000_000_000)
                      } else {
-                         try? await Task.sleep(nanoseconds: 10_000_000_000)
+                          try? await Task.sleep(nanoseconds: 30_000_000_000)
                      }
                 }
             }
@@ -627,7 +627,7 @@ struct ConnectionsCard: View {
                         }
                     }
                 } catch {}
-                try? await Task.sleep(nanoseconds: 2_000_000_000) // 2s
+                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5s
             }
         }
     }
