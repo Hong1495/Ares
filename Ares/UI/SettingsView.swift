@@ -27,6 +27,7 @@ struct SettingsView: View {
     // MITM Settings
     @AppStorage("mitmPorts") private var mitmPorts = "80, 443, 8080, 8443"
     @AppStorage("mitmHosts") private var mitmHosts = ""  // Empty = intercept all hosts
+    @AppStorage("ideResilienceMode") private var ideResilienceMode = false
     
     var body: some View {
         Form {
@@ -187,6 +188,21 @@ struct SettingsView: View {
                     Text("Comma-separated hosts/IPs to intercept (e.g. 10.10.25.251, api.example.com)")
                         .font(.footnote)
                         .fontWeight(.medium)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle(isOn: $ideResilienceMode) {
+                        HStack {
+                            Text("IDE Resilience Mode")
+                                .fontWeight(.medium)
+                            Image(systemName: "shield.check")
+                                .foregroundStyle(.green)
+                        }
+                    }
+                    Text("Automatically retry failed requests (5xx/Timeout) for Antigravity IDE.")
+                        .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 4)

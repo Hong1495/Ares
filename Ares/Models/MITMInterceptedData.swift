@@ -4,7 +4,7 @@ import zlib
 
 /// Captured HTTP data from MITM interception
 struct MITMInterceptedData: Sendable {
-    let id: String
+    var id: String
     let host: String
     let method: String
     let path: String

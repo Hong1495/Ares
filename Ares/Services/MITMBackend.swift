@@ -25,6 +25,9 @@ actor MITMBackend {
     // MARK: - Display Whitelist (filter what shows in UI)
     private var displayWhitelist: [String] = []
     
+    // MARK: - Resilience Mode
+    private var ideResilienceMode = false
+    
     // MARK: - Network Monitor (Reset)
     
     // MARK: - API
@@ -44,6 +47,7 @@ actor MITMBackend {
         
         // Load display whitelist from settings
         refreshDisplayWhitelist()
+        refreshResilienceMode()
         
         // Start periodic cleanup task - runs frequently to catch failed TLS handshakes quickly
         cleanupTask = Task.detached { [weak self] in
@@ -114,8 +118,8 @@ actor MITMBackend {
         // Log connection count periodically for monitoring
         connectionCount += 1
         
-        let conn = MITMBoundConnection(connection: nwConn, clashPort: clashPort)
-        let id = conn.id
+        let id = UUID()
+        let conn = MITMBoundConnection(id: id, clientConnection: nwConn, clashPort: clashPort, cachedWhitelist: self.displayWhitelist, resilienceEnabled: self.ideResilienceMode)
         connections[id] = conn
         await conn.start()
     }
@@ -157,7 +161,7 @@ actor MITMBackend {
         return (connections.count, connectionCount)
     }
     
-    func reportInterception(_ data: MITMInterceptedData) {
+    func reportInterception(_ data: MITMInterceptedData) async {
         // Filter by display whitelist if configured
         if !displayWhitelist.isEmpty {
             let hostLower = data.host.lowercased()
@@ -182,7 +186,7 @@ actor MITMBackend {
         onInterception?(data)
     }
     
-    func reportResponse(requestId: String, data: MITMInterceptedData) {
+    func reportResponse(requestId: String, data: MITMInterceptedData) async {
         // Filter by display whitelist if configured
         if !displayWhitelist.isEmpty {
             let hostLower = data.host.lowercased()
@@ -205,6 +209,11 @@ actor MITMBackend {
             }
         }
         onResponse?(requestId, data)
+    }
+    
+    func refreshResilienceMode() {
+        ideResilienceMode = UserDefaults.standard.bool(forKey: "ideResilienceMode")
+        print("[MITMBackend] 🛡️ Resilience Mode: \(ideResilienceMode)")
     }
     
     func refreshDisplayWhitelist() {
@@ -261,6 +270,23 @@ actor MITMBoundConnection: Identifiable {
     
     // Cached whitelist - read once at init to avoid thread issues
     private let cachedWhitelist: [String]
+    
+    // Resilience Mode
+    private let resilienceEnabled: Bool
+    
+    // Request Cache for Retry
+    private var cachedRequest: Data?
+    private var isRetrying = false
+    private var retryCount = 0
+    private static let maxRetries = 3
+    
+    // Pipe State (Maintained on actor to allow refactoring closures)
+    private var firstRequestReported = false
+    private var currentRequestId: String?
+    private var firstResponseReported = false
+    private var requestStartTime = Date()
+    private var responseAccumulator = Data()
+    private var dataToSendOnRetry: Data?
     
     func isStale(timeout: TimeInterval) -> Bool {
         // Already stopped - definitely stale
@@ -351,22 +377,11 @@ actor MITMBoundConnection: Identifiable {
         return true
     }
     
-    init(connection: NWConnection, clashPort: UInt16) {
-        self.clientConnection = connection
+    init(id: UUID, clientConnection: NWConnection, clashPort: UInt16, cachedWhitelist: [String], resilienceEnabled: Bool) {
         self.clashPort = clashPort
-        
-        // Read whitelist once at init (thread-safe)
-        let mitmHostsString = UserDefaults.standard.string(forKey: "mitmHosts") ?? ""
-        let trimmed = mitmHostsString.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            self.cachedWhitelist = []
-        } else {
-            let separators = CharacterSet(charactersIn: ",，\n")
-            self.cachedWhitelist = trimmed.components(separatedBy: separators)
-                .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
-                .filter { !$0.isEmpty }
-            // Whitelist loaded silently
-        }
+        self.clientConnection = clientConnection
+        self.cachedWhitelist = cachedWhitelist
+        self.resilienceEnabled = resilienceEnabled
     }
     
     func start() {
@@ -606,10 +621,10 @@ actor MITMBoundConnection: Identifiable {
                 let identity = try await CertificateManager.shared.getIdentity(for: host)
                 // Reduced logging for performance
                 // print("[MITMBackend] 🔐 Identity loaded for \(host)")
-                await self.finalizeTLS(identity, initialData: initialData)
+                self.finalizeTLS(identity, initialData: initialData)
             } catch {
                 print("[MITMBackend] ❌ Failed to load identity for \(host): \(error)")
-                await self.stop()
+                self.stop()
             }
         }
     }
@@ -832,245 +847,232 @@ actor MITMBoundConnection: Identifiable {
         decrypted.start(queue: .global())
     }
     
+    // State for pipe and analysis moved to top of class to avoid re-declaration
+    
+    
     private func setupPipe(c: NWConnection, s: NWConnection, log: Bool = true) {
         // CRITICAL: Check if stopped before starting pipe
         guard !isStopped else { return }
         self.isPiping = true
-        markHandshakeComplete()  // Mark handshake as complete - connection is now active
+        markHandshakeComplete()
         
-        let capturedHost = self.targetHost
-        let capturedStoppedCheck = { [weak self] () -> Bool in
-            // Synchronous check for isStopped (can't await in receive callback)
-            return self == nil
+        // Reset state for new pipe
+        self.firstRequestReported = false
+        self.currentRequestId = nil
+        self.firstResponseReported = false
+        self.requestStartTime = Date()
+        self.responseAccumulator = Data()
+        self.cachedRequest = nil // Clear cached request for a new pipe
+        self.retryCount = 0 // Reset retry count for a new pipe
+        self.isRetrying = false // Ensure this is false at the start of a new pipe
+        
+        // Check if we have data to send immediately (Retry Logic)
+        if let retryData = self.dataToSendOnRetry {
+            print("[MITMBackend] 🔄 Resending \(retryData.count) bytes for retry...")
+            s.send(content: retryData, completion: .contentProcessed({ [weak self] sendErr in
+                if sendErr != nil { Task { await self?.stop() } }
+            }))
+            self.dataToSendOnRetry = nil
         }
         
-        // Track if we've already reported the first HTTP request/response
-        var firstRequestReported = false
-        var currentRequestId: String?
-        var firstResponseReported = false
-        let requestStartTime = Date()
-        var responseAccumulator = Data()  // Accumulate response data for chunked encoding
-        
-//        print("[MITMBackend] 🔄 setupPipe: Starting bidirectional relay for \(capturedHost)")
-//        print("[MITMBackend] 🔄 setupPipe: c.state=\(c.state), s.state=\(s.state)")
-        
-        func rc() {
-            // CRITICAL: Don't schedule new receives if stopped
-            c.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] d, _, i, err in
-                // Exit early if actor is gone
-                guard self != nil else { return }
-                
-                if let d = d {
-//                    print("[MITMBackend] 📤 Pipe c→s: \(d.count) bytes for \(capturedHost)")
-                    
-                    // Parse HTTP request for Analysis view (only first request in connection)
-                    if log && !firstRequestReported {
-                        // Reduced logging for performance
-                        // print("[MITMBackend] 🔍 Attempting to parse HTTP request...")
-                        if let parsed = HTTPParser.parseRequest(d) {
-                            // print("[MITMBackend] 📝 Parsed: \(parsed.method) \(parsed.path.prefix(50))")
-                            let validMethods = ["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"]
-                            if validMethods.contains(parsed.method) {
-                                firstRequestReported = true
-                                
-                                var interceptedData = MITMInterceptedData(host: capturedHost, method: parsed.method, path: parsed.path)
-                                currentRequestId = interceptedData.id
-                                interceptedData.requestHeaders = parsed.headers
-                                interceptedData.requestSize = d.count
-                                
-                                // Reduced logging for performance
-                                // print("[MITMBackend] ✅ Recording request: \(parsed.method) \(interceptedData.url.prefix(60))")
-                                
-                                // Capture request body for text content (POST/PUT with JSON, form data, etc.)
-                                if ["POST", "PUT", "PATCH"].contains(parsed.method) {
-                                    let contentType = parsed.headers.first { $0.key.lowercased() == "content-type" }?.value
-                                    if HTTPParser.isTextContent(contentType) && d.count > parsed.bodyOffset {
-                                        let bodyData = d[parsed.bodyOffset...]
-                                        if bodyData.count <= HTTPParser.maxBodyCapture {
-                                            interceptedData.requestBody = bodyData
-                                            // Reduced logging for performance
-                                            // print("[MITMBackend] 📝 Request body captured: \(bodyData.count) bytes")
-                                        }
-                                    }
-                                }
-                                
-                                Task { await MITMBackend.shared.reportInterception(interceptedData) }
-                            } else {
-                                // Reduced logging for performance
-                                // print("[MITMBackend] ⚠️ Invalid method: \(parsed.method)")
-                            }
-                        } else {
-                            // HTTP parse failed, skip logging
-                        }
-                    }
-                    
-                    s.send(content: d, completion: .contentProcessed({ [weak self] sendErr in
-                        if sendErr != nil {
-                            Task { await self?.stop() }
-                        }
-                    }))
-                }
-                
-                // CRITICAL: Stop loop on error or completion
-                if i || err != nil {
-                    Task { await self?.stop() }
-                } else if !capturedStoppedCheck() {
-                    rc()
-                }
-            }
-        }
-        
-        func rs() {
-            // CRITICAL: Don't schedule new receives if stopped
-            s.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] d, _, i, err in
-                // Exit early if actor is gone
-                guard self != nil else { return }
-                
-                if let d = d {
-//                    print("[MITMBackend] 📥 Pipe s→c: \(d.count) bytes for \(capturedHost)")
-                    
-                    // Parse HTTP response for Analysis view (only first response in connection)
-                    // PERFORMANCE: Limit response accumulator to prevent memory growth
-                    let maxResponseAccumulator = 512 * 1024  // 512KB max
-                    if log && firstRequestReported && !firstResponseReported {
-                        // Accumulate response data
-                        responseAccumulator.append(d)
-                        
-                        // CRITICAL: Stop accumulating if too large to prevent OOM
-                        if responseAccumulator.count > maxResponseAccumulator {
-                            firstResponseReported = true  // Give up parsing, just relay
-                        }
-                        
-                        // Try to parse when we have enough data
-                        if responseAccumulator.count >= 100 {  // Wait for at least some data
-                            // Reduced logging for performance
-                            // print("[MITMBackend] 🔍 Attempting to parse HTTP response (\(responseAccumulator.count) bytes accumulated)...")
-                            if let parsed = HTTPParser.parseResponse(responseAccumulator), let reqId = currentRequestId {
-                                let hasBody = responseAccumulator.count > parsed.bodyOffset
-                                
-                                // For chunked encoding, wait for body data (up to a reasonable limit)
-                                let isChunked = parsed.headers.contains { $0.key.lowercased() == "transfer-encoding" && $0.value.lowercased().contains("chunked") }
-                                let contentLengthStr = parsed.headers.first { $0.key.lowercased() == "content-length" }?.value
-                                let contentLength = contentLengthStr.flatMap { Int($0) }
-                                
-                                // Determine if we should wait for more data
-                                let shouldWaitForMore: Bool
-                                if isChunked {
-                                    // For chunked, wait until we see at least some body data (check for "0\r\n" terminator or reasonable size)
-                                    let bodyData = responseAccumulator.count > parsed.bodyOffset ? responseAccumulator[parsed.bodyOffset...] : Data()
-                                    shouldWaitForMore = bodyData.count < 10 && responseAccumulator.count < 10000
-                                } else if let cl = contentLength {
-                                    let actualBodySize = responseAccumulator.count - parsed.bodyOffset
-                                    shouldWaitForMore = actualBodySize < cl && responseAccumulator.count < 10000
-                                } else {
-                                    // No content-length, no chunked - just use what we have if there's any body
-                                    shouldWaitForMore = !hasBody && responseAccumulator.count < 5000
-                                }
-                                
-                                if shouldWaitForMore {
-                                    // Reduced logging for performance
-                                    // print("[MITMBackend] ⏳ Waiting for more response data (chunked=\(isChunked), hasBody=\(hasBody))")
-                                    // Don't mark as reported yet, continue accumulating
-                                } else {
-                                    // We have enough data, report the response
-                                    firstResponseReported = true
-                                    
-                                    let duration = Date().timeIntervalSince(requestStartTime)
-                                    // Reduced logging for performance
-                                    // print("[MITMBackend] 📝 Response parsed: status=\(parsed.statusCode), bodyOffset=\(parsed.bodyOffset), totalSize=\(responseAccumulator.count)")
-                                    
-                                    // Create response update
-                                    var responseData = MITMInterceptedData(host: capturedHost, method: "RESPONSE", path: "/")
-                                    responseData.statusCode = parsed.statusCode
-                                    responseData.responseHeaders = parsed.headers
-                                    responseData.duration = duration
-                                    responseData.responseSize = responseAccumulator.count
-                                    
-                                    // Capture response body for text content
-                                    let contentType = parsed.headers.first { $0.key.lowercased() == "content-type" }?.value
-                                    // Reduced logging for performance
-                                    // print("[MITMBackend] 📝 Content-Type: \(contentType ?? "nil"), isText=\(HTTPParser.isTextContent(contentType))")
-                                    
-                                    if HTTPParser.isTextContent(contentType) && responseAccumulator.count > parsed.bodyOffset {
-                                        var bodyData = Data(responseAccumulator[parsed.bodyOffset...])
-                                        var decompressionFailed = false
-                                        
-                                        // For chunked encoding, try to decode the chunks
-                                        if isChunked {
-                                            bodyData = HTTPParser.decodeChunkedBody(bodyData) ?? bodyData
-                                        }
-                                        
-                                        // Check for Content-Encoding and decompress if needed
-                                        let contentEncoding = parsed.headers.first { $0.key.lowercased() == "content-encoding" }?.value.lowercased()
-                                        if let encoding = contentEncoding {
-                                            // Reduced logging for performance
-                                            // print("[MITMBackend] 📦 Content-Encoding: \(encoding)")
-                                            if encoding.contains("gzip") || encoding.contains("deflate") {
-                                                if let decompressed = HTTPParser.decompressGzip(bodyData) {
-                                                    // print("[MITMBackend] ✅ Decompressed GZIP: \(bodyData.count) -> \(decompressed.count) bytes")
-                                                    bodyData = decompressed
-                                                } else {
-                                                    // Decompression failed - don't capture raw compressed bytes
-                                                    decompressionFailed = true
-                                                }
-                                            } else if encoding.contains("br") {
-                                                if let decompressed = HTTPParser.decompressBrotli(bodyData) {
-                                                    // print("[MITMBackend] ✅ Decompressed Brotli: \(bodyData.count) -> \(decompressed.count) bytes")
-                                                    bodyData = decompressed
-                                                } else {
-                                                    // Decompression failed - don't capture raw compressed bytes
-                                                    decompressionFailed = true
-                                                }
-                                            }
-                                        }
-                                        
-                                        // Only capture body if decompression succeeded (or wasn't needed)
-                                        // print("[MITMBackend] 📝 Body size: \(bodyData.count) bytes")
-                                        if !decompressionFailed && bodyData.count <= HTTPParser.maxBodyCapture {
-                                            responseData.responseBody = bodyData
-                                            // Preview body content
-                                            // if let bodyStr = String(data: bodyData.prefix(100), encoding: .utf8) {
-                                            //     print("[MITMBackend] ✅ Response body captured: \(bodyStr.prefix(80))...")
-                                            // }
-                                        }
-                                    } else {
-                                        // print("[MITMBackend] ⚠️ No body captured: isText=\(HTTPParser.isTextContent(contentType)), offset=\(parsed.bodyOffset), count=\(responseAccumulator.count)")
-                                    }
-                                    
-                                    Task {
-                                        await MITMBackend.shared.reportResponse(requestId: reqId, data: responseData)
-                                    }
-                                }
-                            } else if responseAccumulator.count > 50 {
-                                // Reduced logging for performance
-                                // let preview = String(data: responseAccumulator.prefix(50), encoding: .utf8) ?? "binary"
-                                // print("[MITMBackend] ❌ Response parse failed. Preview: \(preview)")
-                                // Don't keep accumulating if we can't parse after 50 bytes
-                                if responseAccumulator.count > 1000 {
-                                    firstResponseReported = true  // Give up
-                                }
-                            }
-                        }
-                    }
-                    
-                    c.send(content: d, completion: .contentProcessed({ [weak self] sendErr in
-                        if sendErr != nil {
-                            Task { await self?.stop() }
-                        }
-                    }))
-                }
-                
-                // CRITICAL: Stop loop on error or completion
-                if i || err != nil {
-                    Task { await self?.stop() }
-                } else if !capturedStoppedCheck() {
-                    rs()
-                }
-            }
-        }
-        
-        rc()
-        rs()
+        // Start bidirectional loops
+        rc(c: c, s: s, log: log)
+        rs(c: c, s: s, log: log)
     }
-}
+    
+    private func rc(c: NWConnection, s: NWConnection, log: Bool) {
+        c.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] d, _, i, err in
+            guard let self = self else { return }
+            Task {
+                await self.handleClientPipeData(d: d, isComplete: i, error: err, client: c, server: s, log: log)
+            }
+        }
+    }
+    
+    private func rs(c: NWConnection, s: NWConnection, log: Bool) {
+        s.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] d, _, i, err in
+            guard let self = self else { return }
+            Task {
+                await self.handleServerPipeData(d: d, isComplete: i, error: err, client: c, server: s, log: log)
+            }
+        }
+    }
+    
+    private func handleClientPipeData(d: Data?, isComplete: Bool, error: Error?, client: NWConnection, server: NWConnection, log: Bool) async {
+        guard !isStopped else { return }
+        
+        if let d = d {
+            if resilienceEnabled {
+                if cachedRequest == nil { cachedRequest = d }
+                else { cachedRequest?.append(d) }
+            }
+            
+            if log && !firstRequestReported {
+                let host = targetHost
+                if let parsed = await MainActor.run(body: { HTTPParser.parseRequest(d) }) {
+                    let validMethods = ["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"]
+                    if validMethods.contains(parsed.method) {
+                        firstRequestReported = true
+                        var data = await MainActor.run(body: { MITMInterceptedData(host: host, method: parsed.method, path: parsed.path) })
+                        currentRequestId = data.id
+                        data.requestHeaders = parsed.headers
+                        data.requestSize = d.count
+                        
+                        // Local copies for async context
+                        let method = parsed.method
+                        let headers = parsed.headers
+                        let bodyOffset = parsed.bodyOffset
+                        
+                        if ["POST", "PUT", "PATCH"].contains(method) {
+                            let ct = headers.first { $0.key.lowercased() == "content-type" }?.value
+                            if await MainActor.run(body: { HTTPParser.isTextContent(ct) }) && d.count > bodyOffset {
+                                let body = d[bodyOffset...]
+                                if await MainActor.run(body: { body.count <= HTTPParser.maxBodyCapture }) { data.requestBody = body }
+                            }
+                        }
+                        await MITMBackend.shared.reportInterception(data)
+                    }
+                }
+            }
+            
+            server.send(content: d, completion: .contentProcessed({ [weak self] err in
+                if err != nil { Task { await self?.stop() } }
+            }))
+        }
+        
+        if isComplete || error != nil {
+            stop()
+        } else {
+            rc(c: client, s: server, log: log)
+        }
+    }
+    
+    private func handleServerPipeData(d: Data?, isComplete: Bool, error: Error?, client: NWConnection, server: NWConnection, log: Bool) async {
+        guard !isStopped else { return }
+        
+        if let d = d {
+            let maxAcc = 512 * 1024
+            if log && firstRequestReported && !firstResponseReported {
+                responseAccumulator.append(d)
+                if responseAccumulator.count > maxAcc { firstResponseReported = true }
+                
+                if responseAccumulator.count >= 100 {
+                    let accumulator = responseAccumulator
+                    let host = targetHost
+                    let reqStartTime = requestStartTime
+                    let reqId = currentRequestId
+                    let isResilienceOn = resilienceEnabled
+                    let currentRetry = retryCount
+                    
+                    if let parsed = await MainActor.run(body: { HTTPParser.parseResponse(accumulator) }), let requestId = reqId {
+                        let isChunked = parsed.headers.contains { $0.key.lowercased() == "transfer-encoding" && $0.value.lowercased().contains("chunked") }
+                        let cl = (parsed.headers.first { $0.key.lowercased() == "content-length" }?.value).flatMap { Int($0) }
+                        
+                        let shouldWait: Bool
+                        let bodySize = accumulator.count > parsed.bodyOffset ? accumulator.count - parsed.bodyOffset : 0
+                        if isChunked { shouldWait = bodySize < 10 && accumulator.count < 10000 }
+                        else if let cLen = cl { shouldWait = bodySize < cLen && accumulator.count < 10000 }
+                        else { shouldWait = bodySize <= 0 && accumulator.count < 5000 }
+                        
+                        if !shouldWait {
+                            firstResponseReported = true
+                            
+                            // Check Resilience
+                            let statusCode = parsed.statusCode
 
+                            let isServerError = [500, 502, 503, 504].contains(statusCode)
+                            let isRateLimit = statusCode == 429
+                            
+                            if isResilienceOn && (isServerError || isRateLimit) && currentRetry < MITMBoundConnection.maxRetries {
+                                isRetrying = true
+                                retryCount += 1
+                                let delay: TimeInterval
+                                if isRateLimit {
+                                    let ra = parsed.headers.first { $0.key.lowercased() == "retry-after" }?.value
+                                    delay = (ra.flatMap { Double($0) }) ?? 1.0
+                                    print("[MITMBackend] 🛡️ 429 Rate Limit. Backing off for \(delay)s (Attempt \(self.retryCount))")
+                                } else {
+                                    delay = pow(2.0, Double(retryCount - 1))
+                                    print("[MITMBackend] 🛡️ Server Error \(parsed.statusCode). Retrying in \(delay)s (Attempt \(self.retryCount))")
+                                }
+                                
+                                Task {
+                                    try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                                    await self.performRetry(client: client, server: server)
+                                }
+                                return
+                            }
+                            
+                            var data = await MainActor.run(body: { MITMInterceptedData(host: host, method: "RESPONSE", path: "/") })
+                            data.id = requestId
+                            data.statusCode = parsed.statusCode
+                            data.responseHeaders = parsed.headers
+                            data.duration = Date().timeIntervalSince(reqStartTime)
+                            data.responseSize = accumulator.count
+                            
+                            let ct = parsed.headers.first { $0.key.lowercased() == "content-type" }?.value
+                            if await MainActor.run(body: { HTTPParser.isTextContent(ct) }) && accumulator.count > parsed.bodyOffset {
+                                var bodyData = Data(accumulator[parsed.bodyOffset...])
+                                if isChunked {
+                                    let chunkedData = bodyData
+                                    bodyData = await MainActor.run(body: { HTTPParser.decodeChunkedBody(chunkedData) ?? chunkedData })
+                                }
+                                let ce = parsed.headers.first { $0.key.lowercased() == "content-encoding" }?.value.lowercased()
+                                if let enc = ce {
+                                    if enc.contains("gzip") || enc.contains("deflate") {
+                                        let gzipData = bodyData
+                                        bodyData = await MainActor.run(body: { HTTPParser.decompressGzip(gzipData) ?? gzipData })
+                                    }
+                                    else if enc.contains("br") {
+                                        let brData = bodyData
+                                        bodyData = await MainActor.run(body: { HTTPParser.decompressBrotli(brData) ?? brData })
+                                    }
+                                }
+                                let finalBody = bodyData
+                                if await MainActor.run(body: { finalBody.count <= HTTPParser.maxBodyCapture }) { data.responseBody = finalBody }
+                            }
+                            await MITMBackend.shared.reportResponse(requestId: requestId, data: data)
+                        }
+                    }
+                }
+            }
+            
+            client.send(content: d, completion: .contentProcessed({ [weak self] err in
+                if err != nil { Task { await self?.stop() } }
+            }))
+        }
+        
+        if isComplete || error != nil {
+            stop()
+        } else if !isRetrying {
+            rs(c: client, s: server, log: log)
+        }
+    }
+    
+    private func performRetry(client: NWConnection, server: NWConnection) async {
+        guard let requestData = self.cachedRequest else {
+            print("[MITMBackend] ❌ Retry failed: No cached request data")
+            return
+        }
+        print("[MITMBackend] 🛡️ Retrying connection (\(retryCount)/\(MITMBoundConnection.maxRetries))...")
+        
+        // 1. Close old server connection
+        server.cancel()
+        self.serverConnection = nil
+        self.upstreamConnection = nil // Also clear upstream if it was set
+        self.decryptedConnection = nil // Also clear decrypted if it was set
+        
+        // 2. Reset state for a new connection attempt
+        self.isRetrying = false // Reset for next attempt
+        self.handshakeComplete = false
+        self.dataToSendOnRetry = requestData // Store data to be sent on the new connection
+        
+        // 3. Trigger new upstream connection
+        // This will eventually call setupPipe again, which will then send dataToSendOnRetry
+        self.connectUpstream(isPlain: false)
+        
+        print("[MITMBackend] 🔄 Retry sequence initiated. Waiting for new connection...")
+    }
+    
+
+}
