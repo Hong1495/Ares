@@ -653,15 +653,13 @@ actor MITMBoundConnection: Identifiable {
     
     private func connectUpstreamTLS(host: String, port: NWEndpoint.Port, decrypted: NWConnection) async {
         // print("[MITMBackend] 🌐 connectUpstreamTLS: Connecting to \(host):\(port)")
-        // Use System Proxy to route valid upstream traffic
-        // This acts as a robust fallback for all macOS versions.
-        // It relies on the System Proxy (managed by Clash) to handle the actual routing.
+        // CRITICAL: Use direct connection to avoid proxy loop
+        // When MITM intercepts traffic, the upstream connection must NOT go through system proxy
+        // otherwise it could be re-intercepted causing infinite loops or conflicts with TUN mode
         let options = NWProtocolTLS.Options()
         let params = NWParameters(tls: options)
-        // CRITICAL: Prevent Loop by relying on Clash Logic Rules (PROCESS-NAME check).
-        // We allow System Proxy (default) or Direct (if System Proxy unset).
-        // The Loop is broken in the Clash Config "rules" section.
-        params.preferNoProxies = false 
+        // CRITICAL: Direct connection to target (via Clash's direct rule for Ares process)
+        params.preferNoProxies = true
 
         let upstream = NWConnection(to: .hostPort(host: .init(host), port: port), using: params)
         self.setUpstreamConnection(upstream: upstream, decrypted: decrypted)
@@ -827,9 +825,16 @@ actor MITMBoundConnection: Identifiable {
 //                    print("[MITMBackend] 📥 Pipe s→c: \(d.count) bytes for \(capturedHost)")
                     
                     // Parse HTTP response for Analysis view (only first response in connection)
+                    // PERFORMANCE: Limit response accumulator to prevent memory growth
+                    let maxResponseAccumulator = 512 * 1024  // 512KB max
                     if log && firstRequestReported && !firstResponseReported {
                         // Accumulate response data
                         responseAccumulator.append(d)
+                        
+                        // CRITICAL: Stop accumulating if too large to prevent OOM
+                        if responseAccumulator.count > maxResponseAccumulator {
+                            firstResponseReported = true  // Give up parsing, just relay
+                        }
                         
                         // Try to parse when we have enough data
                         if responseAccumulator.count >= 100 {  // Wait for at least some data
