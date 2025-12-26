@@ -27,12 +27,7 @@ struct ConnectivityTestView: View {
                 
                 Spacer()
                 
-                Button(action: testAll) {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.caption)
-                }
-                .buttonStyle(.plain)
-                .help("Refresh Connectivity")
+                // Auto-refresh only
             }
             .frame(height: 24) // Standard Header Height
             
@@ -82,9 +77,7 @@ struct ConnectivityTestView: View {
                     .background(Color(nsColor: .windowBackgroundColor))
                     .cornerRadius(8)
                     .contentShape(Rectangle())
-                    .onTapGesture {
-                        testSite(name: site.0, url: site.1)
-                    }
+                    // Manual retry removed as requested
                 }
             }
         }
@@ -94,43 +87,76 @@ struct ConnectivityTestView: View {
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
         .task {
-            // Trigger test once on appear
-            if latencies.isEmpty {
-                // Short delay to let UI settle
-                try? await Task.sleep(nanoseconds: 500_000_000)
-                testAll()
-            }
+            startMonitoring()
         }
     }
     
-    @MainActor
-    func testAll() {
-        for site in sites {
-            testSite(name: site.0, url: site.1)
-        }
-    }
+    @State private var retryTask: Task<Void, Never>?
     
-    @MainActor
-    func testSite(name: String, url: String) {
-        loadingStates[name] = true
-        latencies[name] = nil 
+    // ... (keep body until .task) ...
+    // NOTE: Due to length limits, I need to be precise. 
+    // The previous body code ends at .task.
+    // I will replace `testAll` and `testSite` with a robust continuous loop mechanism, 
+    // and trigger it from .task.
+    
+    // Actually the user wants "Connectivity... auto recovery".
+    // This implies if a site fails, it should retry.
+    // If all pass, should it keep testing? Probably periodically (e.g. every 30s) to keep status fresh?
+    // "Regularly fetch" (定期获取) was requested.
         
-        Task {
-            var finalLatency: Int? = nil
-            // 2 attempts for responsiveness
-            for _ in 1...2 { 
-                if let latency = await measureLatency(url: url) {
-                    finalLatency = latency
-                    break
-                }
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-            }
+    @MainActor
+    func startMonitoring() {
+        retryTask?.cancel()
+        retryTask = Task {
+            // Initial delay
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
             
-            let result = finalLatency ?? -1
-            await MainActor.run {
-                self.loadingStates[name] = false
-                self.latencies[name] = result
+            while !Task.isCancelled {
+                // Check if Clash is running
+                if !ClashViewModel.shared.isRunning {
+                     try? await Task.sleep(nanoseconds: 2_000_000_000)
+                     continue
+                }
+
+                await testAll()
+                
+                // Wait for next cycle (e.g. 15 seconds)
+                try? await Task.sleep(nanoseconds: 15_000_000_000)
             }
+        }
+    }
+
+    @MainActor
+    func testAll() async {
+        await withTaskGroup(of: Void.self) { group in
+            for site in sites {
+                group.addTask {
+                    await testSite(name: site.0, url: site.1)
+                }
+            }
+        }
+    }
+    
+    @MainActor
+    func testSite(name: String, url: String) async {
+        // If already loading, skip? No, force refresh.
+        loadingStates[name] = true
+        // latencies[name] = nil // Don't clear old value during refresh, looks cleaner
+        
+        var finalLatency: Int? = nil
+        // 2 attempts
+        for _ in 1...2 { 
+            if let latency = await measureLatency(url: url) {
+                finalLatency = latency
+                break
+            }
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+        }
+        
+        let result = finalLatency ?? -1
+        self.loadingStates[name] = false
+        withAnimation {
+            self.latencies[name] = result
         }
     }
     

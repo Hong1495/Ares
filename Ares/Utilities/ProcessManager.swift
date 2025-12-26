@@ -89,8 +89,16 @@ actor ProcessManager {
     
     /// Kill process by PID
     /// - Parameter pid: Process ID to kill
-    func killProcess(_ pid: Int32) async {
-        _ = await runSimple("/usr/bin/sudo", args: ["-n", "/bin/kill", "-9", "\(pid)"])
+    /// - Returns: True if kill command succeeded (does not guarantee process died immediately)
+    func killProcess(_ pid: Int32) async -> Bool {
+        // Try user kill first (works for own processes)
+        let userKill = await runSimple("/bin/kill", args: ["-9", "\(pid)"])
+        if userKill.isEmpty { return true } // Empty usually means success for kill command
+        
+        // If user kill failed/printed error, try sudo kill
+        print("[ProcessManager] User kill failed for \(pid), trying sudo...")
+        let result = try? await run(executable: "/usr/bin/sudo", arguments: ["-n", "/bin/kill", "-9", "\(pid)"])
+        return result?.exitCode == 0
     }
     
     /// Kill all processes matching a pattern

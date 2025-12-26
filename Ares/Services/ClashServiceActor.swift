@@ -311,9 +311,12 @@ actor ClashServiceActor {
             let pids = await processManager.getPIDsUsingPort(port)
             if !pids.isEmpty {
                 killedAny = true
-                // Killing existing process on port \(port)
+                addLog("[ClashServiceActor] ⚠️ Found processes on port \(port): \(pids)")
                 for pid in pids {
-                    await processManager.killProcess(pid)
+                    let success = await processManager.killProcess(pid)
+                    if !success {
+                        addLog("[ClashServiceActor] ⚠️ Failed to kill PID \(pid) (may require sudo)")
+                    }
                 }
             }
         }
@@ -328,32 +331,35 @@ actor ClashServiceActor {
         try? aggressiveKill.run()
         aggressiveKill.waitUntilExit()
         
-        // Kernel socket cleanup wait reduced as we now use port isolation
         if killedAny {
-            try? await Task.sleep(nanoseconds: 200_000_000) // 0.2s only
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s initial wait
         }
         
-        // Wait for ports to release (Verified Loop)
-        let deadline = Date().timeIntervalSince1970 + 5.0
+        // Wait for ports to release (Verified Loop) - Increased to 10s
+        let deadline = Date().timeIntervalSince1970 + 10.0
         while Date().timeIntervalSince1970 < deadline {
             var allFreed = true
             for port in portsToClean {
                 let pids = await processManager.getPIDsUsingPort(port)
                 if !pids.isEmpty {
                     allFreed = false
+                    // Retry kill inside loop
+                     for pid in pids {
+                        _ = await processManager.killProcess(pid)
+                    }
                     break
                 }
             }
             if allFreed {
                 return true
             }
-            try? await Task.sleep(nanoseconds: 200_000_000) // 0.2s
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s check interval
         }
         
         addLog("[ClashServiceActor] ⚠️ Cleanup timeout: Ports might still be busy")
         // Force kill one last time just in case
         await processManager.killAllProcesses(matching: "clash-meta")
-        try? await Task.sleep(nanoseconds: 500_000_000)
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
         
         // Final check
         for port in portsToClean {
@@ -384,7 +390,7 @@ actor ClashServiceActor {
             if !pids.isEmpty {
                 addLog("[ClashServiceActor] 🔫 Port \(port) held by PIDs: \(pids) - killing...")
                 for pid in pids {
-                    await processManager.killProcess(pid)
+                    _ = await processManager.killProcess(pid)
                 }
             }
         }

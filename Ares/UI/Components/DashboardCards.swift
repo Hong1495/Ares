@@ -216,17 +216,16 @@ struct IpInfoCard: View {
                         }
                     }
                 }
-            } else if isLoading {
-               ProgressView()
-                    .scaleEffect(0.5)
-                    .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                Text("Tap to check IP")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .onTapGesture {
-                        Task { await fetchIPInfo() }
-                    }
+               HStack(spacing: 8) {
+                   ProgressView()
+                        .scaleEffect(0.5)
+                        .frame(width: 16, height: 16)
+                   Text(isLoading ? "Fetching..." : "Waiting for connection...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+               }
+               .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .padding()
@@ -235,47 +234,57 @@ struct IpInfoCard: View {
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
         .task {
-            // Wait for Clash to be running before first fetch to avoid "Connection refused" startup noise
+            // Initial Wait
             while !clashViewModel.isRunning {
-                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1s
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
             }
-            // Tiny extra gap for TCP stack readiness
-            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s
-            await fetchIPInfo()
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            
+            // Persistent retry loop
+            while !Task.isCancelled {
+                if ipInfo == nil {
+                    isLoading = true
+                    let success = await fetchIPInfo()
+                    if success {
+                        isLoading = false
+                        // Refresh every 5 minutes if successful ? Or just once?
+                        // User said: "if failed... auto recovery". 
+                        // Once success, we can stop aggressively retrying.
+                        // But maybe refreshing periodically is good? Let's sleep long if success.
+                        try? await Task.sleep(nanoseconds: 300_000_000_000) // 5 min
+                    } else {
+                        // Retry backoff
+                        try? await Task.sleep(nanoseconds: 5_000_000_000) // 5s retry
+                    }
+                } else {
+                     try? await Task.sleep(nanoseconds: 300_000_000_000) // 5 min
+                }
+            }
         }
     }
     
     @MainActor
-    private func fetchIPInfo(retries: Int = 3) async {
-        isLoading = true
+    private func fetchIPInfo() async -> Bool {
+        if clashViewModel.isToggling { return false }
         
-        for attempt in 1...retries {
-            // SILENCE during toggles to avoid "Connection refused" noise
-            if clashViewModel.isToggling {
-                self.isLoading = false
-                return
-            }
+        do {
+            let url = URL(string: "https://ipapi.co/json/")!
+            let config = URLSessionConfiguration.ephemeral
+            config.timeoutIntervalForRequest = 5.0
+            let session = URLSession(configuration: config)
             
-            do {
-                let url = URL(string: "https://ipapi.co/json/")!
-                let (data, _) = try await URLSession.shared.data(from: url)
-                let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-                
-                let ip = json?["ip"] as? String ?? "Unknown"
-                let country = json?["country_name"] as? String
-                let city = json?["city"] as? String
-                
-                self.ipInfo = IPInfo(ip: ip, country: country, city: city)
-                self.isLoading = false
-                return // Success
-            } catch {
-                if attempt < retries {
-                    try? await Task.sleep(nanoseconds: 2_000_000_000) // Wait 2s
-                }
-            }
+            let (data, _) = try await session.data(from: url)
+            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            
+            let ip = json?["ip"] as? String ?? "Unknown"
+            let country = json?["country_name"] as? String
+            let city = json?["city"] as? String
+            
+            self.ipInfo = IPInfo(ip: ip, country: country, city: city)
+            return true
+        } catch {
+            return false
         }
-        
-        self.isLoading = false
     }
 }
 
@@ -318,20 +327,12 @@ struct ClashInfoCard: View {
                         .monospacedDigit()
                 }
                 
-                // Memory removed to keep it simple/matching system box, or keep if user wants?
-                // Request said: "Clash Core", "IP Address", "System".
-                // System box shows macOS + Arch.
-                // Clash box shows Version + Memory (maybe?).
-                // Let's keep it simple as Version only for now to match System layout visuals more closely or keep both?
-                // The provided image shows "Clash Core" -> "Version v1.18.1", "Memory 9.6MB".
-                // So I should keep both.
-                
                 HStack {
                     Text("Memory")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Text(formatMemory(memory)) // This needs to be fetched or mocked, currently struct had mock
+                    Text(formatMemory(memory))
                         .font(.caption)
                         .fontWeight(.medium)
                         .monospacedDigit()
@@ -344,11 +345,36 @@ struct ClashInfoCard: View {
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
         .task {
+            // Initial Wait
             while !clashViewModel.isRunning {
-                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1s
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
             }
-            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s cool-down
-            await fetchClashInfo()
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            
+            // Persistent retry loop
+            while !Task.isCancelled {
+                // Determine if we need to fetch (if invalid or just periodic)
+                if version == "Loading..." || version == "Offline" {
+                    let success = await fetchClashInfo()
+                    if !success {
+                        version = "Offline"
+                        try? await Task.sleep(nanoseconds: 3_000_000_000) // Retry every 3s if failed
+                    } else {
+                        try? await Task.sleep(nanoseconds: 10_000_000_000) // Refresh every 10s if success
+                    }
+                } else {
+                    // Periodic update to keep memory fresh
+                     let success = await fetchClashInfo()
+                     if !success {
+                         // Don't immediately show offline on one failure, hold state?
+                         // But if failed, maybe it crashed. 
+                         // Let's retry sooner if it failed.
+                         try? await Task.sleep(nanoseconds: 3_000_000_000)
+                     } else {
+                         try? await Task.sleep(nanoseconds: 10_000_000_000)
+                     }
+                }
+            }
         }
     }
     
@@ -356,26 +382,28 @@ struct ClashInfoCard: View {
     @EnvironmentObject var clashViewModel: ClashViewModel
 
     @MainActor
-    private func fetchClashInfo(retries: Int = 5) async {
+    private func fetchClashInfo() async -> Bool {
+        if clashViewModel.isToggling { return false }
+        
         let port = appState.tunEnabled ? 19097 : 9097
         let url = URL(string: "http://127.0.0.1:\(port)/version")!
-        
-        for attempt in 1...retries {
-            if clashViewModel.isToggling { return }
-            do {
-                let (data, _) = try await URLSession.shared.data(from: url)
-                let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-                if let versionStr = json?["version"] as? String {
-                    self.version = versionStr
-                    // Mock memory for now as /version doesn't return it
-                    self.memory = 10 * 1024 * 1024 
-                    return 
-                }
-            } catch {
-                if attempt < retries { try? await Task.sleep(nanoseconds: 1_500_000_000) }
+        // Quick timeout
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 2.0
+        let session = URLSession(configuration: config)
+
+        do {
+            let (data, _) = try await session.data(from: url)
+            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            if let versionStr = json?["version"] as? String {
+                self.version = versionStr
+                self.memory = 10 * 1024 * 1024 // Mock limit
+                return true
             }
+            return false
+        } catch {
+            return false
         }
-        self.version = "Offline"
     }
     
     private func formatMemory(_ bytes: Int64) -> String {
