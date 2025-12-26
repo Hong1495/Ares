@@ -19,7 +19,11 @@ struct DashboardView: View {
                     ConnectivityTestView()
                 }
                 
+                // Core Info Row (Second to Last)
                 InfoGrid()
+                
+                // Analysis Row (Last)
+                AnalysisGrid()
             }
             .padding()
         }
@@ -46,15 +50,28 @@ private struct MainGrid: View {
 
 private struct InfoGrid: View {
     private var columns: [GridItem] {
-        [GridItem(.flexible()), GridItem(.flexible())]
+        [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
     }
     
     var body: some View {
         LazyVGrid(columns: columns, spacing: 16) {
-            IpInfoCard()
             ClashInfoCard()
-            TestCard()
+            IpInfoCard()
             SystemInfoCard()
+        }
+    }
+}
+
+private struct AnalysisGrid: View {
+    private var columns: [GridItem] {
+        [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+    }
+    
+    var body: some View {
+        LazyVGrid(columns: columns, spacing: 16) {
+            NodeAnalysisCard()
+            ConnectionsCard()
+            ErrorLogCard()
         }
     }
 }
