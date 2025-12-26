@@ -369,6 +369,6 @@ enum HTTPParser {
         }
     }
     
-    /// Maximum body size to capture (64KB)
-    static let maxBodyCapture = 64 * 1024
+    /// Maximum body size to capture (256KB - increased for larger responses)
+    static let maxBodyCapture = 256 * 1024
 }

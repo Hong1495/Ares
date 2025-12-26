@@ -54,13 +54,13 @@ actor MITMBackend {
             let listener = try NWListener(using: params, on: .any)
             
             listener.newConnectionHandler = { [weak self] nwConn in
-                Task.detached {
+                Task {
                     await self?.createNewConnection(nwConn, clashPort: clashPort)
                 }
             }
             
             listener.stateUpdateHandler = { [weak self] state in
-                Task.detached {
+                Task {
                     await self?.handleListenerState(state, listener: listener)
                 }
             }
@@ -272,7 +272,7 @@ actor MITMBoundConnection: Identifiable {
              guard let self = self else { return }
              // Debug Log
              // Client state update
-             Task.detached { await self.handleClientState(state) }
+             Task { await self.handleClientState(state) }
         }
         clientConnection.start(queue: .global())
         readClient()
@@ -311,7 +311,7 @@ actor MITMBoundConnection: Identifiable {
         buffer.removeAll()
         
         // Remove from parent actor
-        Task.detached {
+        Task {
             await MITMBackend.shared.removeConnection(id: self.id)
         }
     }
@@ -444,7 +444,7 @@ actor MITMBoundConnection: Identifiable {
         
         conn.stateUpdateHandler = { [weak self] state in
             guard let self = self else { return }
-            Task.detached { await self.handleServerState(state, conn: conn, isPlain: isPlain) }
+            Task { await self.handleServerState(state, conn: conn, isPlain: isPlain) }
         }
         self.serverConnection = conn
         conn.start(queue: .global())
@@ -547,11 +547,11 @@ actor MITMBoundConnection: Identifiable {
             let listener = try NWListener(using: params, on: .any)
             
             listener.newConnectionHandler = { [weak self] dec in
-                Task.detached { await self?.handleDecrypted(dec) }
+                Task { await self?.handleDecrypted(dec) }
             }
             
             listener.stateUpdateHandler = { [weak self] state in
-                Task.detached { await self?.handleLoopbackState(state, listener: listener, initialData: initialData) }
+                Task { await self?.handleLoopbackState(state, listener: listener, initialData: initialData) }
             }
             
             self.loopbackListener = listener
@@ -585,7 +585,7 @@ actor MITMBoundConnection: Identifiable {
         clientConnection.send(content: ok.data(using: .utf8), completion: .contentProcessed({ [weak self] _ in
             guard let self = self else { return }
             
-            Task.detached {
+            Task {
                 // CRITICAL: Check if stopped inside the async context
                 guard await !self.isStopped else { return }
                 
@@ -598,7 +598,7 @@ actor MITMBoundConnection: Identifiable {
                 
                 conn.stateUpdateHandler = { [weak self] state in
                     guard let self = self else { return }
-                    Task.detached {
+                    Task {
                         switch state {
                         case .ready:
                              // Reduced logging for performance
@@ -606,7 +606,7 @@ actor MITMBoundConnection: Identifiable {
                              // CRITICAL: If we have initial data (ClientHello), send it to loopback first!
                              if !initialData.isEmpty {
                                  conn.send(content: initialData, completion: .contentProcessed({ _ in
-                                     Task.detached { await self.setupPipe(c: self.clientConnection, s: conn) }
+                                     Task { await self.setupPipe(c: self.clientConnection, s: conn) }
                                  }))
                              } else {
                                  await self.setupPipe(c: self.clientConnection, s: conn)
@@ -694,7 +694,7 @@ actor MITMBoundConnection: Identifiable {
         let checkAndStartPipe = { [weak self] in
             guard let self = self else { return }
             if state.bothReady {
-                Task.detached { await self.setupPipe(c: decrypted, s: upstream) }
+                Task { await self.setupPipe(c: decrypted, s: upstream) }
             }
         }
         
@@ -705,7 +705,7 @@ actor MITMBoundConnection: Identifiable {
                 state.upstreamReady = true
                 checkAndStartPipe()
             case .failed, .cancelled:
-                Task.detached { await self?.stop() }
+                Task { await self?.stop() }
             default:
                 break
             }
@@ -718,7 +718,7 @@ actor MITMBoundConnection: Identifiable {
                 state.decryptedReady = true
                 checkAndStartPipe()
             case .failed, .cancelled:
-                Task.detached { await self?.stop() }
+                Task { await self?.stop() }
             default:
                 break
             }
@@ -789,7 +789,7 @@ actor MITMBoundConnection: Identifiable {
                                     }
                                 }
                                 
-                                Task.detached { await MITMBackend.shared.reportInterception(interceptedData) }
+                                Task { await MITMBackend.shared.reportInterception(interceptedData) }
                             } else {
                                 // Reduced logging for performance
                                 // print("[MITMBackend] ⚠️ Invalid method: \(parsed.method)")
@@ -801,14 +801,14 @@ actor MITMBoundConnection: Identifiable {
                     
                     s.send(content: d, completion: .contentProcessed({ [weak self] sendErr in
                         if sendErr != nil {
-                            Task.detached { await self?.stop() }
+                            Task { await self?.stop() }
                         }
                     }))
                 }
                 
                 // CRITICAL: Stop loop on error or completion
                 if i || err != nil {
-                    Task.detached { await self?.stop() }
+                    Task { await self?.stop() }
                 } else if !capturedStoppedCheck() {
                     rc()
                 }
@@ -932,7 +932,7 @@ actor MITMBoundConnection: Identifiable {
                                         // print("[MITMBackend] ⚠️ No body captured: isText=\(HTTPParser.isTextContent(contentType)), offset=\(parsed.bodyOffset), count=\(responseAccumulator.count)")
                                     }
                                     
-                                    Task.detached {
+                                    Task {
                                         await MITMBackend.shared.reportResponse(requestId: reqId, data: responseData)
                                     }
                                 }
@@ -950,14 +950,14 @@ actor MITMBoundConnection: Identifiable {
                     
                     c.send(content: d, completion: .contentProcessed({ [weak self] sendErr in
                         if sendErr != nil {
-                            Task.detached { await self?.stop() }
+                            Task { await self?.stop() }
                         }
                     }))
                 }
                 
                 // CRITICAL: Stop loop on error or completion
                 if i || err != nil {
-                    Task.detached { await self?.stop() }
+                    Task { await self?.stop() }
                 } else if !capturedStoppedCheck() {
                     rs()
                 }
