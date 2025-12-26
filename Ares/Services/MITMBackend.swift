@@ -883,6 +883,7 @@ actor MITMBoundConnection: Identifiable {
                                     
                                     if HTTPParser.isTextContent(contentType) && responseAccumulator.count > parsed.bodyOffset {
                                         var bodyData = Data(responseAccumulator[parsed.bodyOffset...])
+                                        var decompressionFailed = false
                                         
                                         // For chunked encoding, try to decode the chunks
                                         if isChunked {
@@ -899,20 +900,23 @@ actor MITMBoundConnection: Identifiable {
                                                     // print("[MITMBackend] ✅ Decompressed GZIP: \(bodyData.count) -> \(decompressed.count) bytes")
                                                     bodyData = decompressed
                                                 } else {
-                                                    // print("[MITMBackend] ⚠️ GZIP decompression failed, using raw data")
+                                                    // Decompression failed - don't capture raw compressed bytes
+                                                    decompressionFailed = true
                                                 }
                                             } else if encoding.contains("br") {
                                                 if let decompressed = HTTPParser.decompressBrotli(bodyData) {
                                                     // print("[MITMBackend] ✅ Decompressed Brotli: \(bodyData.count) -> \(decompressed.count) bytes")
                                                     bodyData = decompressed
                                                 } else {
-                                                    // print("[MITMBackend] ⚠️ Brotli decompression failed, using raw data")
+                                                    // Decompression failed - don't capture raw compressed bytes
+                                                    decompressionFailed = true
                                                 }
                                             }
                                         }
                                         
+                                        // Only capture body if decompression succeeded (or wasn't needed)
                                         // print("[MITMBackend] 📝 Body size: \(bodyData.count) bytes")
-                                        if bodyData.count <= HTTPParser.maxBodyCapture {
+                                        if !decompressionFailed && bodyData.count <= HTTPParser.maxBodyCapture {
                                             responseData.responseBody = bodyData
                                             // Preview body content
                                             // if let bodyStr = String(data: bodyData.prefix(100), encoding: .utf8) {

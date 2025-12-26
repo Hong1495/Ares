@@ -1,5 +1,6 @@
 import Foundation
 import Compression
+import zlib
 
 /// Captured HTTP data from MITM interception
 struct MITMInterceptedData: Sendable {
@@ -247,83 +248,83 @@ enum HTTPParser {
         return success ? result : nil
     }
     
-    /// Decompress gzip/deflate encoded data
+    /// Decompress gzip/deflate encoded data using zlib
     static func decompressGzip(_ data: Data) -> Data? {
-        // Check for gzip magic bytes (1F 8B)
-        guard data.count >= 2 else { return nil }
-        let isGzip = data[0] == 0x1F && data[1] == 0x8B
-        
-        // Use zlib decompression
-        var decompressed = Data()
-        let bufferSize = 32_768
-        
-        // For gzip, skip the header and use raw inflate
-        // For deflate, use raw inflate directly
-        let inputData: Data
-        if isGzip {
-            // Skip gzip header (minimum 10 bytes)
-            guard data.count > 10 else { return nil }
-            
-            // Parse gzip header to find where compressed data starts
-            var offset = 10
-            let flags = data[3]
-            
-            // FEXTRA
-            if flags & 0x04 != 0 && offset + 2 <= data.count {
-                let extraLen = Int(data[offset]) | (Int(data[offset + 1]) << 8)
-                offset += 2 + extraLen
-            }
-            // FNAME
-            if flags & 0x08 != 0 {
-                while offset < data.count && data[offset] != 0 { offset += 1 }
-                offset += 1
-            }
-            // FCOMMENT
-            if flags & 0x10 != 0 {
-                while offset < data.count && data[offset] != 0 { offset += 1 }
-                offset += 1
-            }
-            // FHCRC
-            if flags & 0x02 != 0 { offset += 2 }
-            
-            guard offset < data.count - 8 else { return nil }
-            inputData = data.subdata(in: offset..<(data.count - 8)) // Remove 8-byte trailer
-        } else {
-            inputData = data
+        // Minimum valid gzip is 18 bytes (10 header + 8 trailer)
+        guard data.count >= 18 else {
+            print("[HTTPParser] ⚠️ Gzip data too small: \(data.count) bytes")
+            return nil
         }
         
-        // Use Compression framework
-        let bufferPtr = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
-        defer { bufferPtr.deallocate() }
+        // Verify gzip magic bytes
+        guard data[0] == 0x1F && data[1] == 0x8B else {
+            print("[HTTPParser] ⚠️ Not gzip data (magic bytes: \(String(format: "%02X %02X", data[0], data[1])))")
+            return nil
+        }
         
-        let streamPtr = UnsafeMutablePointer<compression_stream>.allocate(capacity: 1)
-        defer { streamPtr.deallocate() }
-        
-        var status = compression_stream_init(streamPtr, COMPRESSION_STREAM_DECODE, COMPRESSION_ZLIB)
-        guard status == COMPRESSION_STATUS_OK else { return nil }
-        defer { compression_stream_destroy(streamPtr) }
-        
-        return inputData.withUnsafeBytes { (inputPtr: UnsafeRawBufferPointer) -> Data? in
-            guard let inputBaseAddress = inputPtr.baseAddress else { return nil }
+        // Standard zlib decompression with windowBits = 31 (16 + 15)
+        // This effectively enables gzip header detection and decoding
+        return data.withUnsafeBytes { (inputBytes: UnsafeRawBufferPointer) -> Data? in
+            guard let inputBaseAddress = inputBytes.baseAddress else { return nil }
             
-            streamPtr.pointee.src_ptr = inputBaseAddress.assumingMemoryBound(to: UInt8.self)
-            streamPtr.pointee.src_size = inputData.count
-            streamPtr.pointee.dst_ptr = bufferPtr
-            streamPtr.pointee.dst_size = bufferSize
+            var stream = z_stream()
+            // Initialize with windowBits = 31 (15 + 16) to automatically detect gzip/zlib
+            // Use zlibVersion() function instead of ZLIB_VERSION macro for Swift compatibility
+            let initResult = inflateInit2_(&stream, 31, zlibVersion(), Int32(MemoryLayout<z_stream>.size))
+            if initResult != Z_OK {
+                print("[HTTPParser] ❌ inflateInit2 failed with code: \(initResult)")
+                return nil
+            }
+            defer { inflateEnd(&stream) }
             
-            repeat {
-                status = compression_stream_process(streamPtr, Int32(COMPRESSION_STREAM_FINALIZE.rawValue))
+            stream.next_in = UnsafeMutablePointer(mutating: inputBaseAddress.assumingMemoryBound(to: UInt8.self))
+            stream.avail_in = UInt32(data.count)
+            
+            var decompressed = Data(capacity: data.count * 4) // Estimate 4x compression ratio
+            let bufferSize = 64 * 1024
+            let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+            defer { buffer.deallocate() }
+            
+            var iterations = 0
+            let maxIterations = 1000 // Safety limit
+            
+            while iterations < maxIterations {
+                iterations += 1
+                stream.next_out = buffer
+                stream.avail_out = UInt32(bufferSize)
                 
-                if status == COMPRESSION_STATUS_OK || status == COMPRESSION_STATUS_END {
-                    let bytesWritten = bufferSize - streamPtr.pointee.dst_size
-                    decompressed.append(bufferPtr, count: bytesWritten)
-                    streamPtr.pointee.dst_ptr = bufferPtr
-                    streamPtr.pointee.dst_size = bufferSize
+                let status = inflate(&stream, Z_NO_FLUSH)
+                
+                let bytesRead = bufferSize - Int(stream.avail_out)
+                if bytesRead > 0 {
+                    decompressed.append(buffer, count: bytesRead)
                 }
-            } while status == COMPRESSION_STATUS_OK
+                
+                if status == Z_STREAM_END {
+                    print("[HTTPParser] ✅ Gzip decompressed: \(data.count) -> \(decompressed.count) bytes")
+                    break // Successfully decompressed
+                } else if status == Z_OK {
+                    // Continue decompressing
+                    if stream.avail_in == 0 {
+                        break // No more input
+                    }
+                } else if status == Z_BUF_ERROR {
+                    // No progress possible - likely incomplete data
+                    print("[HTTPParser] ⚠️ Gzip Z_BUF_ERROR after \(decompressed.count) bytes")
+                    break
+                } else {
+                    // Z_DATA_ERROR, Z_MEM_ERROR, etc.
+                    print("[HTTPParser] ❌ Gzip inflate error: \(status)")
+                    return nil
+                }
+            }
             
-            guard status == COMPRESSION_STATUS_END else { return nil }
-            return decompressed.isEmpty ? nil : decompressed
+            // Return nil if decompression produced no output
+            if decompressed.isEmpty {
+                print("[HTTPParser] ❌ Gzip decompression produced no output")
+                return nil
+            }
+            return decompressed
         }
     }
     
