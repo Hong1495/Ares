@@ -335,7 +335,7 @@ actor MITMBoundConnection: Identifiable {
         clientConnection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] content, _, isComplete, error in
             guard let self = self else { return }
             
-            Task.detached {
+            Task {
                 if let data = content {
                     // Debug Log
                     // Process data
@@ -456,7 +456,7 @@ actor MITMBoundConnection: Identifiable {
             if isPlain {
                 conn.send(content: self.buffer, completion: .contentProcessed({ [weak self] _ in
                     guard let self = self else { return }
-                    Task.detached { await self.setupPipe(c: self.clientConnection, s: conn) }
+                    Task { await self.setupPipe(c: self.clientConnection, s: conn) }
                 }))
             } else {
                 handshake(conn)
@@ -475,16 +475,16 @@ actor MITMBoundConnection: Identifiable {
         
         conn.send(content: req.data(using: .utf8), completion: .contentProcessed({ [weak self] err in
             guard let self = self else { return }
-            if err != nil { Task.detached { await self.stop() }; return }
+            if err != nil { Task { await self.stop() }; return }
             
             conn.receive(minimumIncompleteLength: 1, maximumLength: 1024) { [weak self] content, _, _, _ in
                 guard let self = self else { return }
-                Task.detached {
+                Task {
                     if let data = content, String(data: data, encoding: .utf8)?.contains("200") == true {
                         let ok = "HTTP/1.1 200 Connection Established\r\n\r\n"
                         self.clientConnection.send(content: ok.data(using: .utf8), completion: .contentProcessed({ [weak self] _ in
                             guard let self = self else { return }
-                            Task.detached { await self.setupPipe(c: self.clientConnection, s: conn) }
+                            Task { await self.setupPipe(c: self.clientConnection, s: conn) }
                         }))
                     } else {
                         await self.stop()
@@ -496,7 +496,7 @@ actor MITMBoundConnection: Identifiable {
     
     private func startTLS(initialData: Data) {
         let host = self.targetHost
-        Task.detached {
+        Task {
             do {
                 let identity = try await CertificateManager.shared.getIdentity(for: host)
                 // Reduced logging for performance
@@ -646,7 +646,7 @@ actor MITMBoundConnection: Identifiable {
         let port = self.targetPort
         
         // Use NWProxyConfig to tunnel through Clash
-        Task.detached {
+        Task {
             await self.connectUpstreamTLS(host: host, port: port, decrypted: decrypted)
         }
     }
