@@ -700,3 +700,182 @@ struct ErrorLogCard: View {
         return log
     }
 }
+
+/// DNS Config Card - Shows DNS settings
+struct DNSConfigCard: View {
+    @AppStorage("dnsServers") private var dnsServers: String = "223.5.5.5, 8.8.8.8"
+    
+    var dnsArray: [String] {
+        dnsServers.components(separatedBy: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .prefix(2)
+            .map { String($0) }
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label {
+                Text("DNS")
+            } icon: {
+                Image(systemName: "network.badge.shield.half.filled")
+                    .fontWeight(.light)
+                    .frame(width: 20)
+            }
+            .font(.headline.weight(.medium))
+            .frame(height: 24)
+            
+            Divider()
+            
+            Spacer()
+            
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(dnsArray, id: \.self) { dns in
+                    HStack(spacing: 6) {
+                        Image(systemName: "server.rack")
+                            .font(.caption)
+                            .foregroundStyle(.blue.opacity(0.8))
+                        Text(dns)
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .monospacedDigit()
+                    }
+                }
+            }
+        }
+        .padding()
+        .frame(height: 150)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .cornerRadius(12)
+    }
+}
+
+/// MITM Config Card - Shows MITM ports and whitelist
+struct MITMConfigCard: View {
+    @AppStorage("mitmPorts") private var mitmPorts: String = "80, 443, 8080, 8443, 8888"
+    @AppStorage("mitmHosts") private var mitmHosts: String = ""
+    @EnvironmentObject var appState: AppState
+    
+    var portArray: [String] {
+        mitmPorts.components(separatedBy: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .prefix(3)
+            .map { String($0) }
+    }
+    
+    var hostArray: [String] {
+        mitmHosts.components(separatedBy: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .prefix(2)
+            .map { String($0) }
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label {
+                Text("MITM Config")
+            } icon: {
+                Image(systemName: "eyeglasses")
+                    .fontWeight(.light)
+                    .frame(width: 20)
+            }
+            .font(.headline.weight(.medium))
+            .frame(height: 24)
+            
+            Divider()
+            
+            Spacer()
+            
+            VStack(alignment: .leading, spacing: 6) {
+                // Ports
+                HStack {
+                    Text("Ports")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(portArray.joined(separator: ", "))
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                }
+                
+                // Whitelist
+                if !hostArray.isEmpty {
+                    HStack {
+                        Text("Whitelist")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text("\(hostArray.count) host(s)")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                    }
+                }
+            }
+        }
+        .padding()
+        .frame(height: 150)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .cornerRadius(12)
+    }
+}
+
+/// Bypass Settings Card - Shows bypass rules
+struct BypassSettingsCard: View {
+    @AppStorage("bypassRules") private var bypassRules: String = "localhost, 127.*, 172.16.*, 172.31.*, 192.168.*"
+    
+    var ruleArray: [String] {
+        bypassRules.components(separatedBy: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .prefix(3)
+            .map { String($0) }
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label {
+                Text("Bypass Rules")
+            } icon: {
+                Image(systemName: "arrow.triangle.turn.up.right.diamond")
+                    .fontWeight(.light)
+                    .frame(width: 20)
+            }
+            .font(.headline.weight(.medium))
+            .frame(height: 24)
+            
+            Divider()
+            
+            Spacer()
+            
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(ruleArray, id: \.self) { rule in
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.circle")
+                            .font(.caption)
+                            .foregroundStyle(.green.opacity(0.8))
+                        Text(rule)
+                            .font(.caption)
+                            .fontWeight(.medium)
+                    }
+                }
+                
+                if ruleArray.count < bypassRules.components(separatedBy: ",").count {
+                    Text("+\(bypassRules.components(separatedBy: ",").count - ruleArray.count) more")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding()
+        .frame(height: 150)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .cornerRadius(12)
+    }
+}

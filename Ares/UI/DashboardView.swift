@@ -22,6 +22,9 @@ struct DashboardView: View {
                 // Core Info Row (Second to Last)
                 InfoGrid()
                 
+                // Config Row (DNS, MITM, Bypass)
+                ConfigGrid()
+                
                 // Analysis Row (Last)
                 AnalysisGrid()
             }
@@ -72,6 +75,20 @@ private struct AnalysisGrid: View {
             NodeAnalysisCard()
             ConnectionsCard()
             ErrorLogCard()
+        }
+    }
+}
+
+private struct ConfigGrid: View {
+    private var columns: [GridItem] {
+        [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+    }
+    
+    var body: some View {
+        LazyVGrid(columns: columns, spacing: 16) {
+            DNSConfigCard()
+            MITMConfigCard()
+            BypassSettingsCard()
         }
     }
 }
