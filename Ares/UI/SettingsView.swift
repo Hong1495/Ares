@@ -26,6 +26,7 @@ struct SettingsView: View {
     
     // MITM Settings
     @AppStorage("mitmPorts") private var mitmPorts = "80, 443, 8080, 8443"
+    @AppStorage("mitmHosts") private var mitmHosts = ""  // Empty = intercept all hosts
     
     var body: some View {
         Form {
@@ -171,6 +172,19 @@ struct SettingsView: View {
                         .textFieldStyle(.roundedBorder)
                     
                     Text("Comma-separated ports to intercept (e.g. 80, 443, 8888)")
+                        .font(.footnote)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("MITM Host Whitelist")
+                        .fontWeight(.medium)
+                    TextField("Hosts (empty = all)", text: $mitmHosts)
+                        .textFieldStyle(.roundedBorder)
+                    
+                    Text("Comma-separated hosts/IPs to intercept (e.g. 10.10.25.251, api.example.com)")
                         .font(.footnote)
                         .fontWeight(.medium)
                         .foregroundStyle(.secondary)

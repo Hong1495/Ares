@@ -22,6 +22,9 @@ actor MITMBackend {
     private var connectionCount = 0  // Track total connections created
     private var cleanupTask: Task<Void, Never>?
     
+    // MARK: - Display Whitelist (filter what shows in UI)
+    private var displayWhitelist: [String] = []
+    
     // MARK: - Network Monitor (Reset)
     
     // MARK: - API
@@ -38,6 +41,9 @@ actor MITMBackend {
     
     func start(clashPort: UInt16) async {
         await stop()
+        
+        // Load display whitelist from settings
+        refreshDisplayWhitelist()
         
         // Start periodic cleanup task - runs frequently to catch failed TLS handshakes quickly
         cleanupTask = Task.detached { [weak self] in
@@ -152,11 +158,67 @@ actor MITMBackend {
     }
     
     func reportInterception(_ data: MITMInterceptedData) {
+        // Filter by display whitelist if configured
+        if !displayWhitelist.isEmpty {
+            let hostLower = data.host.lowercased()
+            var shouldDisplay = false
+            for pattern in displayWhitelist {
+                if hostLower == pattern || hostLower.hasSuffix("." + pattern) {
+                    shouldDisplay = true
+                    break
+                }
+                if pattern.hasPrefix("*") {
+                    let suffix = String(pattern.dropFirst())
+                    if hostLower.hasSuffix(suffix) {
+                        shouldDisplay = true
+                        break
+                    }
+                }
+            }
+            if !shouldDisplay {
+                return  // Skip displaying this request
+            }
+        }
         onInterception?(data)
     }
     
     func reportResponse(requestId: String, data: MITMInterceptedData) {
+        // Filter by display whitelist if configured
+        if !displayWhitelist.isEmpty {
+            let hostLower = data.host.lowercased()
+            var shouldDisplay = false
+            for pattern in displayWhitelist {
+                if hostLower == pattern || hostLower.hasSuffix("." + pattern) {
+                    shouldDisplay = true
+                    break
+                }
+                if pattern.hasPrefix("*") {
+                    let suffix = String(pattern.dropFirst())
+                    if hostLower.hasSuffix(suffix) {
+                        shouldDisplay = true
+                        break
+                    }
+                }
+            }
+            if !shouldDisplay {
+                return  // Skip displaying this response
+            }
+        }
         onResponse?(requestId, data)
+    }
+    
+    func refreshDisplayWhitelist() {
+        let mitmHostsString = UserDefaults.standard.string(forKey: "mitmHosts") ?? ""
+        let trimmed = mitmHostsString.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            displayWhitelist = []
+        } else {
+            let separators = CharacterSet(charactersIn: ",，\n")
+            displayWhitelist = trimmed.components(separatedBy: separators)
+                .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+                .filter { !$0.isEmpty }
+            print("[MITMBackend] 📋 Display whitelist: \(displayWhitelist)")
+        }
     }
     
     private func handleListenerState(_ state: NWListener.State, listener: NWListener) {
@@ -196,6 +258,9 @@ actor MITMBoundConnection: Identifiable {
     private let createdAt = Date()
     private var lastActivity = Date()
     private var handshakeComplete = false  // Track if we've successfully established the pipe
+    
+    // Cached whitelist - read once at init to avoid thread issues
+    private let cachedWhitelist: [String]
     
     func isStale(timeout: TimeInterval) -> Bool {
         // Already stopped - definitely stale
@@ -246,22 +311,62 @@ actor MITMBoundConnection: Identifiable {
     ]
     
     private func shouldBypassMITM(_ host: String) -> Bool {
-        // Check exact match
+        // First check blacklist (always bypass these domains)
         if Self.bypassDomains.contains(host) {
             return true
         }
-        // Check if host ends with any bypass domain (for subdomains)
         for domain in Self.bypassDomains {
             if host.hasSuffix("." + domain) {
                 return true
             }
         }
-        return false
+        
+        // If whitelist is empty, intercept all (default behavior)
+        if cachedWhitelist.isEmpty {
+            return false
+        }
+        
+        let hostLower = host.lowercased()
+        
+        // Check if host matches any whitelist entry
+        for pattern in cachedWhitelist {
+            // Exact match
+            if hostLower == pattern {
+                return false  // Don't bypass - intercept this host
+            }
+            // Suffix match (for subdomains)
+            if hostLower.hasSuffix("." + pattern) {
+                return false  // Don't bypass - intercept this host
+            }
+            // Pattern match (for wildcard-like behavior)
+            if pattern.hasPrefix("*") {
+                let suffix = String(pattern.dropFirst())
+                if hostLower.hasSuffix(suffix) {
+                    return false
+                }
+            }
+        }
+        
+        // Host not in whitelist, bypass MITM
+        return true
     }
     
     init(connection: NWConnection, clashPort: UInt16) {
         self.clientConnection = connection
         self.clashPort = clashPort
+        
+        // Read whitelist once at init (thread-safe)
+        let mitmHostsString = UserDefaults.standard.string(forKey: "mitmHosts") ?? ""
+        let trimmed = mitmHostsString.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            self.cachedWhitelist = []
+        } else {
+            let separators = CharacterSet(charactersIn: ",，\n")
+            self.cachedWhitelist = trimmed.components(separatedBy: separators)
+                .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+                .filter { !$0.isEmpty }
+            // Whitelist loaded silently
+        }
     }
     
     func start() {
