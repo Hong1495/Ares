@@ -24,6 +24,9 @@ struct SettingsView: View {
     // System Proxy Bypass
     @AppStorage("bypassRules") private var bypassRules = "localhost,127.*,10.*,172.16.*,172.31.*,192.168.*"
     
+    // MITM Settings
+    @AppStorage("mitmPorts") private var mitmPorts = "80, 443, 8080, 8443"
+    
     var body: some View {
         Form {
             // General Settings
@@ -161,6 +164,19 @@ struct SettingsView: View {
                 }
                 .padding(.vertical, 4)
                 
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("MITM Intercept Ports")
+                        .fontWeight(.medium)
+                    TextField("Ports", text: $mitmPorts)
+                        .textFieldStyle(.roundedBorder)
+                    
+                    Text("Comma-separated ports to intercept (e.g. 80, 443, 8888)")
+                        .font(.footnote)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
+                
                 Button("Apply Proxy Rules") {
                     Task {
                         // 1. Refresh system proxy with new rules if currently enabled
@@ -171,7 +187,20 @@ struct SettingsView: View {
                         
                         // 2. If TUN mode is active, we MUST restart Clash to rebuild config with new bypass rules
                         if tunEnabled {
+                            let wasMITMRunning = NetworkMITMService.shared.isRunning
+                            
+                            // Stop MITM first to prevent errors during Clash restart
+                            if wasMITMRunning {
+                                await NetworkMITMService.shared.stop()
+                            }
+                            
                             await clashViewModel.restart()
+                            
+                            // Restart MITM if it was running (with safety delay)
+                            if wasMITMRunning {
+                                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1s wait for Core stability
+                                await NetworkMITMService.shared.start()
+                            }
                         }
                     }
                 }

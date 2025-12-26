@@ -64,12 +64,18 @@ actor ConfigService {
         
         // Dynamic Rules: Inject Bypass rules and MITM rules
         // Fetch bypass rules from UserDefaults via MainActor
-        let (mitmEnabled, mitmPort, bypassRules) = await MainActor.run {
+        let (mitmEnabled, mitmPort, bypassRules, mitmPortsString) = await MainActor.run {
             let mitm = NetworkMITMService.shared
-            return (mitm.isRunning, Int(mitm.currentPort), UserDefaults.standard.string(forKey: "bypassRules") ?? "")
+            let defaults = UserDefaults.standard
+            return (
+                mitm.isRunning,
+                Int(mitm.currentPort),
+                defaults.string(forKey: "bypassRules") ?? "",
+                defaults.string(forKey: "mitmPorts") ?? "80, 443, 8080, 8443"
+            )
         }
         
-        cleanedProfile = injectDynamicRules(into: cleanedProfile, tunEnabled: tunEnabled, mitmEnabled: mitmEnabled, mitmPort: mitmPort, bypassRules: bypassRules)
+        cleanedProfile = injectDynamicRules(into: cleanedProfile, tunEnabled: tunEnabled, mitmEnabled: mitmEnabled, mitmPort: mitmPort, bypassRules: bypassRules, mitmPortsString: mitmPortsString)
         
         // Build base Clash config with TUN setting (MainActor required for ClashConfig)
         let baseConfig = await MainActor.run {
@@ -198,10 +204,15 @@ actor ConfigService {
     
     /// Inject Dynamic Rules (Bypass & MITM) into existing profile sections
     /// - bypassRules: User-defined bypass domains (DIRECT)
-    /// - mitm: MITM interception rules (hijack 443/80)
-    nonisolated private func injectDynamicRules(into yaml: String, tunEnabled: Bool, mitmEnabled: Bool, mitmPort: Int, bypassRules: String) -> String {
+    /// - mitm: MITM interception rules (hijack configured ports)
+    /// Inject Dynamic Rules (Bypass & MITM) into existing profile sections
+    /// - bypassRules: User-defined bypass domains (DIRECT)
+    /// - mitm: MITM interception rules (hijack configured ports)
+    nonisolated private func injectDynamicRules(into yaml: String, tunEnabled: Bool, mitmEnabled: Bool, mitmPort: Int, bypassRules: String, mitmPortsString: String) -> String {
+        print("[ConfigService] 🛠 Injecting Rules - Bypass: [\(bypassRules)], MITM Ports: [\(mitmPortsString)], TUN: \(tunEnabled), MITM: \(mitmEnabled)")
+        
         var result = yaml
-        var dynamicRulesBuffer = ""
+        var rulesToInject: [String] = []
         
         // 1. Generate Bypass Rules (Highest Priority)
         let bypassItems = bypassRules.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
@@ -209,36 +220,39 @@ actor ConfigService {
         for item in bypassItems {
             // Smart Parsing for macOS defaults
             if item == "10.*" {
-                dynamicRulesBuffer += "  - IP-CIDR,10.0.0.0/8,DIRECT\n"
+                rulesToInject.append("  - IP-CIDR,10.0.0.0/8,DIRECT")
             } else if item == "127.*" {
-                dynamicRulesBuffer += "  - IP-CIDR,127.0.0.0/8,DIRECT\n"
+                rulesToInject.append("  - IP-CIDR,127.0.0.0/8,DIRECT")
             } else if item == "192.168.*" {
-                dynamicRulesBuffer += "  - IP-CIDR,192.168.0.0/16,DIRECT\n"
+                rulesToInject.append("  - IP-CIDR,192.168.0.0/16,DIRECT")
             } else if item == "172.16.*" {
-                dynamicRulesBuffer += "  - IP-CIDR,172.16.0.0/12,DIRECT\n" // Standard Private Range
+                rulesToInject.append("  - IP-CIDR,172.16.0.0/12,DIRECT")
             } else if item.contains("/") {
-                // Assume generic CIDR (e.g. 1.2.3.4/24)
-                dynamicRulesBuffer += "  - IP-CIDR,\(item),DIRECT\n"
+                rulesToInject.append("  - IP-CIDR,\(item),DIRECT")
             } else {
-                // Default to Domain Suffix
-                // Remove any wildcard prefixes like *.google.com -> google.com
                 let domain = item.replacingOccurrences(of: "*.", with: "")
-                dynamicRulesBuffer += "  - DOMAIN-SUFFIX,\(domain),DIRECT\n"
+                rulesToInject.append("  - DOMAIN-SUFFIX,\(domain),DIRECT")
             }
         }
         
         // 2. Generate MITM Rules (If Enabled in TUN mode)
         if tunEnabled && mitmEnabled && mitmPort > 0 {
-            // Calculate MITM proxy injection (needs to happen separately in proxies section)
-            // But here we build the rules string first
-            let mitmRules = """
-              - DST-PORT,\(mitmPort),DIRECT
-              - AND,((DST-PORT,80),(NOT,((PROCESS-NAME,Ares)))),MITM-Intercept
-              - AND,((DST-PORT,443),(NOT,((PROCESS-NAME,Ares)))),MITM-Intercept
-              - AND,((DST-PORT,8080),(NOT,((PROCESS-NAME,Ares)))),MITM-Intercept
-              - AND,((DST-PORT,8443),(NOT,((PROCESS-NAME,Ares)))),MITM-Intercept
-            """
-            dynamicRulesBuffer += (mitmRules + "\n")
+            // Parse user configured MITM ports (Handle both English and Chinese commas)
+            let separators = CharacterSet(charactersIn: ",，")
+            let targetPorts = mitmPortsString.components(separatedBy: separators).compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+            // Default to standard ports if empty
+            let validPorts = targetPorts.isEmpty ? [80, 443, 8080, 8443] : targetPorts
+            
+            // Prevent loop: The MITM port itself MUST be DIRECT
+            rulesToInject.append("  - DST-PORT,\(mitmPort),DIRECT")
+            
+            for port in validPorts {
+                // Validation: Ensure valid port range and skip MITM port
+                if port > 0 && port < 65536 && port != mitmPort {
+                     // Note: Using spaces to ensure indentation matches "rules:" children
+                     rulesToInject.append("  - AND,((DST-PORT,\(port)),(NOT,((PROCESS-NAME,Ares)))),MITM-Intercept")
+                }
+            }
             
             // Inject MITM Proxy Definition
             let mitmProxy = """
@@ -255,8 +269,11 @@ actor ConfigService {
             }
         }
         
+        print("[ConfigService] 📋 Generated \(rulesToInject.count) dynamic rules:\n\(rulesToInject.joined(separator: "\n"))")
+        
         // 3. Inject Rules Buffer at the top of "rules:"
-        if !dynamicRulesBuffer.isEmpty {
+        if !rulesToInject.isEmpty {
+            let dynamicRulesBuffer = rulesToInject.joined(separator: "\n")
             if let rulesRange = result.range(of: "rules:", options: .caseInsensitive) {
                 if let lineEnd = result[rulesRange.upperBound...].firstIndex(of: "\n") {
                     result.insert(contentsOf: "\n" + dynamicRulesBuffer, at: lineEnd)
