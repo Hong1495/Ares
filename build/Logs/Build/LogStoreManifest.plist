@@ -48,7 +48,7 @@
 			<key>uniqueIdentifier</key>
 			<string>0B9ABCC9-518B-4C61-8011-14426C8F71EA</string>
 		</dict>
-		<key>5C4C9083-68E2-4373-B206-70DB290C5AB4</key>
+		<key>F1CADBC5-7A77-498A-9B4F-B44774ED0D49</key>
 		<dict>
 			<key>className</key>
 			<string>IDECommandLineBuildLog</string>
@@ -57,7 +57,7 @@
 			<key>domainType</key>
 			<string>Xcode.IDEActivityLogDomainType.BuildLog</string>
 			<key>fileName</key>
-			<string>5C4C9083-68E2-4373-B206-70DB290C5AB4.xcactivitylog</string>
+			<string>F1CADBC5-7A77-498A-9B4F-B44774ED0D49.xcactivitylog</string>
 			<key>hasPrimaryLog</key>
 			<true/>
 			<key>primaryObservable</key>
@@ -82,97 +82,13 @@
 			<key>signature</key>
 			<string>Building project Ares with scheme Ares and configuration Debug</string>
 			<key>timeStartedRecording</key>
-			<real>789034389.18399298</real>
+			<real>789035422.70041394</real>
 			<key>timeStoppedRecording</key>
-			<real>789034392.91896105</real>
+			<real>789035428.50228095</real>
 			<key>title</key>
 			<string>Building project Ares with scheme Ares and configuration Debug</string>
 			<key>uniqueIdentifier</key>
-			<string>5C4C9083-68E2-4373-B206-70DB290C5AB4</string>
-		</dict>
-		<key>7D8E576E-7EBC-4D59-AACC-6F08E2E61CB7</key>
-		<dict>
-			<key>className</key>
-			<string>IDECommandLineBuildLog</string>
-			<key>documentTypeString</key>
-			<string>&lt;nil&gt;</string>
-			<key>domainType</key>
-			<string>Xcode.IDEActivityLogDomainType.BuildLog</string>
-			<key>fileName</key>
-			<string>7D8E576E-7EBC-4D59-AACC-6F08E2E61CB7.xcactivitylog</string>
-			<key>hasPrimaryLog</key>
-			<true/>
-			<key>primaryObservable</key>
-			<dict>
-				<key>highLevelStatus</key>
-				<string>W</string>
-				<key>totalNumberOfAnalyzerIssues</key>
-				<integer>0</integer>
-				<key>totalNumberOfErrors</key>
-				<integer>0</integer>
-				<key>totalNumberOfTestFailures</key>
-				<integer>0</integer>
-				<key>totalNumberOfWarnings</key>
-				<integer>9</integer>
-			</dict>
-			<key>schemeIdentifier-containerName</key>
-			<string>Ares project</string>
-			<key>schemeIdentifier-schemeName</key>
-			<string>Ares</string>
-			<key>schemeIdentifier-sharedScheme</key>
-			<integer>1</integer>
-			<key>signature</key>
-			<string>Building project Ares with scheme Ares and configuration Debug</string>
-			<key>timeStartedRecording</key>
-			<real>789034520.748734</real>
-			<key>timeStoppedRecording</key>
-			<real>789034525.77330804</real>
-			<key>title</key>
-			<string>Building project Ares with scheme Ares and configuration Debug</string>
-			<key>uniqueIdentifier</key>
-			<string>7D8E576E-7EBC-4D59-AACC-6F08E2E61CB7</string>
-		</dict>
-		<key>D106867B-4D11-4B57-A719-4FC20C7B01D5</key>
-		<dict>
-			<key>className</key>
-			<string>IDECommandLineBuildLog</string>
-			<key>documentTypeString</key>
-			<string>&lt;nil&gt;</string>
-			<key>domainType</key>
-			<string>Xcode.IDEActivityLogDomainType.BuildLog</string>
-			<key>fileName</key>
-			<string>D106867B-4D11-4B57-A719-4FC20C7B01D5.xcactivitylog</string>
-			<key>hasPrimaryLog</key>
-			<true/>
-			<key>primaryObservable</key>
-			<dict>
-				<key>highLevelStatus</key>
-				<string>W</string>
-				<key>totalNumberOfAnalyzerIssues</key>
-				<integer>0</integer>
-				<key>totalNumberOfErrors</key>
-				<integer>0</integer>
-				<key>totalNumberOfTestFailures</key>
-				<integer>0</integer>
-				<key>totalNumberOfWarnings</key>
-				<integer>9</integer>
-			</dict>
-			<key>schemeIdentifier-containerName</key>
-			<string>Ares project</string>
-			<key>schemeIdentifier-schemeName</key>
-			<string>Ares</string>
-			<key>schemeIdentifier-sharedScheme</key>
-			<integer>1</integer>
-			<key>signature</key>
-			<string>Building project Ares with scheme Ares and configuration Debug</string>
-			<key>timeStartedRecording</key>
-			<real>789034287.44297099</real>
-			<key>timeStoppedRecording</key>
-			<real>789034323.49665201</real>
-			<key>title</key>
-			<string>Building project Ares with scheme Ares and configuration Debug</string>
-			<key>uniqueIdentifier</key>
-			<string>D106867B-4D11-4B57-A719-4FC20C7B01D5</string>
+			<string>F1CADBC5-7A77-498A-9B4F-B44774ED0D49</string>
 		</dict>
 	</dict>
 </dict>

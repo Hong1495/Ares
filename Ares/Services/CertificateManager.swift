@@ -89,48 +89,14 @@ final class CertificateManager: ObservableObject {
 
     /// Generates a new Root CA with proper extensions
     func generateRootCA() async throws {
-        let caKey = caKeyPath.path
-        let caCert = caCertPath.path
-        let config = openSSLConfigPath.path
-        
-        // 0. Create OpenSSL Config
-        let configContent = """
-        [ req ]
-        default_bits       = 2048
-        distinguished_name = req_distinguished_name
-        x509_extensions    = v3_ca
-        prompt             = no
-        
-        [ req_distinguished_name ]
-        CN = Ares MITM Proxy CA [\(UUID().uuidString.prefix(8))]
-        O  = Ares
-        C  = US
-        
-        [ v3_ca ]
-        subjectKeyIdentifier = hash
-        authorityKeyIdentifier = keyid:always,issuer
-        basicConstraints = critical,CA:true
-        keyUsage = critical, digitalSignature, cRLSign, keyCertSign
-        """
-        
-        try configContent.write(to: openSSLConfigPath, atomically: true, encoding: .utf8)
-        
-        // 1. Generate CA Private Key
-        try await runOpenSSL(["genrsa", "-out", caKey, "2048"])
-        
-        // 2. Generate CA Certificate using Config
-        try await runOpenSSL([
-            "req", "-new", "-x509", "-days", "3650",
-            "-key", caKey,
-            "-out", caCert,
-            "-config", config
-        ])
-        
+        // Delegate to actor to ensure serialization and prevent race conditions
+        try await generator.forceRegenerateRootCA()
         await MainActor.run { checkRootCA() }
     }
     
     /// Gets (or generates) a SecIdentity for a specific host
     func getIdentity(for host: String) async throws -> SecIdentity {
+        // Delegation entirely to actor, which handles race conditions
         return try await generator.getIdentity(for: host)
     }
     
@@ -143,6 +109,7 @@ final class CertificateManager: ObservableObject {
         
         private var caCertPath: URL { certsDirectory.appendingPathComponent("ca.crt") }
         private var caKeyPath: URL { certsDirectory.appendingPathComponent("ca.key") }
+        private var openSSLConfigPath: URL { certsDirectory.appendingPathComponent("openssl.cnf") }
         
         // Temporary keychain to avoid permission prompts
         private var tempKeychain: SecKeychain?
@@ -244,7 +211,63 @@ final class CertificateManager: ObservableObject {
             return kc
         }
         
+        func forceRegenerateRootCA() async throws {
+            let caKey = caKeyPath.path
+            let caCert = caCertPath.path
+            let config = openSSLConfigPath.path
+            
+            // 0. Create OpenSSL Config
+            let configContent = """
+            [ req ]
+            default_bits       = 2048
+            distinguished_name = req_distinguished_name
+            x509_extensions    = v3_ca
+            prompt             = no
+            
+            [ req_distinguished_name ]
+            CN = Ares MITM Proxy CA [\(UUID().uuidString.prefix(8))]
+            O  = Ares
+            C  = US
+            
+            [ v3_ca ]
+            subjectKeyIdentifier = hash
+            authorityKeyIdentifier = keyid:always,issuer
+            basicConstraints = critical,CA:true
+            keyUsage = critical, digitalSignature, cRLSign, keyCertSign
+            """
+            
+            try configContent.write(to: openSSLConfigPath, atomically: true, encoding: .utf8)
+            
+            // 1. Generate CA Private Key
+            try await runOpenSSL(["genrsa", "-out", caKey, "2048"])
+            
+            // 2. Generate CA Certificate using Config
+            try await runOpenSSL([
+                "req", "-new", "-x509", "-days", "3650",
+                "-key", caKey,
+                "-out", caCert,
+                "-config", config
+            ])
+            
+            print("[CertificateManager] ✅ Root CA Regenerated (Actor)")
+            
+            // Invalidate caches
+            identityCache.removeAll()
+        }
+        
+        func ensureRootCA() async throws {
+            let fileManager = FileManager.default
+            if fileManager.fileExists(atPath: caCertPath.path) && fileManager.fileExists(atPath: caKeyPath.path) {
+                return
+            }
+            print("[CertificateManager] ⚠️ Root CA missing, regenerating inside Actor...")
+            try await forceRegenerateRootCA()
+        }
+
         func getIdentity(for host: String) async throws -> SecIdentity {
+            // Ensure CA exists safely
+            try await ensureRootCA()
+            
             // 1. Check Cache
             if let cached = identityCache[host] {
                 return cached
@@ -428,35 +451,58 @@ final class CertificateManager: ObservableObject {
             process.executableURL = URL(fileURLWithPath: "/usr/bin/openssl")
             process.arguments = arguments
             
-            process.standardOutput = Pipe()
-            process.standardError = Pipe()
+            let outputPipe = Pipe()
+            let errorPipe = Pipe()
+            process.standardOutput = outputPipe
+            process.standardError = errorPipe
             
-            try process.run()
-            process.waitUntilExit()
-            
-            if process.terminationStatus != 0 {
-                throw NSError(domain: "OpenSSL", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: "OpenSSL failed with arguments: \(arguments)"])
+            do {
+                try process.run()
+                // Read stderr to capture error details if it fails
+                let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+                process.waitUntilExit()
+                
+                if process.terminationStatus != 0 {
+                    let errorStr = String(data: errorData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Unknown OpenSSL Error"
+                    // Log the actual error
+                    print("[CertificateManager] ❌ OpenSSL CLI Failed. Cmd: openssl \(arguments.joined(separator: " "))\nSTDERR: \(errorStr)")
+                    
+                    throw NSError(domain: "OpenSSL", code: Int(process.terminationStatus), 
+                                userInfo: [NSLocalizedDescriptionKey: "OpenSSL Failed: \(errorStr). Args: \(arguments)"])
+                }
+            } catch {
+                throw error
             }
         }
     }
     
     private func runOpenSSL(_ arguments: [String]) async throws {
          // Facade for outer class usage (like Root CA generation)
-         // Note: Code duplication is acceptable here to keep Actor isolated
         await Task.yield()
         
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/openssl")
         process.arguments = arguments
         
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
         
-        try process.run()
-        process.waitUntilExit()
-        
-        if process.terminationStatus != 0 {
-            throw NSError(domain: "OpenSSL", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: "OpenSSL failed with arguments: \(arguments)"])
+        do {
+            try process.run()
+            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            
+            if process.terminationStatus != 0 {
+                let errorStr = String(data: errorData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Unknown OpenSSL Error"
+                print("[CertificateManager] ❌ OpenSSL CLI Failed (Outer). Cmd: openssl \(arguments.joined(separator: " "))\nSTDERR: \(errorStr)")
+                
+                throw NSError(domain: "OpenSSL", code: Int(process.terminationStatus), 
+                            userInfo: [NSLocalizedDescriptionKey: "OpenSSL Failed: \(errorStr). Args: \(arguments)"])
+            }
+        } catch {
+            throw error
         }
     }
     
