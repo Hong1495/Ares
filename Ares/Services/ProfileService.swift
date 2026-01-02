@@ -301,9 +301,23 @@ class ProfileService: ObservableObject {
             if isReady {
                 ClashViewModel.shared.addLog("[ProfileService] ✅ Profile switch completed")
                 
-                // 4. Refresh proxies and rules
-                try? await ClashController.shared.fetchProxiesData()
-                try? await ClashController.shared.fetchRules()
+                // 4. Force refresh proxies and rules
+                // Clear old state first to avoid UI confusing old data with new
+                await MainActor.run {
+                    ClashController.shared.proxyGroups = []
+                    ClashController.shared.proxyNodes = [:]
+                    ClashController.shared.rules = []
+                }
+                
+                try? await Task.sleep(nanoseconds: 500_000_000) // Small delay for core to initialize mappings
+                
+                do {
+                    try await ClashController.shared.fetchProxiesData()
+                    try await ClashController.shared.fetchRules()
+                    ClashViewModel.shared.addLog("[ProfileService] 📡 Refreshed UI data for new profile")
+                } catch {
+                     ClashViewModel.shared.addLog("[ProfileService] ⚠️ Failed to fetch fresh data: \(error)")
+                }
             } else {
                 ClashViewModel.shared.addLog("[ProfileService] ⚠️ Clash API not ready after restart")
             }
