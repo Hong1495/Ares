@@ -211,7 +211,7 @@ actor ConfigService {
         print("[ConfigService] 🛠 Injecting Rules - Bypass: [\(bypassRules)], MITM Ports: [\(mitmPortsString)], MITM Hosts: [\(mitmHosts)], TUN: \(tunEnabled), MITM: \(mitmEnabled)")
         
         var result = yaml
-        var rulesToInject: [String] = []
+        var rulesToInject: [String] = []  // No indentation yet
         
         // 1. Generate Bypass Rules (Highest Priority)
         let bypassItems = bypassRules.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
@@ -219,25 +219,25 @@ actor ConfigService {
         for item in bypassItems {
             // Smart Parsing for macOS defaults
             if item == "10.*" {
-                rulesToInject.append("  - IP-CIDR,10.0.0.0/8,DIRECT")
+                rulesToInject.append("- IP-CIDR,10.0.0.0/8,DIRECT")
             } else if item == "127.*" {
-                rulesToInject.append("  - IP-CIDR,127.0.0.0/8,DIRECT")
+                rulesToInject.append("- IP-CIDR,127.0.0.0/8,DIRECT")
             } else if item == "192.168.*" {
-                rulesToInject.append("  - IP-CIDR,192.168.0.0/16,DIRECT")
+                rulesToInject.append("- IP-CIDR,192.168.0.0/16,DIRECT")
             } else if item == "172.16.*" {
-                rulesToInject.append("  - IP-CIDR,172.16.0.0/12,DIRECT")
+                rulesToInject.append("- IP-CIDR,172.16.0.0/12,DIRECT")
             } else if item.contains("/") {
-                rulesToInject.append("  - IP-CIDR,\(item),DIRECT")
+                rulesToInject.append("- IP-CIDR,\(item),DIRECT")
             } else {
                 let domain = item.replacingOccurrences(of: "*.", with: "")
-                rulesToInject.append("  - DOMAIN-SUFFIX,\(domain),DIRECT")
+                rulesToInject.append("- DOMAIN-SUFFIX,\(domain),DIRECT")
             }
         }
         
         // 2. Generate MITM Rules (If Enabled in TUN mode)
         if tunEnabled && mitmEnabled && mitmPort > 0 {
             // Prevent loop: The MITM port itself MUST be DIRECT
-            rulesToInject.append("  - DST-PORT,\(mitmPort),DIRECT")
+            rulesToInject.append("- DST-PORT,\(mitmPort),DIRECT")
             
             // Parse whitelist domains
             let separators = CharacterSet(charactersIn: ",，\n")
@@ -246,61 +246,99 @@ actor ConfigService {
                 .filter { !$0.isEmpty }
             
             if !whitelistDomains.isEmpty {
-                // Whitelist mode: Only route whitelisted domains to MITM
-                // Other traffic goes through normal Clash rules (high efficiency)
-                
-                // Use AND rule to prevent loops while allowing falling through to Proxy rules
-                // (Traffic from Ares will fail this rule and match subsequent profile rules)
+                // Whitelist mode
                 for domain in whitelistDomains {
-                    rulesToInject.append("  - AND,((DOMAIN-SUFFIX,\(domain)),(NOT,((PROCESS-NAME,Ares)))),MITM-Intercept")
+                    rulesToInject.append("- AND,((DOMAIN-SUFFIX,\(domain)),(NOT,((PROCESS-NAME,Ares)))),MITM-Intercept")
                 }
-                print("[ConfigService] 📋 MITM Whitelist mode: \(whitelistDomains.count) domains will be intercepted (Loop protection active for Ares)")
+                print("[ConfigService] 📋 MITM Whitelist mode: \(whitelistDomains.count) domains will be intercepted")
             } else {
-                // Legacy mode: Intercept all traffic on configured ports
-                // Parse user configured MITM ports (Handle both English and Chinese commas)
+                // Legacy mode: Intercept ports
                 let portSeparators = CharacterSet(charactersIn: ",，")
                 let targetPorts = mitmPortsString.components(separatedBy: portSeparators).compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
-                // Default to standard ports if empty
                 let validPorts = targetPorts.isEmpty ? [80, 443, 8080, 8443] : targetPorts
                 
                 for port in validPorts {
-                    // Validation: Ensure valid port range and skip MITM port
                     if port > 0 && port < 65536 && port != mitmPort {
-                         // Note: Using spaces to ensure indentation matches "rules:" children
-                         rulesToInject.append("  - AND,((DST-PORT,\(port)),(NOT,((PROCESS-NAME,Ares)))),MITM-Intercept")
+                         rulesToInject.append("- AND,((DST-PORT,\(port)),(NOT,((PROCESS-NAME,Ares)))),MITM-Intercept")
                     }
                 }
                 print("[ConfigService] 📋 MITM Port mode: intercepting ports \(validPorts)")
             }
             
             // Inject MITM Proxy Definition
+            // Detect indentation for proxies
+            var proxyIndent = "  " // Default 2 spaces
+            if let range = result.range(of: "(?m)^\\s*proxies:.*$", options: .regularExpression) {
+                proxyIndent = detectIndentation(in: result, after: range)
+            }
+            
             let mitmProxy = """
-              - name: MITM-Intercept
-                type: http
-                server: 127.0.0.1
-                port: \(mitmPort)
+            \(proxyIndent)- name: MITM-Intercept
+            \(proxyIndent)  type: http
+            \(proxyIndent)  server: 127.0.0.1
+            \(proxyIndent)  port: \(mitmPort)
             """
             
-            if let proxiesRange = result.range(of: "proxies:", options: .caseInsensitive) {
-                if let lineEnd = result[proxiesRange.upperBound...].firstIndex(of: "\n") {
-                    result.insert(contentsOf: "\n" + mitmProxy, at: lineEnd)
-                }
+            // Regex to find "proxies:" at start of line
+            if let range = result.range(of: "(?m)^\\s*proxies:.*$", options: .regularExpression) {
+                result.insert(contentsOf: "\n" + mitmProxy, at: range.upperBound)
+            } else {
+                // If missing, append (using default 2 space indent)
+                result.append("\nproxies:\n" + mitmProxy)
             }
         }
         
-        print("[ConfigService] 📋 Generated \(rulesToInject.count) dynamic rules:\n\(rulesToInject.joined(separator: "\n"))")
+        print("[ConfigService] 📋 Generated \(rulesToInject.count) dynamic rules")
         
         // 3. Inject Rules Buffer at the top of "rules:"
         if !rulesToInject.isEmpty {
-            let dynamicRulesBuffer = rulesToInject.joined(separator: "\n")
-            if let rulesRange = result.range(of: "rules:", options: .caseInsensitive) {
-                if let lineEnd = result[rulesRange.upperBound...].firstIndex(of: "\n") {
-                    result.insert(contentsOf: "\n" + dynamicRulesBuffer, at: lineEnd)
-                }
+            // Detect indentation for rules
+            var ruleIndent = "  "
+            if let range = result.range(of: "(?m)^\\s*rules:.*$", options: .regularExpression) {
+                ruleIndent = detectIndentation(in: result, after: range)
+            }
+            
+            // Apply indentation to all rules
+            let dynamicRulesBuffer = rulesToInject.map { ruleIndent + $0 }.joined(separator: "\n")
+            
+            // Regex to find "rules:" at start of line
+            if let range = result.range(of: "(?m)^\\s*rules:.*$", options: .regularExpression) {
+                result.insert(contentsOf: "\n" + dynamicRulesBuffer, at: range.upperBound)
+            } else {
+                 // If missing, append
+                result.append("\nrules:\n" + dynamicRulesBuffer)
             }
         }
         
         return result
+    }
+    
+    /// Helper to detect indentation of list items
+    nonisolated private func detectIndentation(in yaml: String, after range: Range<String.Index>) -> String {
+        let defaultIndent = "  "
+        // Look at the next 20 lines max
+        let substring = yaml[range.upperBound...]
+        let lines = substring.components(separatedBy: .newlines).prefix(20)
+        
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty || trimmed.hasPrefix("#") { continue }
+            
+            // If we find a list item, calculate its indentation
+            if trimmed.hasPrefix("-") {
+                let leadingSpaces = line.prefix(while: { $0 == " " }).count
+                return String(repeating: " ", count: leadingSpaces)
+            }
+            
+            // If we hit something that's NOT a list item (and not a comment/empty), 
+            // the list might be empty or formatted differently. Stop.
+            // Exception: sub-keys (e.g. key: value). But we are looking for list items of the parent.
+            if !trimmed.hasPrefix("-") && trimmed.contains(":") {
+                 // Might be end of section
+                 break
+            }
+        }
+        return defaultIndent
     }
     
     /// Build a safe fallback config when no profile is available
