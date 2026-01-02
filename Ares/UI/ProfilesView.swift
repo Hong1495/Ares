@@ -11,7 +11,7 @@ struct ProfilesView: View {
     @State private var errorMessage: String?
     
     var body: some View {
-        ScrollView {
+        ScrollView(showsIndicators: false) {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 16)], spacing: 16) {
                 // "Add Profile" Card
                 Menu {

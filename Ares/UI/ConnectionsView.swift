@@ -222,6 +222,7 @@ struct ConnectionsView: View {
                 }
                 .width(ideal: 90)
             }
+            .scrollIndicators(.hidden)
         }
         .navigationTitle("Connections")
         .task {

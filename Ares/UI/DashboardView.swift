@@ -7,7 +7,7 @@ struct DashboardView: View {
     
 
     var body: some View {
-        ScrollView {
+        ScrollView(showsIndicators: false) {
             VStack(spacing: 16) {
                 StatusHeader()
                 MainGrid()

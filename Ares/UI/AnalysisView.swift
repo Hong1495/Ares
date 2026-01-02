@@ -184,7 +184,7 @@ struct AnalysisView: View {
                     
                     Divider()
                     
-                    ScrollView {
+                    ScrollView(showsIndicators: false) {
                         VStack(alignment: .leading, spacing: 0) {
                             ForEach(httpMethods, id: \.self) { method in
                                 Button {
@@ -253,7 +253,7 @@ struct AnalysisView: View {
                     
                     Divider()
                     
-                    ScrollView {
+                    ScrollView(showsIndicators: false) {
                         VStack(alignment: .leading, spacing: 0) {
                             ForEach(resourceTypes, id: \.self) { type in
                                 Button {
@@ -458,6 +458,7 @@ struct DetailContent: View {
             }
             .width(60)
         }
+        .scrollIndicators(.hidden)
 
 
     }

@@ -135,7 +135,7 @@ struct LogsView: View {
             
             // Logs display
             ScrollViewReader { proxy in
-                ScrollView {
+                ScrollView(showsIndicators: false) {
                     LazyVStack(alignment: .leading, spacing: 1) {
                         ForEach(Array(filteredLogs.enumerated()), id: \.offset) { index, line in
                             LogLineView(line: line, index: index)

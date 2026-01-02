@@ -16,7 +16,22 @@ struct CurrentProxyCard: View {
         case .direct:
             return []
         case .rule:
-            return clashController.proxyGroups.filter { $0.name == "🚀 节点选择" }
+            // Smart select the main proxy group
+            let allGroups = clashController.proxyGroups
+            
+            // 1. Try exact match for common standards
+            if let exact = allGroups.first(where: { $0.name == "🚀 节点选择" }) { return [exact] }
+            if let exact = allGroups.first(where: { $0.name == "Proxy" }) { return [exact] }
+            if let exact = allGroups.first(where: { $0.name == "PROXY" }) { return [exact] }
+            
+            // 2. Try partial match
+            if let partial = allGroups.first(where: { $0.name.contains("节点") && $0.type == "Selector" }) { return [partial] }
+            if let partial = allGroups.first(where: { $0.name.contains("Proxy") && $0.type == "Selector" }) { return [partial] }
+            
+            // 3. Fallback: First non-GLOBAL selector
+            if let fallback = allGroups.first(where: { $0.type == "Selector" && $0.name != "GLOBAL" }) { return [fallback] }
+            
+            return []
         }
     }
     

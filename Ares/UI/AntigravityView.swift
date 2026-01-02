@@ -10,7 +10,7 @@ struct AntigravityView: View {
 
     
     var body: some View {
-        ScrollView {
+        ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 20) {
                 // 1. AVAILABLE MODELS (From IDE)
                 if !trafficAnalyzer.availableModels.isEmpty {

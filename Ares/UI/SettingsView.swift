@@ -158,6 +158,7 @@ struct SettingsView: View {
                         .background(Color(nsColor: .textBackgroundColor))
                         .cornerRadius(4)
                         .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.gray.opacity(0.2)))
+                        .scrollIndicators(.hidden)
                     
                     Text("Comma-separated domains/IPs to bypass proxy")
                         .font(.footnote)
@@ -272,6 +273,7 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Settings")
+        .scrollIndicators(.hidden)
     }
     
     private func clearCache() {

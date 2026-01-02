@@ -71,6 +71,7 @@ struct RulesView: View {
                 }
                 .width(min: 100, max: 200)
             }
+            .scrollIndicators(.hidden)
         }
         .navigationTitle("Rules")
         .task {

@@ -50,7 +50,7 @@ struct ProxiesView: View {
             Divider()
             
             // Content
-            ScrollView {
+            ScrollView(showsIndicators: false) {
                 if selectedTab == .direct {
                     VStack(spacing: 12) {
                         Image(systemName: "arrow.turn.up.right")
