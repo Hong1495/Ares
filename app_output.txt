@@ -1,0 +1,106 @@
+[TeleWorker] 🚀 Listener started on port 10086
+[TeleWorker] 📡 State: ready
+[14:40:35] [ProfileService] ✅ Loaded 1 profiles
+[14:40:35] [ProfileService] 🔹 Active Profile: crelay
+🏥 Performing Startup Health Check...
+[14:40:35] [AppState] 🚀 Initializing application state...
+[14:40:35] [Init] 🔐 Checking privileges for startup...
+[14:40:35] [Privilege] 🔐 Installing sudoers configuration...
+[14:40:35] [Privilege] ❌ Installation failed: {     NSAppleScriptErrorAppName = AresApp;     NSAppleScriptErrorBriefMessage = "Authorization failed.";     NSAppleScriptErrorMessage = "Authorization failed.";     NSAppleScriptErrorRange = "NSRange: {0, 119}"; }
+[14:40:35] [Init] ⚠️ Privilege installation failed - TUN might fail
+🚀 Starting Clash...
+[14:40:35] [ClashController] 🟡 Toggling in progress, silencing monitors...
+[14:40:35] [ClashController] 🟡 Toggling in progress, silencing monitors...
+[14:40:35] [ClashServiceActor] 🚀 Starting Clash...
+[14:40:35] [ClashServiceActor] 🧹 Cleaning up old processes...
+[14:40:36] [ClashServiceActor] 📝 Building configuration...
+[14:40:36] [Config] 📝 Building config (TUN=false)...
+[ConfigService] 🛠 Injecting Rules - Bypass: [], MITM Ports: [80, 443, 8080, 8443], TUN: false, MITM: false
+[ConfigService] 📋 Generated 0 dynamic rules:
+
+[14:40:36] [Config] 📝 Writing config content (Preview lines 1-10):
+[14:40:36] # Ares Clash Configuration mixed-port: 7890 socks-port: 7891 port: 7892 mode: rule log-level: info allow-lan: false ipv6: false external-controller: 127.0.0.1:9097 secret: ""
+[14:40:36] [Config] ✅ Config written to: config.yaml
+[14:40:36] [ClashServiceActor] ✅ Binary found: clash-meta
+[14:40:36] [ClashController] 🟡 Toggling in progress, silencing monitors...
+[14:40:36] [ClashServiceActor] ✅ Clash launched (Normal)
+[14:40:36] [ClashServiceActor] ⏱️ Total startup time: 0.71s
+[14:40:36] [ClashController] ⚠️ Failed to get connections: Error Domain=NSURLErrorDomain Code=-1004 "Could not connect to the server." UserInfo={_kCFStreamErrorCodeKey=61, NSUnderlyingError=0xa1161aac0 {Error Domain=kCFErrorDomainCFNetwork Code=-1004 "(null)" UserInfo={_NSURLErrorNWPathKey=satisfied (Path is satisfied), viable, interface: lo0, _kCFStreamErrorCodeKey=61, _kCFStreamErrorDomainKey=1}}, _NSURLErrorFailingURLSessionTaskErrorKey=LocalDataTask <AF001522-3BDA-4C3A-A557-B8246ECC6074>.<3>, _NSURLErrorRelatedURLSessionTaskErrorKey=(     "LocalDataTask <AF001522-3BDA-4C3A-A557-B8246ECC6074>.<3>" ), NSLocalizedDescription=Could not connect to the server., NSErrorFailingURLStringKey=http://127.0.0.1:9097/connections, NSErrorFailingURLKey=http://127.0.0.1:9097/connections, _kCFStreamErrorDomainKey=1}
+[ClashCore] time="2026-01-02T14:40:36.461325000+08:00" level=info msg="Start initial configuration in progress"
+[14:40:36] [Core] time="2026-01-02T14:40:36.461325000+08:00" level=info msg="Start initial configuration in progress"
+[ClashCore] time="2026-01-02T14:40:36.464397000+08:00" level=info msg="Geodata Loader mode: memconservative"
+[ClashCore] time="2026-01-02T14:40:36.464412000+08:00" level=info msg="Geosite Matcher implementation: succinct"
+[14:40:36] [Core] time="2026-01-02T14:40:36.464397000+08:00" level=info msg="Geodata Loader mode: memconservative"
+[14:40:36] [Core] time="2026-01-02T14:40:36.464412000+08:00" level=info msg="Geosite Matcher implementation: succinct"
+[ClashCore] time="2026-01-02T14:40:36.470837000+08:00" level=info msg="Initial configuration complete, total time: 9ms"
+[14:40:36] [Core] time="2026-01-02T14:40:36.470837000+08:00" level=info msg="Initial configuration complete, total time: 9ms"
+[ClashCore] time="2026-01-02T14:40:36.471788000+08:00" level=info msg="RESTful API listening at: 127.0.0.1:9097"
+[ClashCore] time="2026-01-02T14:40:36.474515000+08:00" level=info msg="Sniffer is closed"
+[ClashCore] time="2026-01-02T14:40:36.474861000+08:00" level=info msg="HTTP proxy listening at: 127.0.0.1:7892"
+[ClashCore] time="2026-01-02T14:40:36.474913000+08:00" level=info msg="SOCKS proxy listening at: 127.0.0.1:7891"
+[ClashCore] time="2026-01-02T14:40:36.474961000+08:00" level=info msg="Mixed(http+socks) proxy listening at: 127.0.0.1:7890"
+[14:40:36] [Core] time="2026-01-02T14:40:36.471788000+08:00" level=info msg="RESTful API listening at: 127.0.0.1:9097"
+[14:40:36] [Core] time="2026-01-02T14:40:36.474515000+08:00" level=info msg="Sniffer is closed"
+[14:40:36] [Core] time="2026-01-02T14:40:36.474861000+08:00" level=info msg="HTTP proxy listening at: 127.0.0.1:7892"
+[14:40:36] [Core] time="2026-01-02T14:40:36.474913000+08:00" level=info msg="SOCKS proxy listening at: 127.0.0.1:7891"
+[14:40:36] [Core] time="2026-01-02T14:40:36.474961000+08:00" level=info msg="Mixed(http+socks) proxy listening at: 127.0.0.1:7890"
+[ClashCore] time="2026-01-02T14:40:36.477637000+08:00" level=info msg="Start initial Compatible provider 🐟 漏网之鱼"
+[ClashCore] time="2026-01-02T14:40:36.477657000+08:00" level=info msg="Start initial Compatible provider 📲 电报消息"
+[ClashCore] time="2026-01-02T14:40:36.477661000+08:00" level=info msg="Start initial Compatible provider 🎥 奈飞视频"
+[ClashCore] time="2026-01-02T14:40:36.477663000+08:00" level=info msg="Start initial Compatible provider 🎶 网易音乐"
+[ClashCore] time="2026-01-02T14:40:36.477667000+08:00" level=info msg="Start initial Compatible provider 🇨🇳 台湾节点"
+[ClashCore] time="2026-01-02T14:40:36.477671000+08:00" level=info msg="Start initial Compatible provider 🇭🇰 香港节点"
+[ClashCore] time="2026-01-02T14:40:36.477693000+08:00" level=info msg="Start initial Compatible provider 🚀 节点选择"
+[ClashCore] time="2026-01-02T14:40:36.477700000+08:00" level=info msg="Start initial Compatible provider 🎥 奈飞节点"
+[ClashCore] time="2026-01-02T14:40:36.477703000+08:00" level=info msg="Start initial Compatible provider 📺 巴哈姆特"
+[ClashCore] time="2026-01-02T14:40:36.477706000+08:00" level=info msg="Start initial Compatible provider 🎮 游戏平台"
+[ClashCore] time="2026-01-02T14:40:36.477709000+08:00" level=info msg="Start initial Compatible provider 📹 油管视频"
+[ClashCore] time="2026-01-02T14:40:36.477711000+08:00" level=info msg="Start initial Compatible provider 🛑 广告拦截"
+[ClashCore] time="2026-01-02T14:40:36.477715000+08:00" level=info msg="Start initial Compatible provider default"
+[ClashCore] time="2026-01-02T14:40:36.477717000+08:00" level=info msg="Start initial Compatible provider Ⓜ️ 微软云盘"
+[ClashCore] time="2026-01-02T14:40:36.477723000+08:00" level=info msg="Start initial Compatible provider 🚀 手动切换"
+[ClashCore] time="2026-01-02T14:40:36.477726000+08:00" level=info msg="Start initial Compatible provider Ⓜ️ 微软服务"
+[ClashCore] time="2026-01-02T14:40:36.477729000+08:00" level=info msg="Start initial Compatible provider 📺 哔哩哔哩"
+[ClashCore] time="2026-01-02T14:40:36.477731000+08:00" level=info msg="Start initial Compatible provider Ⓜ️ 微软Bing"
+[ClashCore] time="2026-01-02T14:40:36.477752000+08:00" level=info msg="Start initial Compatible provider 💬 Ai平台"
+[ClashCore] time="2026-01-02T14:40:36.477758000+08:00" level=info msg="Start initial Compatible provider 🍃 应用净化"
+[ClashCore] time="2026-01-02T14:40:36.477761000+08:00" level=info msg="Start initial Compatible provider 📢 谷歌FCM"
+[ClashCore] time="2026-01-02T14:40:36.477764000+08:00" level=info msg="Start initial Compatible provider 🇰🇷 韩国节点"
+[ClashCore] time="2026-01-02T14:40:36.477766000+08:00" level=info msg="Start initial Compatible provider 🇯🇵 日本节点"
+[ClashCore] time="2026-01-02T14:40:36.477769000+08:00" level=info msg="Start initial Compatible provider 🇸🇬 狮城节点"
+[ClashCore] time="2026-01-02T14:40:36.477805000+08:00" level=info msg="Start initial Compatible provider 🎯 全球直连"
+[ClashCore] time="2026-01-02T14:40:36.477817000+08:00" level=info msg="Start initial Compatible provider 🇺🇲 美国节点"
+[ClashCore] time="2026-01-02T14:40:36.477822000+08:00" level=info msg="Start initial Compatible provider 🌍 国外媒体"
+[ClashCore] time="2026-01-02T14:40:36.477829000+08:00" level=info msg="Start initial Compatible provider 🍎 苹果服务"
+[ClashCore] time="2026-01-02T14:40:36.477832000+08:00" level=info msg="Start initial Compatible provider 🌏 国内媒体"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477637000+08:00" level=info msg="Start initial Compatible provider 🐟 漏网之鱼"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477657000+08:00" level=info msg="Start initial Compatible provider 📲 电报消息"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477661000+08:00" level=info msg="Start initial Compatible provider 🎥 奈飞视频"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477663000+08:00" level=info msg="Start initial Compatible provider 🎶 网易音乐"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477667000+08:00" level=info msg="Start initial Compatible provider 🇨🇳 台湾节点"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477671000+08:00" level=info msg="Start initial Compatible provider 🇭🇰 香港节点"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477693000+08:00" level=info msg="Start initial Compatible provider 🚀 节点选择"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477700000+08:00" level=info msg="Start initial Compatible provider 🎥 奈飞节点"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477703000+08:00" level=info msg="Start initial Compatible provider 📺 巴哈姆特"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477706000+08:00" level=info msg="Start initial Compatible provider 🎮 游戏平台"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477709000+08:00" level=info msg="Start initial Compatible provider 📹 油管视频"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477711000+08:00" level=info msg="Start initial Compatible provider 🛑 广告拦截"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477715000+08:00" level=info msg="Start initial Compatible provider default"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477717000+08:00" level=info msg="Start initial Compatible provider Ⓜ️ 微软云盘"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477723000+08:00" level=info msg="Start initial Compatible provider 🚀 手动切换"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477726000+08:00" level=info msg="Start initial Compatible provider Ⓜ️ 微软服务"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477729000+08:00" level=info msg="Start initial Compatible provider 📺 哔哩哔哩"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477731000+08:00" level=info msg="Start initial Compatible provider Ⓜ️ 微软Bing"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477752000+08:00" level=info msg="Start initial Compatible provider 💬 Ai平台"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477758000+08:00" level=info msg="Start initial Compatible provider 🍃 应用净化"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477761000+08:00" level=info msg="Start initial Compatible provider 📢 谷歌FCM"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477764000+08:00" level=info msg="Start initial Compatible provider 🇰🇷 韩国节点"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477766000+08:00" level=info msg="Start initial Compatible provider 🇯🇵 日本节点"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477769000+08:00" level=info msg="Start initial Compatible provider 🇸🇬 狮城节点"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477805000+08:00" level=info msg="Start initial Compatible provider 🎯 全球直连"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477817000+08:00" level=info msg="Start initial Compatible provider 🇺🇲 美国节点"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477822000+08:00" level=info msg="Start initial Compatible provider 🌍 国外媒体"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477829000+08:00" level=info msg="Start initial Compatible provider 🍎 苹果服务"
+[14:40:36] [Core] time="2026-01-02T14:40:36.477832000+08:00" level=info msg="Start initial Compatible provider 🌏 国内媒体"
+[14:40:36] [ClashController] 🟢 Core stable, activating monitors...
+[14:40:36] [ClashController] 🟢 Starting traffic mo

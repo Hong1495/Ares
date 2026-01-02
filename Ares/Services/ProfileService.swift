@@ -83,13 +83,23 @@ class ProfileService: ObservableObject {
         // Add to list
         profiles.append(profile)
         
-        // Auto-select if first profile
-        if profiles.count == 1 {
+        // Auto-select if first profile OR always activate new profile for better UX
+        let shouldActivate = profiles.count == 1 || activeProfileID == nil
+        if shouldActivate {
             activeProfileID = profile.id
         }
         
         saveProfiles()
-        print("[ProfileService] Added remote profile: \(name)")
+        
+        Task { @MainActor in
+            ClashViewModel.shared.addLog("[ProfileService] ✅ Added remote profile: \(name)")
+            
+            // If this is the active profile, reload Clash
+            if shouldActivate {
+                ClashViewModel.shared.addLog("[ProfileService] 🔄 Activating new profile...")
+                await reloadClashWithCurrentProfile()
+            }
+        }
     }
     
     /// Add a local profile
@@ -102,13 +112,23 @@ class ProfileService: ObservableObject {
         let profile = Profile.local(name: name, path: destination)
         profiles.append(profile)
         
-        // Auto-select if first profile
-        if profiles.count == 1 {
+        // Auto-select if first profile OR no active profile
+        let shouldActivate = profiles.count == 1 || activeProfileID == nil
+        if shouldActivate {
             activeProfileID = profile.id
         }
         
         saveProfiles()
-        print("[ProfileService] Added local profile: \(name)")
+        
+        Task { @MainActor in
+            ClashViewModel.shared.addLog("[ProfileService] ✅ Added local profile: \(name)")
+            
+            // If this is the active profile, reload Clash
+            if shouldActivate {
+                ClashViewModel.shared.addLog("[ProfileService] 🔄 Activating new profile...")
+                await reloadClashWithCurrentProfile()
+            }
+        }
     }
     
     /// Update a remote profile by downloading latest content
@@ -232,10 +252,53 @@ class ProfileService: ObservableObject {
         return profiles.first(where: { $0.id == id })
     }
     
-    /// Set active profile
+    /// Set active profile and reload Clash with new configuration
     func setActiveProfile(id: UUID) {
+        guard activeProfileID != id else { return } // No-op if already active
+        
         activeProfileID = id
         saveProfiles()
+        
+        // Find the new profile name for logging
+        let profileName = profiles.first(where: { $0.id == id })?.name ?? "Unknown"
+        
+        Task { @MainActor in
+            ClashViewModel.shared.addLog("[ProfileService] 🔄 Switching to profile: \(profileName)")
+            
+            // Rebuild config and restart Clash
+            await reloadClashWithCurrentProfile()
+        }
+    }
+    
+    /// Reload Clash with the current active profile
+    @MainActor
+    func reloadClashWithCurrentProfile() async {
+        let tunEnabled = AppState.shared.tunEnabled
+        
+        ClashViewModel.shared.addLog("[ProfileService] 📝 Rebuilding configuration...")
+        
+        do {
+            // 1. Rebuild config with new profile
+            try await ConfigService.shared.buildConfig(tunEnabled: tunEnabled)
+            
+            // 2. Restart Clash to apply new config
+            ClashViewModel.shared.addLog("[ProfileService] 🔄 Restarting Clash with new profile...")
+            await ClashViewModel.shared.restart()
+            
+            // 3. Wait for API to be ready
+            let isReady = await ClashController.shared.waitForAPIReady(timeout: 5.0)
+            if isReady {
+                ClashViewModel.shared.addLog("[ProfileService] ✅ Profile switch completed")
+                
+                // 4. Refresh proxies and rules
+                try? await ClashController.shared.fetchProxiesData()
+                try? await ClashController.shared.fetchRules()
+            } else {
+                ClashViewModel.shared.addLog("[ProfileService] ⚠️ Clash API not ready after restart")
+            }
+        } catch {
+            ClashViewModel.shared.addLog("[ProfileService] ❌ Failed to reload: \(error.localizedDescription)")
+        }
     }
     
     /// Parse subscription info from HTTP headers

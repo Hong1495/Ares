@@ -1,0 +1,74 @@
+Ares/Services/CertificateManager.swift:137:17: warning: 'SecKeychainUnlock' was deprecated in macOS 10.10: SecKeychain is deprecated [#DeprecatedDeclaration]
+135 |             if let kc = tempKeychain {
+136 |                 // Always unlock before returning
+137 |                 SecKeychainUnlock(kc, 0, "", true)
+    |                 `- warning: 'SecKeychainUnlock' was deprecated in macOS 10.10: SecKeychain is deprecated [#DeprecatedDeclaration]
+138 |                 return kc
+139 |             }
+
+Ares/Services/CertificateManager.swift:193:30: warning: 'SecKeychainOpen' was deprecated in macOS 10.10: SecKeychain is deprecated [#DeprecatedDeclaration]
+191 |             // Open with Security framework for SecItemCopyMatching
+192 |             var keychain: SecKeychain?
+193 |             let openStatus = SecKeychainOpen(path, &keychain)
+    |                              `- warning: 'SecKeychainOpen' was deprecated in macOS 10.10: SecKeychain is deprecated [#DeprecatedDeclaration]
+194 |             if openStatus != errSecSuccess {
+195 |                 throw NSError(domain: "CertificateManager", code: Int(openStatus),
+
+Ares/Services/CertificateManager.swift:205:13: warning: 'SecKeychainUnlock' was deprecated in macOS 10.10: SecKeychain is deprecated [#DeprecatedDeclaration]
+203 |             
+204 |             // Final unlock with Security framework
+205 |             SecKeychainUnlock(kc, 0, "", true)
+    |             `- warning: 'SecKeychainUnlock' was deprecated in macOS 10.10: SecKeychain is deprecated [#DeprecatedDeclaration]
+206 |             
+207 |             tempKeychain = kc
+
+Ares/Services/CertificateManager.swift:329:32: warning: 'SecAccessCreate' was deprecated in macOS 10.10: SecKeychain is deprecated [#DeprecatedDeclaration]
+327 |             // Create an "allow all" access control so no prompts are triggered
+328 |             var access: SecAccess?
+329 |             let accessStatus = SecAccessCreate("Ares MITM Key" as CFString, nil, &access)
+    |                                `- warning: 'SecAccessCreate' was deprecated in macOS 10.10: SecKeychain is deprecated [#DeprecatedDeclaration]
+330 |             
+331 |             var items: CFArray?
+
+Ares/Services/CertificateManager.swift:359:17: warning: 'SecKeychainCopyDefault' was deprecated in macOS 10.10: SecKeychain is deprecated [#DeprecatedDeclaration]
+357 |                 // Save original default keychain
+358 |                 var originalDefault: SecKeychain?
+359 |                 SecKeychainCopyDefault(&originalDefault)
+    |                 `- warning: 'SecKeychainCopyDefault' was deprecated in macOS 10.10: SecKeychain is deprecated [#DeprecatedDeclaration]
+360 |                 
+361 |                 // Set temp keychain as default (SecPKCS12Import uses default)
+
+Ares/Services/CertificateManager.swift:362:17: warning: 'SecKeychainSetDefault' was deprecated in macOS 10.10: SecKeychain is deprecated [#DeprecatedDeclaration]
+360 |                 
+361 |                 // Set temp keychain as default (SecPKCS12Import uses default)
+362 |                 SecKeychainSetDefault(keychain)
+    |                 `- warning: 'SecKeychainSetDefault' was deprecated in macOS 10.10: SecKeychain is deprecated [#DeprecatedDeclaration]
+363 |                 
+364 |                 // Now try import again - it should go to our temp keychain
+
+Ares/Services/CertificateManager.swift:370:21: warning: 'SecKeychainSetDefault' was deprecated in macOS 10.10: SecKeychain is deprecated [#DeprecatedDeclaration]
+368 |                 // Restore original default
+369 |                 if let orig = originalDefault {
+370 |                     SecKeychainSetDefault(orig)
+    |                     `- warning: 'SecKeychainSetDefault' was deprecated in macOS 10.10: SecKeychain is deprecated [#DeprecatedDeclaration]
+371 |                 }
+372 |                 
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+Ares/Services/PrivilegeService.swift:154:108: warning: capture of 'error' with non-Sendable type 'NSDictionary' in a '@Sendable' closure; this is an error in the Swift 6 language mode [#SendableClosureCaptures]
+152 |             
+153 |             if let error = error {
+154 |                 await MainActor.run { ClashViewModel.shared.addLog("[Privilege] ❌ Installation failed: \(error)") }
+    |                                                                                                          `- warning: capture of 'error' with non-Sendable type 'NSDictionary' in a '@Sendable' closure; this is an error in the Swift 6 language mode [#SendableClosureCaptures]
+155 |                 return false
+156 |             }
+
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/Foundation.framework/Headers/NSDictionary.h:14:12: note: class 'NSDictionary' does not conform to the 'Sendable' protocol
+ 12 | NS_HEADER_AUDIT_BEGIN(nullability, sendability)
+ 13 | 
+ 14 | @interface NSDictionary<__covariant KeyType, __covariant ObjectType> : NSObject <NSCopying, NSMutableCopying, NSSecureCoding, NSFastEnumeration>
+    |            `- note: class 'NSDictionary' does not conform to the 'Sendable' protocol
+ 15 | 
+ 16 | @property (readonly) NSUInteger count;
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>

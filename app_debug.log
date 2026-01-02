@@ -1,0 +1,72 @@
+[TeleWorker] 🚀 Listener started on port 10086
+[TeleWorker] 📡 State: ready
+[AppDelegate] 🤫 Silent start enabled - hiding application
+[14:44:16] [ProfileService] ✅ Loaded 1 profiles
+[14:44:16] [ProfileService] 🔹 Active Profile: crelay
+🏥 Performing Startup Health Check...
+[14:44:16] [AppState] 🚀 Initializing application state...
+🚀 Starting Clash...
+[14:44:16] [ClashController] 🟡 Toggling in progress, silencing monitors...
+[14:44:16] [ClashController] 🟡 Toggling in progress, silencing monitors...
+[14:44:16] [ClashServiceActor] 🚀 Starting Clash...
+[14:44:16] [ClashServiceActor] 🧹 Cleaning up old processes...
+[14:44:16] [ClashServiceActor] ⚠️ Found processes on port 7891: [48190]
+[14:44:17] [ClashServiceActor] 📝 Building configuration...
+[14:44:17] [Config] 📝 Building config (TUN=false)...
+[ConfigService] 🛠 Injecting Rules - Bypass: [], MITM Ports: [80, 443, 8080, 8443], TUN: false, MITM: false
+[ConfigService] 📋 Generated 0 dynamic rules:
+
+[14:44:17] [Config] 📝 Writing config content (Preview lines 1-10):
+[14:44:17] # Ares Clash Configuration mixed-port: 7890 socks-port: 7891 port: 7892 mode: rule log-level: warning allow-lan: false ipv6: false external-controller: 127.0.0.1:9097 secret: ""
+[14:44:17] [Config] ✅ Config written to: config.yaml
+[14:44:17] [ClashServiceActor] ✅ Binary found: clash-meta
+[14:44:17] [ClashController] 🟡 Toggling in progress, silencing monitors...
+[14:44:17] [ClashServiceActor] ✅ Clash launched (Normal)
+[14:44:17] [ClashServiceActor] ⏱️ Total startup time: 1.23s
+[ClashCore] time="2026-01-02T14:44:17.477846000+08:00" level=info msg="Start initial configuration in progress"
+[14:44:17] [ClashController] ⚠️ Failed to get connections: Error Domain=NSURLErrorDomain Code=-1004 "Could not connect to the server." UserInfo={_kCFStreamErrorCodeKey=61, NSUnderlyingError=0x90f00e760 {Error Domain=kCFErrorDomainCFNetwork Code=-1004 "(null)" UserInfo={_NSURLErrorNWPathKey=satisfied (Path is satisfied), viable, interface: lo0, _kCFStreamErrorCodeKey=61, _kCFStreamErrorDomainKey=1}}, _NSURLErrorFailingURLSessionTaskErrorKey=LocalDataTask <0F6D7B94-5B5C-492A-A5D3-129405682A7C>.<4>, _NSURLErrorRelatedURLSessionTaskErrorKey=(     "LocalDataTask <0F6D7B94-5B5C-492A-A5D3-129405682A7C>.<4>" ), NSLocalizedDescription=Could not connect to the server., NSErrorFailingURLStringKey=http://127.0.0.1:9097/connections, NSErrorFailingURLKey=http://127.0.0.1:9097/connections, _kCFStreamErrorDomainKey=1}
+[14:44:17] [Core] time="2026-01-02T14:44:17.477846000+08:00" level=info msg="Start initial configuration in progress"
+[ClashCore] time="2026-01-02T14:44:17.479427000+08:00" level=info msg="Geodata Loader mode: memconservative"
+[ClashCore] time="2026-01-02T14:44:17.479437000+08:00" level=info msg="Geosite Matcher implementation: succinct"
+[ClashCore] time="2026-01-02T14:44:17.484876000+08:00" level=info msg="Initial configuration complete, total time: 6ms"
+[14:44:17] [Core] time="2026-01-02T14:44:17.479427000+08:00" level=info msg="Geodata Loader mode: memconservative"
+[14:44:17] [Core] time="2026-01-02T14:44:17.479437000+08:00" level=info msg="Geosite Matcher implementation: succinct"
+[14:44:17] [Core] time="2026-01-02T14:44:17.484876000+08:00" level=info msg="Initial configuration complete, total time: 6ms"
+[14:44:17] [ClashController] 🟢 Core stable, activating monitors...
+[14:44:17] [ClashController] 🟢 Starting traffic monitor (WebSocket)
+[14:44:17] [ClashController] 🔄 Initial state sync...
+[14:44:18] [ClashController] ✅ Initial sync completed (Attempt 1)
+[14:44:23] [ClashController] ⚠️ Test failed for 🇺🇲 美国节点: HTTP 504
+[14:44:23] [ClashController] ❌ Test error for 🇺🇲 美国节点: The operation couldn’t be completed. (ClashController error 504.)
+[14:44:30] [ClashController] ⚠️ Test failed for 🇺🇲 美国节点: HTTP 504
+[14:44:30] [ClashController] ❌ Test error for 🇺🇲 美国节点: The operation couldn’t be completed. (ClashController error 504.)
+[14:44:38] [ClashController] ⚠️ Test failed for 🇺🇲 2026-01-02 14:45:28.084 Ares[48427:10196307] WARNING: Application performed a reentrant operation in its NSTableView delegate. This warning will become an assert in the future.
+2026-01-02 14:45:39.011 Ares[48427:10196307] TSM AdjustCapsLockLEDForKeyTransitionHandling - _ISSetPhysicalKeyboardCapsLockLED Inhibit
+2026-01-02 14:46:58.455 Ares[48427:10196307] WARNING: Application performed a reentrant operation in its NSTableView delegate. This warning will become an assert in the future.
+美国节点: HTTP 504
+[14:44:38] [ClashController] ❌ Test error for 🇺🇲 美国节点: The operation couldn’t be completed. (ClashController error 504.)
+[14:44:45] [ClashController] ⚠️ Test failed for 🇺🇲 美国节点: HTTP 504
+[14:44:45] [ClashController] ❌ Test error for 🇺🇲 美国节点: The operation couldn’t be completed. (ClashController error 504.)
+[14:44:52] [ClashController] ⚠️ Test failed for 🇺🇲 美国节点: HTTP 504
+[14:44:52] [ClashController] ❌ Test error for 🇺🇲 美国节点: The operation couldn’t be completed. (ClashController error 504.)
+[14:44:59] [ClashController] ⚠️ Test failed for 🇺🇲 美国节点: HTTP 504
+[14:44:59] [ClashController] ❌ Test error for 🇺🇲 美国节点: The operation couldn’t be completed. (ClashController error 504.)
+[14:45:06] [ClashController] ⚠️ Test failed for 🇺🇲 美国节点: HTTP 504
+[14:45:06] [ClashController] ❌ Test error for 🇺🇲 美国节点: The operation couldn’t be completed. (ClashController error 504.)
+[14:45:13] [ClashController] ⚠️ Test failed for 🇺🇲 美国节点: HTTP 504
+[14:45:13] [ClashController] ❌ Test error for 🇺🇲 美国节点: The operation couldn’t be completed. (ClashController error 504.)
+[14:45:20] [ClashController] ⚠️ Test failed for 🇺🇲 美国节点: HTTP 504
+[14:45:20] [ClashController] ❌ Test error for 🇺🇲 美国节点: The operation couldn’t be completed. (ClashController error 504.)
+[14:45:27] [ClashController] ⚠️ Test failed for 🇺🇲 美国节点: HTTP 504
+[14:45:27] [ClashController] ❌ Test error for 🇺🇲 美国节点: The operation couldn’t be completed. (ClashController error 504.)
+[14:45:27] [ClashController] ❌ Test error for 🇺🇲 美国节点: cancelled
+[ProfileService] Saved 0 profiles
+[ProfileService] Deleted profile: crelay
+[ProfileService] Downloading profile from: https://tiktok-api-token.trafficmanager.net/api/v1/client/subscribe?token=7a8cd60d4ed2b64ed5218ac3a444b8fe
+[ProfileService] Downloading profile from: https://subconverters.com/sub?target=clash&url=https%3A%2F%2Ftiktok-api-token.trafficmanager.net%2Fapi%2Fv1%2Fclient%2Fsubscribe%3Ftoken%3D7a8cd60d4ed2b64ed5218ac3a444b8fe&insert=false&config=https%3A%2F%2Fraw.githubusercontent.com%2FACL4SSR%2FACL4SSR%2Fmaster%2FClash%2Fconfig%2FACL4SSR_Online_Full_NoAuto.ini&emoji=true&list=false&xudp=false&udp=false&tfo=false&expand=true&scv=false&fdn=false&new_name=true
+[ProfileService] Profile updated: 2026
+[ProfileService] Saved 1 profiles
+[ProfileService] Added remote profile: 2026
+[ProfileService] Updating profile: 2026
+🛑 App Terminating - Cleaning up...
+✅ Cleanup command executed

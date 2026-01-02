@@ -1,0 +1,191 @@
+[TeleWorker] 🚀 Listener started on port 10086
+[TeleWorker] 📡 State: ready
+[AppDelegate] 🤫 Silent start enabled - hiding application
+[14:42:08] [ProfileService] ✅ Loaded 1 profiles
+[14:42:08] [ProfileService] 🔹 Active Profile: crelay
+🏥 Performing Startup Health Check...
+[14:42:08] [AppState] 🚀 Initializing application state...
+[14:42:08] [Init] 🔐 Checking privileges for startup...
+[14:42:08] [Privilege] 🔐 Installing sudoers configuration...
+[14:42:15] [Privilege] ✅ Sudoers configuration installed successfully
+[14:42:15] [Init] ✅ Privileges installed
+🚀 Starting Clash...
+[14:42:15] [ClashController] 🟡 Toggling in progress, silencing monitors...
+[14:42:15] [ClashController] 🟡 Toggling in progress, silencing monitors...
+[14:42:15] [ClashServiceActor] 🚀 Starting Clash...
+[14:42:15] [ClashServiceActor] 🧹 Cleaning up old processes...
+[14:42:15] [ClashServiceActor] 📝 Building configuration...
+[14:42:15] [Config] 📝 Building config (TUN=true)...
+[ConfigService] 🛠 Injecting Rules - Bypass: [], MITM Ports: [80, 443, 8080, 8443], TUN: true, MITM: false
+[ConfigService] 📋 Generated 0 dynamic rules:
+
+[14:42:15] [Config] 📝 Writing config content (Preview lines 1-10):
+[14:42:15] # Ares Clash Configuration mixed-port: 7890 socks-port: 7891 port: 7892 mode: rule log-level: warning allow-lan: false ipv6: false external-controller: 127.0.0.1:19097 secret: ""
+[14:42:15] [Config] ✅ Config written to: config.yaml
+[14:42:15] [ClashServiceActor] ✅ Binary found: clash-meta
+[14:42:15] [ClashServiceActor] 🛡️ TUN mode: Preparing privileged startup...
+[14:42:15] [ClashServiceActor] Starting with sudo...
+[14:42:15] [ClashServiceActor] ✅ Clash launched with TUN (PID: 46686)
+[14:42:15] [ClashController] 🟡 Toggling in progress, silencing monitors...
+[14:42:15] [ClashServiceActor] ⏱️ Total startup time: 0.84s
+[14:42:16] [ClashController] ⚠️ Failed to get connections: Error Domain=NSURLErrorDomain Code=-1004 "Could not connect to the server." UserInfo={_kCFStreamErrorCodeKey=61, NSUnderlyingError=0xb339bdef0 {Error Domain=kCFErrorDomainCFNetwork Code=-1004 "(null)" UserInfo={_NSURLErrorNWPathKey=satisfied (Path is satisfied), viable, interface: lo0, _kCFStreamErrorCodeKey=61, _kCFStreamErrorDomainKey=1}}, _NSURLErrorFailingURLSessionTaskErrorKey=LocalDataTask <B6AA3640-D754-4B12-AC7E-D896183B99B2>.<5>, _NSURLErrorRelatedURLSessionTaskErrorKey=(     "LocalDataTask <B6AA3640-D754-4B12-AC7E-D896183B99B2>.<5>" ), NSLocalizedDescription=Could not connect to the server., NSErrorFailingURLStringKey=http://127.0.0.1:19097/connections, NSErrorFailingURLKey=http://127.0.0.1:19097/connections, _kCFStreamErrorDomainKey=1}
+🔄 Restoring System Proxy state...
+[14:42:16] [AppState] 🔄 Restoring system proxy state...
+[ClashCore] time="2026-01-02T14:42:16.041798000+08:00" level=info msg="Start initial configuration in progress"
+[14:42:16] [Core] time="2026-01-02T14:42:16.041798000+08:00" level=info msg="Start initial configuration in progress"
+[ClashCore] time="2026-01-02T14:42:16.043242000+08:00" level=info msg="Geodata Loader mode: memconservative"
+[ClashCore] time="2026-01-02T14:42:16.043297000+08:00" level=info msg="Geosite Matcher implementation: succinct"
+[14:42:16] [Core] time="2026-01-02T14:42:16.043242000+08:00" level=info msg="Geodata Loader mode: memconservative"
+[14:42:16] [Core] time="2026-01-02T14:42:16.043297000+08:00" level=info msg="Geosite Matcher implementation: succinct"
+[ClashCore] time="2026-01-02T14:42:16.049076000+08:00" level=info msg="Initial configuration complete, total time: 7ms"
+[ClashCore] time="2026-01-02T14:42:16.052350000+08:00" level=warning msg="[TUN] default interface changed by monitor,  => en1"
+[14:42:16] [Core] time="2026-01-02T14:42:16.049076000+08:00" level=info msg="Initial configuration complete, total time: 7ms"
+[14:42:16] [Core] time="2026-01-02T14:42:16.052350000+08:00" level=warning msg="[TUN] default interface changed by monitor,  => en1"
+[ClashCore] time="2026-01-02T14:42:16.052644000+08:00" level=error msg="Start TUN listening error: configure tun interface: add route: 1.0.0.0/8: file exists"
+[14:42:16] [Core] time="2026-01-02T14:42:16.052644000+08:00" level=error msg="Start TUN listening error: configure tun interface: add route: 1.0.0.0/8: file exists"
+[SystemProxy] Enabling system proxy via networksetup...
+[SystemProxy] ⚡️ Using password-less sudo...
+[14:42:16] [ClashController] 🟢 Core stable, activating monitors...
+[14:42:16] [ClashController] 🟢 Starting traffic monitor (WebSocket)
+[14:42:16] [ClashController] 🔄 Initial state sync...
+[14:42:16] [ClashController] ✅ Initial sync completed (Attempt 1)
+[ClashCore] time="2026-01-02T14:42:17.204572000+08:00" level=warning msg="[TCP] dial 💬 Ai平台 (match Domain/gemini.google.com) 127.0.0.1:57115(Ares) --> gemini.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:17.204580000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/google) 127.0.0.1:57113(Ares) --> www.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:17.204585000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/github) 127.0.0.1:57114(Ares) --> github.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:17] [Core] time="2026-01-02T14:42:17.204572000+08:00" level=warning msg="[TCP] dial 💬 Ai平台 (match Domain/gemini.google.com) 127.0.0.1:57115(Ares) --> gemini.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:17] [Core] time="2026-01-02T14:42:17.204580000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/google) 127.0.0.1:57113(Ares) --> www.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:17] [Core] time="2026-01-02T14:42:17.204585000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/github) 127.0.0.1:57114(Ares) --> github.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:17.209867000+08:00" level=warning msg="[TCP] dial 💬 Ai平台 (match Domain/gemini.google.com) 127.0.0.1:57117(Ares) --> gemini.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:17.210077000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/google) 127.0.0.1:57118(Ares) --> www.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:17.210332000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/github) 127.0.0.1:57119(Ares) --> github.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:17] [Core] time="2026-01-02T14:42:17.209867000+08:00" level=warning msg="[TCP] dial 💬 Ai平台 (match Domain/gemini.google.com) 127.0.0.1:57117(Ares) --> gemini.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:17] [Core] time="2026-01-02T14:42:17.210077000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/google) 127.0.0.1:57118(Ares) --> www.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:17] [Core] time="2026-01-02T14:42:17.210332000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/github) 127.0.0.1:57119(Ares) --> github.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[SystemProxy] ✅ System proxy updated (Sudoers)
+[14:42:17] [AppState] ✅ System proxy enabled (HTTP/HTTPS: 7890, SOCKS: 7891)
+[14:42:17] [ClashServiceActor] 🟢 Port 19097 is now listening
+[ClashCore] time="2026-01-02T14:42:17.656231000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57131(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:17] [Core] time="2026-01-02T14:42:17.656231000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57131(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:17.656966000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57116(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:17.658145000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57134(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:17] [Core] time="2026-01-02T14:42:17.656966000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57116(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:17] [Core] time="2026-01-02T14:42:17.658145000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57134(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:18.283440000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/github) 127.0.0.1:57142(Ares) --> github.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:18] [Core] time="2026-01-02T14:42:18.283440000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/github) 127.0.0.1:57142(Ares) --> github.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:18.283941000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/google) 127.0.0.1:57144(Ares) --> www.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:18.284565000+08:00" level=warning msg="[TCP] dial 💬 Ai平台 (match Domain/gemini.google.com) 127.0.0.1:57143(Ares) --> gemini.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:18.287577000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/github) 127.0.0.1:57145(Ares) --> github.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:18.288219000+08:00" level=warning msg="[TCP] dial 💬 Ai平台 (match Domain/gemini.google.com) 127.0.0.1:57147(Ares) --> gemini.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:18.288925000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/google) 127.0.0.1:57146(Ares) --> www.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:18] [Core] time="2026-01-02T14:42:18.283941000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/google) 127.0.0.1:57144(Ares) --> www.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:18] [Core] time="2026-01-02T14:42:18.284565000+08:00" level=warning msg="[TCP] dial 💬 Ai平台 (match Domain/gemini.google.com) 127.0.0.1:57143(Ares) --> gemini.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:18] [Core] time="2026-01-02T14:42:18.287577000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/github) 127.0.0.1:57145(Ares) --> github.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:18] [Core] time="2026-01-02T14:42:18.288219000+08:00" level=warning msg="[TCP] dial 💬 Ai平台 (match Domain/gemini.google.com) 127.0.0.1:57147(Ares) --> gemini.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:18] [Core] time="2026-01-02T14:42:18.288925000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/google) 127.0.0.1:57146(Ares) --> www.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:20] [ClashController] ⚠️ Test failed for 🇺🇲 美国节点: HTTP 503
+[14:42:20] [ClashController] ❌ Test error for 🇺🇲 美国节点: The operation couldn’t be completed. (ClashController error 503.)
+[ClashCore] time="2026-01-02T14:42:22.573101000+08:00" level=warning msg="[TCP] dial 🎯 全球直连 (match IPCIDR/10.0.0.0/8) 127.0.0.1:57132 --> 10.10.24.111:80 error: connect failed: dial tcp 10.10.24.111:80: i/o timeout"
+[14:42:22] [Core] time="2026-01-02T14:42:22.573101000+08:00" level=warning msg="[TCP] dial 🎯 全球直连 (match IPCIDR/10.0.0.0/8) 127.0.0.1:57132 --> 10.10.24.111:80 error: connect failed: dial tcp 10.10.24.111:80: i/o timeout"
+[ClashCore] time="2026-01-02T14:42:22.737186000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57154(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:22] [Core] time="2026-01-02T14:42:22.737186000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57154(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:22.739227000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57155(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:22] [Core] time="2026-01-02T14:42:22.739227000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57155(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:25] [ClashController] ⚠️ Test failed for 🇺🇲 美国节点: HTTP 503
+[14:42:25] [ClashController] ❌ Test error for 🇺🇲 美国节点: The operation couldn’t be completed. (ClashController error 503.)
+[ClashCore] time="2026-01-02T14:42:26.190005000+08:00" level=warning msg="[TCP] dial 🎯 全球直连 (match IPCIDR/10.0.0.0/8) 127.0.0.1:57152 --> 10.10.24.111:80 error: connect failed: dial tcp 10.10.24.111:80: i/o timeout"
+[14:42:26] [Core] time="2026-01-02T14:42:26.190005000+08:00" level=warning msg="[TCP] dial 🎯 全球直连 (match IPCIDR/10.0.0.0/8) 127.0.0.1:57152 --> 10.10.24.111:80 error: connect failed: dial tcp 10.10.24.111:80: i/o timeout"
+[ClashCore] time="2026-01-02T14:42:27.798857000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57202(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:27] [Core] time="2026-01-02T14:42:27.798857000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57202(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:27.801841000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57203(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:27] [Core] time="2026-01-02T14:42:27.801841000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57203(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:30] [ClashController] ⚠️ Test failed for 🇺🇲 美国节点: HTTP 503
+[14:42:30] [ClashController] ❌ Test error for 🇺🇲 美国节点: The operation couldn’t be completed. (ClashController error 503.)
+[ClashCore] time="2026-01-02T14:42:32.850070000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57230(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:32] [Core] time="2026-01-02T14:42:32.850070000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57230(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:32.854146000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57231(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:32] [Core] time="2026-01-02T14:42:32.854146000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57231(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:35] [ClashController] ⚠️ Test failed for 🇺🇲 美国节点: HTTP 503
+[14:42:35] [ClashController] ❌ Test error for 🇺🇲 美国节点: The operation couldn’t be completed. (ClashController error 503.)
+[ClashCore] time="2026-01-02T14:42:37.903324000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57236(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:37] [Core] time="2026-01-02T14:42:37.903324000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57236(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:37.906272000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57238(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:37] [Core] time="2026-01-02T14:42:37.906272000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57238(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:40.279798000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/github) 127.0.0.1:57239(Ares) --> github.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:40.280171000+08:00" level=warning msg="[TCP] dial 💬 Ai平台 (match Domain/gemini.google.com) 127.0.0.1:57240(Ares) --> gemini.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:40] [Core] time="2026-01-02T14:42:40.279798000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/github) 127.0.0.1:57239(Ares) --> github.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:40] [Core] time="2026-01-02T14:42:40.280171000+08:00" level=warning msg="[TCP] dial 💬 Ai平台 (match Domain/gemini.google.com) 127.0.0.1:57240(Ares) --> gemini.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:40.280540000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/google) 127.0.0.1:57241(Ares) --> www.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:40.282809000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/github) 127.0.0.1:57244(Ares) --> github.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:40.283240000+08:00" level=warning msg="[TCP] dial 💬 Ai平台 (match Domain/gemini.google.com) 127.0.0.1:57245(Ares) --> gemini.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:40.283911000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/google) 127.0.0.1:57246(Ares) --> www.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:40] [Core] time="2026-01-02T14:42:40.280540000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/google) 127.0.0.1:57241(Ares) --> www.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:40] [Core] time="2026-01-02T14:42:40.282809000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/github) 127.0.0.1:57244(Ares) --> github.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:40] [Core] time="2026-01-02T14:42:40.283240000+08:00" level=warning msg="[TCP] dial 💬 Ai平台 (match Domain/gemini.google.com) 127.0.0.1:57245(Ares) --> gemini.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:40] [Core] time="2026-01-02T14:42:40.283911000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/google) 127.0.0.1:57246(Ares) --> www.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:40] [ClashController] ⚠️ Test failed for 🇺🇲 美国节点: HTTP 503
+[14:42:40] [ClashController] ❌ Test error for 🇺🇲 美国节点: The operation couldn’t be completed. (ClashController error 503.)
+[ClashCore] time="2026-01-02T14:42:41.348337000+08:00" level=warning msg="[TCP] dial 💬 Ai平台 (match Domain/gemini.google.com) 127.0.0.1:57249(Ares) --> gemini.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:41.348980000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/google) 127.0.0.1:57248(Ares) --> www.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:41.349057000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/github) 127.0.0.1:57247(Ares) --> github.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:41] [Core] time="2026-01-02T14:42:41.348337000+08:00" level=warning msg="[TCP] dial 💬 Ai平台 (match Domain/gemini.google.com) 127.0.0.1:57249(Ares) --> gemini.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:41] [Core] time="2026-01-02T14:42:41.348980000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/google) 127.0.0.1:57248(Ares) --> www.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:41] [Core] time="2026-01-02T14:42:41.349057000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/github) 127.0.0.1:57247(Ares) --> github.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:41.354224000+08:00" level=warning msg="[TCP] dial 💬 Ai平台 (match Domain/gemini.google.com) 127.0.0.1:57250(Ares) --> gemini.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:41.356158000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/github) 127.0.0.1:57251(Ares) --> github.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:41.356415000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/google) 127.0.0.1:57252(Ares) --> www.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:41] [Core] time="2026-01-02T14:42:41.354224000+08:00" level=warning msg="[TCP] dial 💬 Ai平台 (match Domain/gemini.google.com) 127.0.0.1:57250(Ares) --> gemini.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:41] [Core] time="2026-01-02T14:42:41.356158000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/github) 127.0.0.1:57251(Ares) --> github.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:41] [Core] time="2026-01-02T14:42:41.356415000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/google) 127.0.0.1:57252(Ares) --> www.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:42.937019000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57253(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:42] [Core] time="2026-01-02T14:42:42.937019000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57253(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:42.941840000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57254(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:42] [Core] time="2026-01-02T14:42:42.941840000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57254(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:45.282068000+08:00" level=warning msg="[TCP] dial 🎯 全球直连 (match IPCIDR/10.0.0.0/8) 127.0.0.1:57242 --> 10.10.24.111:80 error: connect failed: dial tcp 10.10.24.111:80: i/o timeout"
+[14:42:45] [Core] time="2026-01-02T14:42:45.282068000+08:00" level=warning msg="[TCP] dial 🎯 全球直连 (match IPCIDR/10.0.0.0/8) 127.0.0.1:57242 --> 10.10.24.111:80 error: connect failed: dial tcp 10.10.24.111:80: i/o timeout"
+[14:42:45] [ClashController] ⚠️ Test failed for 🇺🇲 美国节点: HTTP 503
+[14:42:45] [ClashController] ❌ Test error for 🇺🇲 美国节点: The operation couldn’t be completed. (ClashController error 503.)
+[ClashCore] time="2026-01-02T14:42:47.974077000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57282(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:47] [Core] time="2026-01-02T14:42:47.974077000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57282(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:47.976322000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57283(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:47] [Core] time="2026-01-02T14:42:47.976322000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57283(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:49.341532000+08:00" level=warning msg="[TCP] dial 🎯 全球直连 (match IPCIDR/10.0.0.0/8) 127.0.0.1:57255 --> 10.10.24.111:80 error: connect failed: dial tcp 10.10.24.111:80: i/o timeout"
+[14:42:49] [Core] time="2026-01-02T14:42:49.341532000+08:00" level=warning msg="[TCP] dial 🎯 全球直连 (match IPCIDR/10.0.0.0/8) 127.0.0.1:57255 --> 10.10.24.111:80 error: connect failed: dial tcp 10.10.24.111:80: i/o timeout"
+[14:42:50] [ClashController] ⚠️ Test failed for 🇺🇲 美国节点: HTTP 503
+[14:42:50] [ClashController] ❌ Test error for 🇺🇲 美国节点: The operation couldn’t be completed. (ClashController error 503.)
+[ClashCore] time="2026-01-02T14:42:53.048736000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57308(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:53] [Core] time="2026-01-02T14:42:53.048736000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57308(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:53.051601000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57309(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:53] [Core] time="2026-01-02T14:42:53.051601000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57309(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:55] [ClashController] ⚠️ Test failed for 🇺🇲 美国节点: HTTP 503
+[14:42:55] [ClashController] ❌ Test error for 🇺🇲 美国节点: The operation couldn’t be completed. (ClashController error 503.)
+[ClashCore] time="2026-01-02T14:42:58.194473000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57315(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:58] [Core] time="2026-01-02T14:42:58.194473000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57315(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:42:58.198248000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57316(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:42:58] [Core] time="2026-01-02T14:42:58.198248000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57316(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:43:00] [ClashController] ⚠️ Test failed for 🇺🇲 美国节点: HTTP 503
+[14:43:00] [ClashController] ❌ Test error for 🇺🇲 美国节点: The operation couldn’t be completed. (ClashController error 503.)
+[ClashCore] time="2026-01-02T14:43:03.242789000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57331(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:43:03] [Core] time="2026-01-02T14:43:03.242789000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57331(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:43:03.245799000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57332(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:43:03] [Core] time="2026-01-02T14:43:03.245799000+08:00" level=warning msg="[TCP] dial 🐟 漏网之鱼 (match Match/) 127.0.0.1:57332(Ares) --> ipapi.co:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:43:03.466784000+08:00" level=warning msg="[TCP] dial 💬 Ai平台 (match Domain/gemini.google.com) 127.0.0.1:57334(Ares) --> gemini.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:43:03] [Core] time="2026-01-02T14:43:03.466784000+08:00" level=warning msg="[TCP] dial 💬 Ai平台 (match Domain/gemini.google.com) 127.0.0.1:57334(Ares) --> gemini.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:43:03.467112000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/github) 127.0.0.1:57336(Ares) --> github.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:43:03.467422000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/google) 127.0.0.1:57335(Ares) --> www.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:43:03.469939000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/google) 127.0.0.1:57340(Ares) --> www.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:43:03.470518000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/github) 127.0.0.1:57339(Ares) --> github.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:43:03.471193000+08:00" level=warning msg="[TCP] dial 💬 Ai平台 (match Domain/gemini.google.com) 127.0.0.1:57338(Ares) --> gemini.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:43:03] [Core] time="2026-01-02T14:43:03.467112000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/github) 127.0.0.1:57336(Ares) --> github.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:43:03] [Core] time="2026-01-02T14:43:03.467422000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/google) 127.0.0.1:57335(Ares) --> www.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:43:03] [Core] time="2026-01-02T14:43:03.469939000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/google) 127.0.0.1:57340(Ares) --> www.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:43:03] [Core] time="2026-01-02T14:43:03.470518000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/github) 127.0.0.1:57339(Ares) --> github.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:43:03] [Core] time="2026-01-02T14:43:03.471193000+08:00" level=warning msg="[TCP] dial 💬 Ai平台 (match Domain/gemini.google.com) 127.0.0.1:57338(Ares) --> gemini.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:43:04.567131000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/github) 127.0.0.1:57343(Ares) --> github.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:43:04] [Core] time="2026-01-02T14:43:04.567131000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/github) 127.0.0.1:57343(Ares) --> github.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:43:04.567514000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/google) 127.0.0.1:57341(Ares) --> www.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:43:04.567894000+08:00" level=warning msg="[TCP] dial 💬 Ai平台 (match Domain/gemini.google.com) 127.0.0.1:57342(Ares) --> gemini.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:43:04.569932000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/github) 127.0.0.1:57344(Ares) --> github.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:43:04.570340000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/google) 127.0.0.1:57345(Ares) --> www.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[ClashCore] time="2026-01-02T14:43:04.570885000+08:00" level=warning msg="[TCP] dial 💬 Ai平台 (match Domain/gemini.google.com) 127.0.0.1:57346(Ares) --> gemini.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:43:04] [Core] time="2026-01-02T14:43:04.567514000+08:00" level=warning msg="[TCP] dial 🚀 节点选择 (match DomainKeyword/google) 127.0.0.1:57341(Ares) --> www.google.com:443 error: xr.wgnmdgfw.com:34709 connect error: dns resolve failed: couldn't find ip"
+[14:43:04] [Core] time="2026-01-02T14:43:04.567894000+08:00" level=warning msg="[TCP] dial 💬 Ai平台 (match Domain/gemini.google.com) 127.0.0.1:57342(Ares) --> gemini.google.com:443 error: xr.wgnm
