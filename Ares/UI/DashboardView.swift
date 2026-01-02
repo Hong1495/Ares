@@ -43,10 +43,10 @@ private struct MainGrid: View {
     var body: some View {
         LazyVGrid(columns: columns, spacing: 16) {
             NetworkTrafficCard()
-            ProxyModeCard()
             TUNModeCard()
-            MITMModeCard()
+            ProxyModeCard()
             CurrentProxyCard()
+            MITMModeCard()
         }
     }
 }
