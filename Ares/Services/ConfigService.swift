@@ -63,8 +63,8 @@ actor ConfigService {
         var cleanedProfile = removeConflictingKeys(from: profileContent)
         
         // Dynamic Rules: Inject Bypass rules and MITM rules
-        // Fetch bypass rules from UserDefaults via MainActor
-        let (mitmEnabled, mitmPort, bypassRules, mitmPortsString, mitmHosts) = await MainActor.run {
+        // Fetch bypass rules and MITM settings from UserDefaults via MainActor
+        let (mitmEnabled, mitmPort, bypassRules, mitmPortsString, mitmHosts, tlsFingerprint) = await MainActor.run {
             let mitm = NetworkMITMService.shared
             let defaults = UserDefaults.standard
             return (
@@ -72,8 +72,14 @@ actor ConfigService {
                 Int(mitm.currentPort),
                 defaults.string(forKey: "bypassRules") ?? "",
                 defaults.string(forKey: "mitmPorts") ?? "80, 443, 8080, 8443",
-                defaults.string(forKey: "mitmHosts") ?? ""  // Whitelist domains
+                defaults.string(forKey: "mitmHosts") ?? "",  // Whitelist domains
+                defaults.string(forKey: "tlsFingerprint") ?? "none"
             )
+        }
+        
+        // Inject TLS Fingerprint if enabled (Do this before rule injection for cleaner logic)
+        if tlsFingerprint != "none" {
+            cleanedProfile = injectFingerprint(into: cleanedProfile, fingerprint: tlsFingerprint)
         }
         
         cleanedProfile = injectDynamicRules(into: cleanedProfile, tunEnabled: tunEnabled, mitmEnabled: mitmEnabled, mitmPort: mitmPort, bypassRules: bypassRules, mitmPortsString: mitmPortsString, mitmHosts: mitmHosts)
@@ -212,6 +218,10 @@ actor ConfigService {
         
         var result = yaml
         var rulesToInject: [String] = []  // No indentation yet
+        
+        // --- TLS Fingerprint Injection (Before rule processing) ---
+        // This is handled by a separate helper, but we should make sure this method focuses on Rules.
+        // Fingerprint injection is best done before rule injection to keep logic clean.
         
         // 1. Generate Bypass Rules (Highest Priority)
         let bypassItems = bypassRules.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
@@ -372,5 +382,53 @@ actor ConfigService {
         
         try await fileManager.writeText(config, to: targetPath)
         print("[ConfigService] Safe fallback config created")
+    }
+
+    
+    /// Inject TLS Fingerprint into proxy definitions
+    nonisolated private func injectFingerprint(into yaml: String, fingerprint: String) -> String {
+        print("[ConfigService] 🕵️ Injecting TLS Fingerprint: \(fingerprint)")
+        
+        // Strategy:
+        // We target Single-Line Flow Style JSON objects commonly used in subscriptions.
+        // e.g. - { name: "...", type: vmess, ... }
+        // We look for proxies that have type: (ss|vmess|vless|trojan|hysteria2?) AND do NOT already have client-fingerprint.
+        // Note: For SS (Shadowsocks), fingerprint is ignored by Core but harmless to add.
+        // Note: We use a simplified regex that assumes standard key: value formatting.
+        
+        let lines = yaml.components(separatedBy: .newlines)
+        var result: [String] = []
+        var count = 0
+        
+        // Create regex object
+        guard let regex = try? NSRegularExpression(pattern: #"\btype:\s*(ss|vmess|vless|trojan|hysteria2?)\b"#, options: .caseInsensitive) else {
+            return yaml
+        }
+        
+        for line in lines {
+            // Check if line is a proxy definition (starts with - {)
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("-") && trimmed.contains("{") && trimmed.contains("}") {
+                // Check if it's a target protocol
+                let range = NSRange(location: 0, length: line.utf16.count)
+                if regex.firstMatch(in: line, options: [], range: range) != nil {
+                     // Check if fingerprint already exists
+                    if !line.contains("client-fingerprint") {
+                        // Find the last "}" and insert before it
+                        if let lastBraceIndex = line.lastIndex(of: "}") {
+                            var mutableLine = line
+                            mutableLine.insert(contentsOf: ", client-fingerprint: \(fingerprint)", at: lastBraceIndex)
+                            result.append(mutableLine)
+                            count += 1
+                            continue
+                        }
+                    }
+                }
+            }
+            result.append(line)
+        }
+        
+        print("[ConfigService] ✅ Injected fingerprint into \(count) nodes")
+        return result.joined(separator: "\n")
     }
 }

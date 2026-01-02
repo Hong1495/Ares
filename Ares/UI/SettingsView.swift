@@ -27,6 +27,7 @@ struct SettingsView: View {
     // MITM Settings
     @AppStorage("mitmPorts") private var mitmPorts = "80, 443, 8080, 8443"
     @AppStorage("mitmHosts") private var mitmHosts = ""  // Empty = intercept all hosts
+    @AppStorage("tlsFingerprint") private var tlsFingerprint = "none"
     
     var body: some View {
         Form {
@@ -229,8 +230,34 @@ struct SettingsView: View {
                 .buttonStyle(.bordered)
             }
             
-            // Advanced & Maintenance
+            // Advanced Features
             Section("Advanced") {
+                Picker("TLS Fingerprint", selection: $tlsFingerprint) {
+                    Text("Disabled (Default)").tag("none")
+                    Text("Chrome (Recommended)").tag("chrome")
+                    Text("Safari (iOS)").tag("ios")
+                    Text("Firefox").tag("firefox")
+                    Text("Randomized").tag("random")
+                }
+                .pickerStyle(.menu)
+                .onChange(of: tlsFingerprint) { _, _ in
+                    Task {
+                        await clashViewModel.restart()
+                    }
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Mimic browser fingerprints to bypass Deep Packet Inspection (DPI).")
+                    Text("• Helps reduce connection drops and throttling")
+                    Text("• Applies to supported proxy protocols automatically")
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .padding(.vertical, 4)
+            }
+            
+            // Other & Maintenance
+            Section("Other") {
                 Picker("Log Level", selection: $logLevel) {
                     Text("Silent").tag("silent")
                     Text("Error").tag("error")
