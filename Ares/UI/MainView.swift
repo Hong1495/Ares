@@ -75,16 +75,7 @@ struct MainView: View {
                             .frame(width: 20)
                     }
                 }
-                NavigationLink(value: AppState.NavigationItem.antigravity) {
-                    Label {
-                        Text("Antigravity")
-                    } icon: {
-                        Image(systemName: "sparkles")
-                            .imageScale(.medium)
-                            .fontWeight(.light)
-                            .frame(width: 20)
-                    }
-                }
+
                 NavigationLink(value: AppState.NavigationItem.logs) {
                     Label {
                         Text("Logs")
@@ -122,8 +113,7 @@ struct MainView: View {
                 AnalysisView()
             case .logs:
                 LogsView()
-            case .antigravity:
-                AntigravityView()
+
             case .rules:
                 RulesView()
             case .settings:

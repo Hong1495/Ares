@@ -9,6 +9,7 @@ struct ProfilesView: View {
     @State private var newProfileURL = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var editingProfile: Profile?
     
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -49,6 +50,9 @@ struct ProfilesView: View {
                         onSelect: {
                             profileService.setActiveProfile(id: profile.id)
                         },
+                        onEdit: {
+                            editingProfile = profile
+                        },
                         onDelete: {
                             profileService.deleteProfile(id: profile.id)
                         }
@@ -77,6 +81,11 @@ struct ProfilesView: View {
                     errorMessage = nil
                 }
             )
+        }
+        .sheet(item: $editingProfile) { profile in
+            EditProfileSheet(profile: profile) { name, url in
+                try profileService.editProfile(id: profile.id, name: name, urlString: url)
+            }
         }
         .fileImporter(
             isPresented: $showingFileImporter,
@@ -131,6 +140,7 @@ struct ProfileCard: View {
     let profile: Profile
     let isActive: Bool
     let onSelect: () -> Void
+    let onEdit: () -> Void
     let onDelete: () -> Void
     
     @State private var isUpdating = false
@@ -227,6 +237,15 @@ struct ProfileCard: View {
                     .buttonStyle(.borderless)
                     .disabled(isUpdating)
                     .help("Update subscription")
+                    
+                    // Edit Button
+                    Button {
+                        onEdit()
+                    } label: {
+                        Image(systemName: "pencil")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Edit profile")
                 }
                 
                 Spacer()
@@ -311,6 +330,71 @@ struct AddProfileSheet: View {
             if isLoading {
                 ProgressView()
                     .scaleEffect(0.8)
+            }
+        }
+        .padding(30)
+    }
+}
+
+struct EditProfileSheet: View {
+    let profile: Profile
+    var onSave: (String, String) throws -> Void
+    
+    @State private var name: String
+    @State private var url: String
+    @State private var errorMessage: String?
+    @Environment(\.dismiss) var dismiss
+    
+    init(profile: Profile, onSave: @escaping (String, String) throws -> Void) {
+        self.profile = profile
+        self.onSave = onSave
+        _name = State(initialValue: profile.name)
+        _url = State(initialValue: profile.url?.absoluteString ?? "")
+    }
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Edit Profile")
+                .font(.headline)
+                .fontWeight(.bold)
+            
+            TextField("Profile Name", text: $name)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 400)
+            
+            if case .remote = profile.type {
+                TextField("Subscription URL", text: $url)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 400)
+            } else {
+                Text("Local profile URL cannot be edited")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            
+            if let error = errorMessage {
+                Text(error)
+                    .foregroundStyle(.red)
+                    .font(.footnote)
+                    .fontWeight(.medium)
+            }
+            
+            HStack(spacing: 12) {
+                Button("Cancel") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+                
+                Button("Save") {
+                    do {
+                        try onSave(name, url)
+                        dismiss()
+                    } catch {
+                        errorMessage = error.localizedDescription
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(name.isEmpty || (profile.type == .remote && url.isEmpty))
             }
         }
         .padding(30)

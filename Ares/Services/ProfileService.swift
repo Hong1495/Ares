@@ -234,6 +234,30 @@ class ProfileService: ObservableObject {
         print("[ProfileService] Updated profile: \(profiles[index].name)")
     }
     
+    /// Edit profile metadata (Name, URL)
+    func editProfile(id: UUID, name: String, urlString: String) throws {
+        guard let index = profiles.firstIndex(where: { $0.id == id }) else { return }
+        
+        var profile = profiles[index]
+        profile.name = name
+        
+        // Only update URL for remote profiles
+        if profile.type == .remote {
+            if let newURL = URL(string: urlString) {
+                profile.url = newURL
+            } else {
+                throw NSError(domain: "ProfileService", code: 5, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])
+            }
+        }
+        
+        profiles[index] = profile
+        saveProfiles()
+        
+        Task { @MainActor in
+            ClashViewModel.shared.addLog("[ProfileService] ✏️ Edited profile: \(name)")
+        }
+    }
+    
     /// Delete a profile
     func deleteProfile(id: UUID) {
         guard let index = profiles.firstIndex(where: { $0.id == id }) else { return }

@@ -17,7 +17,7 @@ class AppState: ObservableObject {
         case connections
         case analysis
         case logs
-        case antigravity
+
         case rules
         case settings
         
@@ -29,7 +29,7 @@ class AppState: ObservableObject {
             case .connections: return "Connections"
             case .analysis: return "Analysis"
             case .logs: return "Logs"
-            case .antigravity: return "Antigravity"
+
             case .rules: return "Rules"
             case .settings: return "Settings"
             }
