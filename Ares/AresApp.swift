@@ -75,7 +75,7 @@ struct AresApp: App {
     @StateObject private var themeService = ThemeService.shared
     
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "main") {
             MainView()
                 .environmentObject(clashViewModel)
                 .environmentObject(profileService)
@@ -99,158 +99,165 @@ struct AresApp: App {
         }
         
         // Enhanced Menu Bar
-        // Enhanced Menu Bar
         MenuBarExtra {
-            Button(action: {
-                NSApp.activate(ignoringOtherApps: true)
-                appState.selection = .dashboard
-                if let window = NSApp.windows.first {
-                    window.makeKeyAndOrderFront(nil)
-                }
-            }) {
-                Label {
-                    Text("Dashboard")
-                } icon: {
-                    Image(systemName: "square.grid.2x2")
-                        .imageScale(.medium)
-                        .fontWeight(.light)
-                        .frame(width: 18)
-                }
-            }
-            .keyboardShortcut("d", modifiers: [.command])
-
-            Divider()
-
-            // System Proxy Toggle
-            Toggle(isOn: Binding(
-                get: { appState.systemProxyEnabled },
-                set: { _ in
-                    Task {
-                        await appState.toggleSystemProxy()
-                    }
-                }
-            )) {
-                Label {
-                    Text("System Proxy")
-                } icon: {
-                    Image(systemName: "bolt.horizontal")
-                        .imageScale(.medium)
-                        .fontWeight(.light)
-                        .frame(width: 18)
-                }
-            }
-            .disabled(clashViewModel.isToggling)
-            .keyboardShortcut("p", modifiers: [.command, .shift])
-            
-            // TUN Mode Toggle
-            Toggle(isOn: Binding(
-                get: { appState.tunEnabled },
-                set: { newValue in
-                    print("[MenuBar] 🔘 TUN toggle clicked: \(appState.tunEnabled) -> \(newValue)")
-                    appState.toggleTUN()
-                }
-            )) {
-                Label {
-                    Text("TUN Mode")
-                } icon: {
-                    Image(systemName: "bolt.shield")
-                        .imageScale(.medium)
-                        .fontWeight(.light)
-                        .frame(width: 18)
-                }
-            }
-            .disabled(clashViewModel.isToggling)
-            .keyboardShortcut("t", modifiers: [.command, .shift])
-            
-            Divider()
-            
-            // Mode Selector
-            Menu {
-                Toggle(isOn: Binding(
-                    get: { appState.currentMode == .rule },
-                    set: { _ in Task { await appState.setMode(.rule) } }
-                )) {
-                    Label {
-                        Text("Rule")
-                    } icon: {
-                        Image(systemName: "list.bullet.indent")
-                            .imageScale(.medium)
-                            .fontWeight(.light)
-                            .frame(width: 18)
-                    }
-                }
-                .keyboardShortcut("1", modifiers: [.command])
-                
-                Toggle(isOn: Binding(
-                    get: { appState.currentMode == .global },
-                    set: { _ in Task { await appState.setMode(.global) } }
-                )) {
-                    Label {
-                        Text("Global")
-                    } icon: {
-                        Image(systemName: "map")
-                            .imageScale(.medium)
-                            .fontWeight(.light)
-                            .frame(width: 18)
-                    }
-                }
-                .keyboardShortcut("2", modifiers: [.command])
-                
-                Toggle(isOn: Binding(
-                    get: { appState.currentMode == .direct },
-                    set: { _ in Task { await appState.setMode(.direct) } }
-                )) {
-                    Label {
-                        Text("Direct")
-                    } icon: {
-                        Image(systemName: "arrow.turn.up.right")
-                            .imageScale(.medium)
-                            .fontWeight(.light)
-                            .frame(width: 18)
-                    }
-                }
-                .keyboardShortcut("3", modifiers: [.command])
-
-            } label: {
-                Label {
-                    Text("Mode")
-                } icon: {
-                    Image(systemName: "arrow.triangle.branch")
-                        .imageScale(.medium)
-                        .fontWeight(.light)
-                        .frame(width: 18)
-                }
-            }
-            .keyboardShortcut("M", modifiers: [.command, .shift])
-            
-            // MITM Mode Toggle (Top Level)
-            Toggle(isOn: Binding(
-                get: { appState.mitmEnabled },
-                set: { _ in appState.toggleMITM() }
-            )) {
-                Label {
-                    Text("MITM Mode")
-                } icon: {
-                    Image(systemName: "eyeglasses")
-                        .imageScale(.medium)
-                        .fontWeight(.light)
-                        .frame(width: 18)
-                }
-            }
-            .keyboardShortcut("m", modifiers: [.command, .shift])
-            
-            Divider()
-            
-            Button(action: {
-                NSApplication.shared.terminate(nil)
-            }) {
-                Label("Quit Ares", systemImage: "power")
-            }
-            .keyboardShortcut("q", modifiers: [.command])
+            AresMenuBarView(appState: appState, clashViewModel: clashViewModel)
         } label: {
             let proxyStatus = appState.systemProxyEnabled ? "1" : "0"
             let tunStatus = appState.tunEnabled ? "1" : "0"
             Image("Ares_Menu_\(proxyStatus)\(tunStatus)")
         }
+    }
+}
+
+struct AresMenuBarView: View {
+    @ObservedObject var appState: AppState
+    @ObservedObject var clashViewModel: ClashViewModel
+    @Environment(\.openWindow) var openWindow
+    
+    var body: some View {
+        Button(action: {
+            NSApp.activate(ignoringOtherApps: true)
+            appState.selection = .dashboard
+            openWindow(id: "main")
+        }) {
+            Label {
+                Text("Dashboard")
+            } icon: {
+                Image(systemName: "square.grid.2x2")
+                    .imageScale(.medium)
+                    .fontWeight(.light)
+                    .frame(width: 18)
+            }
+        }
+        .keyboardShortcut("d", modifiers: [.command])
+
+        Divider()
+
+        // System Proxy Toggle
+        Toggle(isOn: Binding(
+            get: { appState.systemProxyEnabled },
+            set: { _ in
+                Task {
+                    await appState.toggleSystemProxy()
+                }
+            }
+        )) {
+            Label {
+                Text("System Proxy")
+            } icon: {
+                Image(systemName: "bolt.horizontal")
+                    .imageScale(.medium)
+                    .fontWeight(.light)
+                    .frame(width: 18)
+            }
+        }
+        .disabled(clashViewModel.isToggling)
+        .keyboardShortcut("p", modifiers: [.command, .shift])
+        
+        // TUN Mode Toggle
+        Toggle(isOn: Binding(
+            get: { appState.tunEnabled },
+            set: { newValue in
+                print("[MenuBar] 🔘 TUN toggle clicked: \(appState.tunEnabled) -> \(newValue)")
+                appState.toggleTUN()
+            }
+        )) {
+            Label {
+                Text("TUN Mode")
+            } icon: {
+                Image(systemName: "bolt.shield")
+                    .imageScale(.medium)
+                    .fontWeight(.light)
+                    .frame(width: 18)
+            }
+        }
+        .disabled(clashViewModel.isToggling)
+        .keyboardShortcut("t", modifiers: [.command, .shift])
+        
+        Divider()
+        
+        // Mode Selector
+        Menu {
+            Toggle(isOn: Binding(
+                get: { appState.currentMode == .rule },
+                set: { _ in Task { await appState.setMode(.rule) } }
+            )) {
+                Label {
+                    Text("Rule")
+                } icon: {
+                    Image(systemName: "list.bullet.indent")
+                        .imageScale(.medium)
+                        .fontWeight(.light)
+                        .frame(width: 18)
+                }
+            }
+            .keyboardShortcut("1", modifiers: [.command])
+            
+            Toggle(isOn: Binding(
+                get: { appState.currentMode == .global },
+                set: { _ in Task { await appState.setMode(.global) } }
+            )) {
+                Label {
+                    Text("Global")
+                } icon: {
+                    Image(systemName: "map")
+                        .imageScale(.medium)
+                        .fontWeight(.light)
+                        .frame(width: 18)
+                }
+            }
+            .keyboardShortcut("2", modifiers: [.command])
+            
+            Toggle(isOn: Binding(
+                get: { appState.currentMode == .direct },
+                set: { _ in Task { await appState.setMode(.direct) } }
+            )) {
+                Label {
+                    Text("Direct")
+                } icon: {
+                    Image(systemName: "arrow.turn.up.right")
+                        .imageScale(.medium)
+                        .fontWeight(.light)
+                        .frame(width: 18)
+                }
+            }
+            .keyboardShortcut("3", modifiers: [.command])
+
+        } label: {
+            Label {
+                Text("Mode")
+            } icon: {
+                Image(systemName: "arrow.triangle.branch")
+                    .imageScale(.medium)
+                    .fontWeight(.light)
+                    .frame(width: 18)
+            }
+        }
+        .keyboardShortcut("M", modifiers: [.command, .shift])
+        
+        // MITM Mode Toggle (Top Level)
+        Toggle(isOn: Binding(
+            get: { appState.mitmEnabled },
+            set: { _ in appState.toggleMITM() }
+        )) {
+            Label {
+                Text("MITM Mode")
+            } icon: {
+                Image(systemName: "eyeglasses")
+                    .imageScale(.medium)
+                    .fontWeight(.light)
+                    .frame(width: 18)
+            }
+        }
+        .keyboardShortcut("m", modifiers: [.command, .shift])
+        
+        Divider()
+        
+        Button(action: {
+            NSApplication.shared.terminate(nil)
+        }) {
+            Label("Quit Ares", systemImage: "power")
+        }
+        .keyboardShortcut("q", modifiers: [.command])
     }
 }

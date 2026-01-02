@@ -37,7 +37,7 @@ struct DashboardView: View {
 
 private struct MainGrid: View {
     private var columns: [GridItem] {
-        [GridItem(.adaptive(minimum: 380), spacing: 16)]
+        [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
     }
     
     var body: some View {
