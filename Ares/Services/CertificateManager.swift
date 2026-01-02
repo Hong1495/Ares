@@ -40,6 +40,30 @@ final class CertificateManager: ObservableObject {
         Task {
             await MainActor.run { self.checkRootCA() }
             await self.cleanupLegacyCerts()
+            // Pre-generate certificates for common domains to avoid first-visit latency
+            await self.pregenerateCommonCerts()
+        }
+    }
+    
+    /// Pre-generate certificates for commonly accessed domains
+    private func pregenerateCommonCerts() async {
+        // Only pregenerate if Root CA exists
+        guard fileManager.fileExists(atPath: caCertPath.path) else { return }
+        
+        let commonDomains = [
+            "google.com", "googleapis.com", "gstatic.com",
+            "github.com", "githubusercontent.com",
+            "cloudflare.com", "cdn.jsdelivr.net",
+            "anthropic.com", "openai.com"
+        ]
+        
+        print("[CertificateManager] 🔄 Pre-generating certificates for \(commonDomains.count) common domains...")
+        
+        for domain in commonDomains {
+            // Run in background, don't block
+            Task.detached(priority: .background) {
+                _ = try? await self.getIdentity(for: domain)
+            }
         }
     }
 
@@ -140,9 +164,22 @@ final class CertificateManager: ObservableObject {
             
             let path = tempKeychainPath
             
-            // First, delete any existing keychain to start fresh
+            // Try to reuse existing keychain first (faster than recreating)
             if FileManager.default.fileExists(atPath: path) {
-                // Try to delete using security CLI
+                var existingKeychain: SecKeychain?
+                let openStatus = SecKeychainOpen(path, &existingKeychain)
+                if openStatus == errSecSuccess, let kc = existingKeychain {
+                    // Try to unlock it
+                    let unlockStatus = SecKeychainUnlock(kc, 0, "", true)
+                    if unlockStatus == errSecSuccess {
+                        print("[CertificateManager] 🔑 Reusing existing temp Keychain")
+                        tempKeychain = kc
+                        return kc
+                    }
+                }
+                
+                // Keychain exists but can't be used - delete and recreate
+                print("[CertificateManager] ⚠️ Existing Keychain unusable, recreating...")
                 let deleteProcess = Process()
                 deleteProcess.executableURL = URL(fileURLWithPath: "/usr/bin/security")
                 deleteProcess.arguments = ["delete-keychain", path]
@@ -150,8 +187,6 @@ final class CertificateManager: ObservableObject {
                 deleteProcess.standardError = FileHandle.nullDevice
                 try? deleteProcess.run()
                 deleteProcess.waitUntilExit()
-                
-                // Also delete file directly if still exists
                 try? FileManager.default.removeItem(atPath: path)
             }
             

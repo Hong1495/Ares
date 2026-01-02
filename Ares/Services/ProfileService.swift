@@ -41,8 +41,13 @@ class ProfileService: ObservableObject {
             let decoded = try JSONDecoder().decode([Profile].self, from: data)
             self.profiles = decoded
             
-            // Auto-select first profile if none active
-            if activeProfileID == nil, let first = profiles.first {
+            // Restore active profile ID from UserDefaults
+            if let savedIDString = UserDefaults.standard.string(forKey: "activeProfileID"),
+               let savedID = UUID(uuidString: savedIDString),
+               profiles.contains(where: { $0.id == savedID }) {
+                activeProfileID = savedID
+            } else if let first = profiles.first {
+                // Fallback to first profile if saved ID is invalid
                 activeProfileID = first.id
             }
             
@@ -67,7 +72,13 @@ class ProfileService: ObservableObject {
         do {
             let data = try JSONEncoder().encode(profiles)
             try data.write(to: profilesMetadataFile)
-            print("[ProfileService] Saved \(profiles.count) profiles")
+            
+            // Also persist active profile ID
+            if let activeID = activeProfileID {
+                UserDefaults.standard.set(activeID.uuidString, forKey: "activeProfileID")
+            }
+            
+            print("[ProfileService] Saved \(profiles.count) profiles, active: \(activeProfileID?.uuidString ?? "none")")
         } catch {
             print("[ProfileService] Failed to save profiles: \(error)")
         }

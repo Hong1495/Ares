@@ -41,6 +41,11 @@ class AppState: ObservableObject {
     @Published var systemProxyEnabled = false
     @Published var tunEnabled = false
     
+    // Toggle state guards to prevent race conditions during fast switching
+    private var isMITMToggling = false
+    private var isTUNToggling = false
+    private var isSystemProxyToggling = false
+    
     // Computed property for UI binding
     var mitmEnabled: Bool {
         NetworkMITMService.shared.isRunning
@@ -162,10 +167,6 @@ class AppState: ObservableObject {
             clashViewModel.addLog("[AppState] ❌ Failed to set mode: \(error)")
         }
     }
-    
-    // State Guard for System Proxy
-    private var isSystemProxyToggling = false
-
     /// Toggle system proxy
     func toggleSystemProxy() async {
         guard !isSystemProxyToggling else {
@@ -322,12 +323,20 @@ class AppState: ObservableObject {
     
     /// Toggle MITM mode
     func toggleMITM() {
+        // Guard against rapid toggling
+        guard !isMITMToggling else {
+            clashViewModel.addLog("[AppState] ⚠️ MITM toggle in progress, ignoring")
+            return
+        }
+        isMITMToggling = true
+        
         print("[AppState] switch MITM mode")
         
         let isRunning = NetworkMITMService.shared.isRunning
         let newState = !isRunning
         
         Task { @MainActor in
+            defer { self.isMITMToggling = false }
             if newState {
                 // STEP 1: Start MITM first to get the port number
                 await NetworkMITMService.shared.start()

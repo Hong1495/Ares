@@ -17,8 +17,9 @@ actor MITMBackend {
     
     // MARK: - Connection Limits
     private static let maxConnections = 500  // Maximum concurrent connections
-    private static let connectionTimeout: TimeInterval = 15  // 15 seconds timeout (reduced for faster cleanup of failed TLS handshakes)
-    private static let cleanupInterval: UInt64 = 30_000_000_000  // 30 seconds (safety net, connections self-cleanup)
+    private static let handshakeTimeout: TimeInterval = 5  // 5 seconds for TLS handshake (faster cleanup of stuck connections)
+    private static let dataIdleTimeout: TimeInterval = 30  // 30 seconds for data idle (allow slow responses)
+    private static let cleanupInterval: UInt64 = 15_000_000_000  // 15 seconds cleanup cycle (more aggressive)
     private var connectionCount = 0  // Track total connections created
     private var cleanupTask: Task<Void, Never>?
     
@@ -134,7 +135,11 @@ actor MITMBackend {
         let staleIds = await withTaskGroup(of: UUID?.self) { group in
             for (id, conn) in connections {
                 group.addTask {
-                    let isStale = await conn.isStale(timeout: Self.connectionTimeout)
+                    // Use different timeouts based on connection state
+                    let isStale = await conn.isStale(
+                        handshakeTimeout: Self.handshakeTimeout,
+                        dataIdleTimeout: Self.dataIdleTimeout
+                    )
                     return isStale ? id : nil
                 }
             }
@@ -288,19 +293,21 @@ actor MITMBoundConnection: Identifiable {
     private var responseAccumulator = Data()
     private var dataToSendOnRetry: Data?
     
-    func isStale(timeout: TimeInterval) -> Bool {
+    func isStale(handshakeTimeout: TimeInterval, dataIdleTimeout: TimeInterval) -> Bool {
         // Already stopped - definitely stale
         if isStopped { return true }
         
-        // Check time since last activity
+        let age = Date().timeIntervalSince(createdAt)
         let idleTime = Date().timeIntervalSince(lastActivity)
-        if idleTime > timeout { return true }
         
-        // Check time since creation - catch stuck handshakes
-        // If handshake hasn't completed in 10 seconds, it's likely stuck
+        // Check handshake timeout (stricter for stuck TLS connections)
         if !handshakeComplete {
-            let age = Date().timeIntervalSince(createdAt)
-            if age > 10.0 { return true }
+            if age > handshakeTimeout { return true }
+        }
+        
+        // Check data idle timeout (more lenient for slow responses)
+        if handshakeComplete {
+            if idleTime > dataIdleTimeout { return true }
         }
         
         return false
@@ -772,18 +779,93 @@ actor MITMBoundConnection: Identifiable {
     }
     
     private func connectUpstreamTLS(host: String, port: NWEndpoint.Port, decrypted: NWConnection) async {
-        // print("[MITMBackend] 🌐 connectUpstreamTLS: Connecting to \(host):\(port)")
-        // CRITICAL: Use direct connection to avoid proxy loop
-        // When MITM intercepts traffic, the upstream connection must NOT go through system proxy
-        // otherwise it could be re-intercepted causing infinite loops or conflicts with TUN mode
-        let options = NWProtocolTLS.Options()
-        let params = NWParameters(tls: options)
-        // CRITICAL: Direct connection to target (via Clash's direct rule for Ares process)
-        params.preferNoProxies = true
-
-        let upstream = NWConnection(to: .hostPort(host: .init(host), port: port), using: params)
-        self.setUpstreamConnection(upstream: upstream, decrypted: decrypted)
-        upstream.start(queue: .global())
+        // CRITICAL FIX: Route through Clash proxy instead of direct connection
+        // Previously this was direct which caused TUN+MITM to bypass proxy rules
+        // Now we establish a CONNECT tunnel through Clash first, then upgrade to TLS
+        
+        let params = NWParameters.tcp
+        params.allowLocalEndpointReuse = true
+        params.preferNoProxies = true  // Avoid system proxy loop, connect to Clash directly
+        
+        // Connect to Clash's mixed-port for proxying
+        let clashConnection = NWConnection(
+            to: .hostPort(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: clashPort)!),
+            using: params
+        )
+        
+        self.serverConnection = clashConnection
+        self.decryptedConnection = decrypted
+        
+        clashConnection.stateUpdateHandler = { [weak self] state in
+            guard let self = self else { return }
+            Task {
+                switch state {
+                case .ready:
+                    await self.establishTLSTunnelThroughClash(host: host, port: port, clashConnection: clashConnection, decrypted: decrypted)
+                case .failed, .cancelled:
+                    await self.stop()
+                default:
+                    break
+                }
+            }
+        }
+        clashConnection.start(queue: .global())
+    }
+    
+    /// Establish CONNECT tunnel through Clash, then upgrade to TLS
+    private func establishTLSTunnelThroughClash(host: String, port: NWEndpoint.Port, clashConnection: NWConnection, decrypted: NWConnection) async {
+        // Send CONNECT request to Clash
+        let connectRequest = "CONNECT \(host):\(port) HTTP/1.1\r\nHost: \(host):\(port)\r\n\r\n"
+        
+        clashConnection.send(content: connectRequest.data(using: .utf8), completion: .contentProcessed({ [weak self] err in
+            guard let self = self else { return }
+            if err != nil { Task { await self.stop() }; return }
+            
+            // Wait for 200 Connection Established
+            clashConnection.receive(minimumIncompleteLength: 1, maximumLength: 1024) { [weak self] content, _, _, recvErr in
+                guard let self = self else { return }
+                Task {
+                    if let data = content, String(data: data, encoding: .utf8)?.contains("200") == true {
+                        // Tunnel established, now create TLS connection over this tunnel
+                        await self.upgradeTunnelToTLS(host: host, clashConnection: clashConnection, decrypted: decrypted)
+                    } else {
+                        print("[MITMBackend] ❌ CONNECT tunnel failed for \(host)")
+                        await self.stop()
+                    }
+                }
+            }
+        }))
+    }
+    
+    /// Upgrade the established tunnel to TLS
+    private func upgradeTunnelToTLS(host: String, clashConnection: NWConnection, decrypted: NWConnection) async {
+        // Create TLS parameters for upstream
+        let tlsOptions = NWProtocolTLS.Options()
+        sec_protocol_options_set_tls_server_name(tlsOptions.securityProtocolOptions, host)
+        
+        let tlsParams = NWParameters(tls: tlsOptions)
+        tlsParams.preferNoProxies = true
+        
+        // Create TLS connection to actual target (through the established tunnel)
+        let upstream = NWConnection(to: .hostPort(host: .init(host), port: 443), using: tlsParams)
+        self.upstreamConnection = upstream
+        
+        // Use the existing setUpstreamConnection logic for state management
+        self.setUpstreamConnectionForTunnel(upstream: upstream, decrypted: decrypted, tunnel: clashConnection)
+    }
+    
+    /// Set up upstream connection with tunnel piping
+    private func setUpstreamConnectionForTunnel(upstream: NWConnection, decrypted: NWConnection, tunnel: NWConnection) {
+        // For tunnel mode, we pipe: decrypted <-> tunnel <-> upstream target
+        // But since we already have the tunnel established, we just pipe decrypted <-> tunnel
+        // The tunnel connection (clashConnection) handles the proxy routing
+        
+        markHandshakeComplete()
+        
+        // Pipe directly between decrypted client and clash tunnel
+        Task {
+            await self.setupPipe(c: decrypted, s: tunnel)
+        }
     }
 
     private func setUpstreamConnection(upstream: NWConnection, decrypted: NWConnection) {

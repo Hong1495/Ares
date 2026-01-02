@@ -69,11 +69,11 @@ struct ClashConfig: Codable {
         let actualController: String
         
         if enableTun {
-            // TUN mode uses standard ports now to match MITM expectations
-            // The previous 17890 isolation caused connection refused errors
-            actualMixedPort = mixedPort
-            actualSocksPort = socksPort
-            actualHttpPort = httpPort
+            // TUN mode uses isolated ports to avoid TIME_WAIT conflicts when switching modes
+            // This ensures clean port release when toggling between TUN and Normal
+            actualMixedPort = 17890
+            actualSocksPort = 17891
+            actualHttpPort = 17892
             actualController = "127.0.0.1:19097"
         } else {
             // Normal mode uses user-configured ports

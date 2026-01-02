@@ -209,13 +209,16 @@ struct SettingsView: View {
                 
                 Button("Apply Proxy Rules") {
                     Task {
+                        // 0. Refresh MITM Backend whitelist (for display filtering and connection bypass)
+                        await MITMBackend.shared.refreshDisplayWhitelist()
+                        
                         // 1. Refresh system proxy with new rules if currently enabled
                         if appState.systemProxyEnabled {
                             await appState.toggleSystemProxy() // Off
                             await appState.toggleSystemProxy() // On with new rules
                         }
                         
-                        // 2. If TUN mode is active, we MUST restart Clash to rebuild config with new bypass rules
+                        // 2. If TUN mode is active, we MUST restart Clash to rebuild config with new MITM domain rules
                         if tunEnabled {
                             let wasMITMRunning = NetworkMITMService.shared.isRunning
                             
@@ -232,6 +235,8 @@ struct SettingsView: View {
                                 await NetworkMITMService.shared.start()
                             }
                         }
+                        
+                        clashViewModel.addLog("[Settings] ✅ Proxy rules applied")
                     }
                 }
                 .buttonStyle(.bordered)

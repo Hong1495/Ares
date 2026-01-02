@@ -64,18 +64,19 @@ actor ConfigService {
         
         // Dynamic Rules: Inject Bypass rules and MITM rules
         // Fetch bypass rules from UserDefaults via MainActor
-        let (mitmEnabled, mitmPort, bypassRules, mitmPortsString) = await MainActor.run {
+        let (mitmEnabled, mitmPort, bypassRules, mitmPortsString, mitmHosts) = await MainActor.run {
             let mitm = NetworkMITMService.shared
             let defaults = UserDefaults.standard
             return (
                 mitm.isRunning,
                 Int(mitm.currentPort),
                 defaults.string(forKey: "bypassRules") ?? "",
-                defaults.string(forKey: "mitmPorts") ?? "80, 443, 8080, 8443"
+                defaults.string(forKey: "mitmPorts") ?? "80, 443, 8080, 8443",
+                defaults.string(forKey: "mitmHosts") ?? ""  // Whitelist domains
             )
         }
         
-        cleanedProfile = injectDynamicRules(into: cleanedProfile, tunEnabled: tunEnabled, mitmEnabled: mitmEnabled, mitmPort: mitmPort, bypassRules: bypassRules, mitmPortsString: mitmPortsString)
+        cleanedProfile = injectDynamicRules(into: cleanedProfile, tunEnabled: tunEnabled, mitmEnabled: mitmEnabled, mitmPort: mitmPort, bypassRules: bypassRules, mitmPortsString: mitmPortsString, mitmHosts: mitmHosts)
         
         // Build base Clash config with TUN setting (MainActor required for ClashConfig)
         let baseConfig = await MainActor.run {
@@ -204,12 +205,10 @@ actor ConfigService {
     
     /// Inject Dynamic Rules (Bypass & MITM) into existing profile sections
     /// - bypassRules: User-defined bypass domains (DIRECT)
-    /// - mitm: MITM interception rules (hijack configured ports)
-    /// Inject Dynamic Rules (Bypass & MITM) into existing profile sections
-    /// - bypassRules: User-defined bypass domains (DIRECT)
-    /// - mitm: MITM interception rules (hijack configured ports)
-    nonisolated private func injectDynamicRules(into yaml: String, tunEnabled: Bool, mitmEnabled: Bool, mitmPort: Int, bypassRules: String, mitmPortsString: String) -> String {
-        print("[ConfigService] 🛠 Injecting Rules - Bypass: [\(bypassRules)], MITM Ports: [\(mitmPortsString)], TUN: \(tunEnabled), MITM: \(mitmEnabled)")
+    /// - mitm: MITM interception rules (hijack configured ports/domains)
+    /// - mitmHosts: Whitelist domains - only these will be routed to MITM
+    nonisolated private func injectDynamicRules(into yaml: String, tunEnabled: Bool, mitmEnabled: Bool, mitmPort: Int, bypassRules: String, mitmPortsString: String, mitmHosts: String) -> String {
+        print("[ConfigService] 🛠 Injecting Rules - Bypass: [\(bypassRules)], MITM Ports: [\(mitmPortsString)], MITM Hosts: [\(mitmHosts)], TUN: \(tunEnabled), MITM: \(mitmEnabled)")
         
         var result = yaml
         var rulesToInject: [String] = []
@@ -237,21 +236,39 @@ actor ConfigService {
         
         // 2. Generate MITM Rules (If Enabled in TUN mode)
         if tunEnabled && mitmEnabled && mitmPort > 0 {
-            // Parse user configured MITM ports (Handle both English and Chinese commas)
-            let separators = CharacterSet(charactersIn: ",，")
-            let targetPorts = mitmPortsString.components(separatedBy: separators).compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
-            // Default to standard ports if empty
-            let validPorts = targetPorts.isEmpty ? [80, 443, 8080, 8443] : targetPorts
-            
             // Prevent loop: The MITM port itself MUST be DIRECT
             rulesToInject.append("  - DST-PORT,\(mitmPort),DIRECT")
             
-            for port in validPorts {
-                // Validation: Ensure valid port range and skip MITM port
-                if port > 0 && port < 65536 && port != mitmPort {
-                     // Note: Using spaces to ensure indentation matches "rules:" children
-                     rulesToInject.append("  - AND,((DST-PORT,\(port)),(NOT,((PROCESS-NAME,Ares)))),MITM-Intercept")
+            // Parse whitelist domains
+            let separators = CharacterSet(charactersIn: ",，\n")
+            let whitelistDomains = mitmHosts.components(separatedBy: separators)
+                .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+                .filter { !$0.isEmpty }
+            
+            if !whitelistDomains.isEmpty {
+                // Whitelist mode: Only route whitelisted domains to MITM
+                // Other traffic goes through normal Clash rules (high efficiency)
+                for domain in whitelistDomains {
+                    // Use DOMAIN-SUFFIX to match domain and all subdomains
+                    rulesToInject.append("  - DOMAIN-SUFFIX,\(domain),MITM-Intercept")
                 }
+                print("[ConfigService] 📋 MITM Whitelist mode: \(whitelistDomains.count) domains will be intercepted")
+            } else {
+                // Legacy mode: Intercept all traffic on configured ports
+                // Parse user configured MITM ports (Handle both English and Chinese commas)
+                let portSeparators = CharacterSet(charactersIn: ",，")
+                let targetPorts = mitmPortsString.components(separatedBy: portSeparators).compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+                // Default to standard ports if empty
+                let validPorts = targetPorts.isEmpty ? [80, 443, 8080, 8443] : targetPorts
+                
+                for port in validPorts {
+                    // Validation: Ensure valid port range and skip MITM port
+                    if port > 0 && port < 65536 && port != mitmPort {
+                         // Note: Using spaces to ensure indentation matches "rules:" children
+                         rulesToInject.append("  - AND,((DST-PORT,\(port)),(NOT,((PROCESS-NAME,Ares)))),MITM-Intercept")
+                    }
+                }
+                print("[ConfigService] 📋 MITM Port mode: intercepting ports \(validPorts)")
             }
             
             // Inject MITM Proxy Definition
