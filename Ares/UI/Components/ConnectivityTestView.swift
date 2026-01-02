@@ -6,7 +6,6 @@ struct ConnectivityTestView: View {
     @State private var loadingStates: [String: Bool] = [:]
     
     let sites = [
-        ("Gateway", "http://10.10.24.111", "server.rack"),
         ("Google", "https://www.google.com", "globe"),
         ("Github", "https://github.com", "chevron.left.forwardslash.chevron.right"),
         ("Gemini", "https://gemini.google.com", "sparkles")
@@ -35,7 +34,7 @@ struct ConnectivityTestView: View {
             
             Spacer()
             
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                 ForEach(sites, id: \.0) { site in
                     VStack(spacing: 4) {
                         Image(systemName: site.2)
