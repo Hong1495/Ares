@@ -1,0 +1,51 @@
+{
+  "/Users/sweethoney/Downloads/Ares/Ares/Models/AIModels.swift" : {
+    "const-values" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/AIModels.swiftconstvalues",
+    "dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/AIModels.d",
+    "diagnostics" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/AIModels.dia",
+    "object" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/AIModels.o",
+    "swift-dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/AIModels.swiftdeps"
+  },
+  "/Users/sweethoney/Downloads/Ares/Ares/Models/AresConfig.swift" : {
+    "const-values" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/AresConfig.swiftconstvalues",
+    "dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/AresConfig.d",
+    "diagnostics" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/AresConfig.dia",
+    "object" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/AresConfig.o",
+    "swift-dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/AresConfig.swiftdeps"
+  },
+  "/Users/sweethoney/Downloads/Ares/Ares/Models/ClashConfig.swift" : {
+    "const-values" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ClashConfig.swiftconstvalues",
+    "dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ClashConfig.d",
+    "diagnostics" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ClashConfig.dia",
+    "object" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ClashConfig.o",
+    "swift-dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ClashConfig.swiftdeps"
+  },
+  "/Users/sweethoney/Downloads/Ares/Ares/Models/MITMInterceptedData.swift" : {
+    "const-values" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/MITMInterceptedData.swiftconstvalues",
+    "dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/MITMInterceptedData.d",
+    "diagnostics" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/MITMInterceptedData.dia",
+    "object" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/MITMInterceptedData.o",
+    "swift-dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/MITMInterceptedData.swiftdeps"
+  },
+  "/Users/sweethoney/Downloads/Ares/Ares/Models/Profile.swift" : {
+    "const-values" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/Profile.swiftconstvalues",
+    "dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/Profile.d",
+    "diagnostics" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/Profile.dia",
+    "object" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/Profile.o",
+    "swift-dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/Profile.swiftdeps"
+  },
+  "/Users/sweethoney/Downloads/Ares/Ares/Models/ProxyModels.swift" : {
+    "const-values" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ProxyModels.swiftconstvalues",
+    "dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ProxyModels.d",
+    "diagnostics" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ProxyModels.dia",
+    "object" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ProxyModels.o",
+    "swift-dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ProxyModels.swiftdeps"
+  },
+  "/Users/sweethoney/Downloads/Ares/Ares/Services/AIAnalysisService.swift" : {
+    "const-values" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/AIAnalysisService.swiftconstvalues",
+    "dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/AIAnalysisService.d",
+    "diagnostics" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/AIAnalysisService.dia",
+    "object" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/AIAnalysisService.o",
+    "swift-dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/AIAnalysisService.swiftdeps"
+  }
+}

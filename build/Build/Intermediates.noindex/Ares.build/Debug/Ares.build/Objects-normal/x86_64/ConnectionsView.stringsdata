@@ -1,0 +1,144 @@
+{
+  "source": "/Users/sweethoney/Downloads/Ares/Ares/UI/ConnectionsView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Connections",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 226
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld connections",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 76
+        }
+      },
+      {
+        "comment": "",
+        "key": "Close all connections",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 104
+        }
+      },
+      {
+        "comment": "",
+        "key": "Export connections",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 113
+        }
+      },
+      {
+        "comment": "",
+        "key": "Search connections...",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 87
+        }
+      },
+      {
+        "comment": "",
+        "key": "Host",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 122
+        }
+      },
+      {
+        "comment": "",
+        "key": "Traffic",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 130
+        }
+      },
+      {
+        "comment": "",
+        "key": "Speed",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 150
+        }
+      },
+      {
+        "comment": "",
+        "key": "Chains",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 160
+        }
+      },
+      {
+        "comment": "",
+        "key": "Rule",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 169
+        }
+      },
+      {
+        "comment": "",
+        "key": "Process",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 185
+        }
+      },
+      {
+        "comment": "",
+        "key": "Time",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 193
+        }
+      },
+      {
+        "comment": "",
+        "key": "Source",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 201
+        }
+      },
+      {
+        "comment": "",
+        "key": "Destination",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 209
+        }
+      },
+      {
+        "comment": "",
+        "key": "Type",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 217
+        }
+      },
+      {
+        "comment": "",
+        "key": "↓ %@",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 152
+        }
+      },
+      {
+        "comment": "",
+        "key": "↑ %@",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 153
+        }
+      }
+    ]
+  },
+  "version": 1
+}

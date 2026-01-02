@@ -1,0 +1,44 @@
+{
+  "/Users/sweethoney/Downloads/Ares/Ares/AresApp.swift" : {
+    "const-values" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/AresApp.swiftconstvalues",
+    "dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/AresApp.d",
+    "diagnostics" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/AresApp.dia",
+    "object" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/AresApp.o",
+    "swift-dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/AresApp.swiftdeps"
+  },
+  "/Users/sweethoney/Downloads/Ares/Ares/ContentView.swift" : {
+    "const-values" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ContentView.swiftconstvalues",
+    "dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ContentView.d",
+    "diagnostics" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ContentView.dia",
+    "object" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ContentView.o",
+    "swift-dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ContentView.swiftdeps"
+  },
+  "/Users/sweethoney/Downloads/Ares/Ares/Utilities/AsyncFileManager.swift" : {
+    "const-values" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/AsyncFileManager.swiftconstvalues",
+    "dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/AsyncFileManager.d",
+    "diagnostics" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/AsyncFileManager.dia",
+    "object" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/AsyncFileManager.o",
+    "swift-dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/AsyncFileManager.swiftdeps"
+  },
+  "/Users/sweethoney/Downloads/Ares/Ares/Utilities/ProcessManager.swift" : {
+    "const-values" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ProcessManager.swiftconstvalues",
+    "dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ProcessManager.d",
+    "diagnostics" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ProcessManager.dia",
+    "object" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ProcessManager.o",
+    "swift-dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ProcessManager.swiftdeps"
+  },
+  "/Users/sweethoney/Downloads/Ares/Ares/ViewModels/ClashView Model.swift" : {
+    "const-values" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ClashView Model.swiftconstvalues",
+    "dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ClashView Model.d",
+    "diagnostics" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ClashView Model.dia",
+    "object" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ClashView Model.o",
+    "swift-dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ClashView Model.swiftdeps"
+  },
+  "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "const-values" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/GeneratedAssetSymbols.swiftconstvalues",
+    "dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/GeneratedAssetSymbols.d",
+    "diagnostics" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/GeneratedAssetSymbols.dia",
+    "object" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/GeneratedAssetSymbols.o",
+    "swift-dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/GeneratedAssetSymbols.swiftdeps"
+  }
+}

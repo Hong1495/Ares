@@ -1,0 +1,48 @@
+{
+  "source": "/Users/sweethoney/Downloads/Ares/Ares/UI/Components/TestCard.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Connection Test",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 13
+        }
+      },
+      {
+        "comment": "",
+        "key": "No test results yet",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 31
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lldms",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 50
+        }
+      },
+      {
+        "comment": "",
+        "key": "Test All Nodes",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 72
+        }
+      },
+      {
+        "comment": "",
+        "key": "Test Active Group",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 85
+        }
+      }
+    ]
+  },
+  "version": 1
+}

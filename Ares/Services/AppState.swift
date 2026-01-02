@@ -258,6 +258,9 @@ class AppState: ObservableObject {
         // Persist immediately
         UserDefaults.standard.set(newTUN, forKey: "tunEnabled")
         
+        // Update Controller Port IMMEDIATELY to avoid race conditions during toggle
+        clashController.updatePort(tunEnabled: newTUN)
+        
         clashViewModel.addLog("[TUN] 🔘 Switching to \(newTUN ? "TUN" : "Normal") mode...")
         
         // 3. Dispatch the heavy lifting to background
@@ -467,10 +470,12 @@ class AppState: ObservableObject {
         let clashHttpPort = Int(defaults.string(forKey: "mixedPort") ?? "7890") ?? 7890
         let clashSocksPort = Int(defaults.string(forKey: "socksPort") ?? "7891") ?? 7891
         
-        // In TUN mode: System proxy points to Clash, traffic flows TUN->Clash->MITM (via rules)
-        // MITM routing is handled by Clash rules, not system proxy
+        // In TUN mode: System proxy points to Clash with isolated ports
+        // Matching logic in ClashConfig.swift:
+        // actualMixedPort = 17890 (HTTP/Mixed)
+        // actualSocksPort = 17891 (SOCKS)
         if tunEnabled {
-            return (clashHttpPort, clashSocksPort)
+            return (17890, 17891)
         }
         
         // In non-TUN mode: If MITM is running, system proxy points to MITM

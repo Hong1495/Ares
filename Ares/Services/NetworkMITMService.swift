@@ -43,10 +43,20 @@ final class NetworkMITMService: ObservableObject {
         ClashViewModel.shared.addLog("[NetworkMITMService] 🟢 Starting MITM Service...")
         await setupCallbacks()
         
-        // Access shared state safely
-        let port = UserDefaults.standard.integer(forKey: "mixedPort") == 0 ? 7890 : UserDefaults.standard.integer(forKey: "mixedPort")
+        // Determine correct Clash port based on TUN mode
+        // TUN mode uses 17890, Normal mode uses user-configured mixedPort (default 7890)
+        let tunEnabled = await MainActor.run { AppState.shared.tunEnabled }
+        let clashPort: UInt16
+        if tunEnabled {
+            clashPort = 17890  // TUN mode isolated port
+            ClashViewModel.shared.addLog("[NetworkMITMService] 📡 TUN mode detected, using Clash port 17890")
+        } else {
+            let userPort = UserDefaults.standard.integer(forKey: "mixedPort")
+            clashPort = UInt16(userPort == 0 ? 7890 : userPort)
+            ClashViewModel.shared.addLog("[NetworkMITMService] 📡 Normal mode, using Clash port \(clashPort)")
+        }
         
-        await MITMBackend.shared.start(clashPort: UInt16(port))
+        await MITMBackend.shared.start(clashPort: clashPort)
         
         // Wait for listener to be ready (up to 2 seconds)
         for i in 0..<20 {

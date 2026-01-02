@@ -1,0 +1,44 @@
+{
+  "/Users/sweethoney/Downloads/Ares/Ares/Services/LaunchService.swift" : {
+    "const-values" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/LaunchService.swiftconstvalues",
+    "dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/LaunchService.d",
+    "diagnostics" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/LaunchService.dia",
+    "object" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/LaunchService.o",
+    "swift-dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/LaunchService.swiftdeps"
+  },
+  "/Users/sweethoney/Downloads/Ares/Ares/Services/MITMBackend.swift" : {
+    "const-values" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/MITMBackend.swiftconstvalues",
+    "dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/MITMBackend.d",
+    "diagnostics" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/MITMBackend.dia",
+    "object" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/MITMBackend.o",
+    "swift-dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/MITMBackend.swiftdeps"
+  },
+  "/Users/sweethoney/Downloads/Ares/Ares/Services/NetworkMITMService.swift" : {
+    "const-values" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/NetworkMITMService.swiftconstvalues",
+    "dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/NetworkMITMService.d",
+    "diagnostics" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/NetworkMITMService.dia",
+    "object" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/NetworkMITMService.o",
+    "swift-dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/NetworkMITMService.swiftdeps"
+  },
+  "/Users/sweethoney/Downloads/Ares/Ares/Services/PrivilegeService.swift" : {
+    "const-values" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/PrivilegeService.swiftconstvalues",
+    "dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/PrivilegeService.d",
+    "diagnostics" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/PrivilegeService.dia",
+    "object" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/PrivilegeService.o",
+    "swift-dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/PrivilegeService.swiftdeps"
+  },
+  "/Users/sweethoney/Downloads/Ares/Ares/Services/ProfileService.swift" : {
+    "const-values" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ProfileService.swiftconstvalues",
+    "dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ProfileService.d",
+    "diagnostics" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ProfileService.dia",
+    "object" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ProfileService.o",
+    "swift-dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ProfileService.swiftdeps"
+  },
+  "/Users/sweethoney/Downloads/Ares/Ares/Services/ProxyDiagnostics.swift" : {
+    "const-values" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ProxyDiagnostics.swiftconstvalues",
+    "dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ProxyDiagnostics.d",
+    "diagnostics" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ProxyDiagnostics.dia",
+    "object" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ProxyDiagnostics.o",
+    "swift-dependencies" : "/Users/sweethoney/Downloads/Ares/build/Build/Intermediates.noindex/Ares.build/Debug/Ares.build/Objects-normal/x86_64/ProxyDiagnostics.swiftdeps"
+  }
+}

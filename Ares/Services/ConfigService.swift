@@ -248,11 +248,13 @@ actor ConfigService {
             if !whitelistDomains.isEmpty {
                 // Whitelist mode: Only route whitelisted domains to MITM
                 // Other traffic goes through normal Clash rules (high efficiency)
+                
+                // Use AND rule to prevent loops while allowing falling through to Proxy rules
+                // (Traffic from Ares AND the MITM Backend itself must fail this rule and match subsequent profile rules)
                 for domain in whitelistDomains {
-                    // Use DOMAIN-SUFFIX to match domain and all subdomains
-                    rulesToInject.append("  - DOMAIN-SUFFIX,\(domain),MITM-Intercept")
+                    rulesToInject.append("  - AND,((DOMAIN-SUFFIX,\(domain)),(NOT,((PROCESS-NAME,Ares))),(NOT,((PROCESS-NAME,language_server_macos_arm)))),MITM-Intercept")
                 }
-                print("[ConfigService] 📋 MITM Whitelist mode: \(whitelistDomains.count) domains will be intercepted")
+                print("[ConfigService] 📋 MITM Whitelist mode: \(whitelistDomains.count) domains will be intercepted (Loop protection active for Ares & Backend)")
             } else {
                 // Legacy mode: Intercept all traffic on configured ports
                 // Parse user configured MITM ports (Handle both English and Chinese commas)

@@ -1,0 +1,232 @@
+{
+  "source": "/Users/sweethoney/Downloads/Ares/Ares/UI/Components/NetworkAnalysisComponents.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 32
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 56
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld hits",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 100
+        }
+      },
+      {
+        "comment": "",
+        "key": "Copied",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 300
+        }
+      },
+      {
+        "comment": "",
+        "key": "Copy",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 300
+        }
+      },
+      {
+        "comment": "",
+        "key": "Form Data",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 394
+        }
+      },
+      {
+        "comment": "",
+        "key": "=",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 448
+        }
+      },
+      {
+        "comment": "",
+        "key": "JSON Object",
+        "location": {
+          "startingColumn": 47,
+          "startingLine": 458
+        }
+      },
+      {
+        "comment": "",
+        "key": "JSON Object (tap to expand)",
+        "location": {
+          "startingColumn": 63,
+          "startingLine": 458
+        }
+      },
+      {
+        "comment": "",
+        "key": "Binary Data",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 502
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld bytes",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 506
+        }
+      },
+      {
+        "comment": "",
+        "key": "... %lld more bytes truncated",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 535
+        }
+      },
+      {
+        "comment": "",
+        "key": "Offset",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 517
+        }
+      },
+      {
+        "comment": "",
+        "key": "00 01 02 03 04 05 06 07  08 09 0A 0B 0C 0D 0E 0F",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 519
+        }
+      },
+      {
+        "comment": "",
+        "key": "ASCII",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 521
+        }
+      },
+      {
+        "comment": "",
+        "key": "   ",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 574
+        }
+      },
+      {
+        "comment": "",
+        "key": " ",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 577
+        }
+      },
+      {
+        "comment": "",
+        "key": "Unable to parse multipart data",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 628
+        }
+      },
+      {
+        "comment": "",
+        "key": "Multipart Form Data",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 613
+        }
+      },
+      {
+        "comment": "",
+        "key": "boundary: %@...",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 618
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld.",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 698
+        }
+      },
+      {
+        "comment": "",
+        "key": "(%@)",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 707
+        }
+      },
+      {
+        "comment": "",
+        "key": "[%@]",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 713
+        }
+      },
+      {
+        "comment": "",
+        "key": "No active sessions",
+        "location": {
+          "startingColumn": 47,
+          "startingLine": 773
+        }
+      },
+      {
+        "comment": "",
+        "key": "Monitoring Network Traffic",
+        "location": {
+          "startingColumn": 70,
+          "startingLine": 773
+        }
+      },
+      {
+        "comment": "",
+        "key": "Search...",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 790
+        }
+      },
+      {
+        "comment": "",
+        "key": "No Activity Captured",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 814
+        }
+      },
+      {
+        "comment": "",
+        "key": "Network requests for this tab will appear here in real-time.",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 816
+        }
+      }
+    ]
+  },
+  "version": 1
+}

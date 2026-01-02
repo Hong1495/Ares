@@ -102,6 +102,7 @@ struct ClashConfig: Codable {
             
             # Performance Settings
             keep-alive-interval: 15
+            find-process-mode: always
             
             # DNS Configuration (Critical for TUN mode speed)
             dns:
