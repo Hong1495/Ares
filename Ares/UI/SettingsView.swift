@@ -112,7 +112,7 @@ struct SettingsView: View {
             // Unified TUN Mode Info
             Section {
                 Toggle(isOn: $tunEnabled) {
-                    Text("Enable TUN Mode")
+                    Text("Enable TUN Support")
                         .fontWeight(.medium)
                 }
                 

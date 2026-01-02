@@ -26,6 +26,7 @@ struct ClashConfig: Codable {
     
     // TUN settings
     var enableTun: Bool = false
+    var tunStack: String = "system"
     
     // MITM Integration (for TUN mode)
     var mitmEnabled: Bool = false
@@ -44,6 +45,7 @@ struct ClashConfig: Codable {
             self.httpPort = Int(defaults.string(forKey: "httpPort") ?? "7892") ?? 7892
             self.socksPort = Int(defaults.string(forKey: "socksPort") ?? "7891") ?? 7891
             self.mixedPort = Int(defaults.string(forKey: "mixedPort") ?? "7890") ?? 7890 // Default 7890
+            self.tunStack = defaults.string(forKey: "tunStack") ?? "system"
             
             // Check legacy keys or string/bool variants if needed? 
             // SwiftUI AppStorage usually stores as the type defined.
@@ -177,7 +179,7 @@ struct ClashConfig: Codable {
             # TUN Mode Configuration
             tun:
               enable: true
-              stack: system
+              stack: \(tunStack)
               dns-hijack:
                 - any:53
               auto-route: true
