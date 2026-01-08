@@ -25,12 +25,81 @@ struct AppSession: Identifiable, Hashable, Sendable {
     // Note: We only store *active* connections here to save memory.
     var activeConnections: [Connection] = []
     
+    // History for Sparkline (Last 40 points of download speed)
+    var speedHistory: [Int64] = []
+    
     static func == (lhs: AppSession, rhs: AppSession) -> Bool {
-        lhs.id == rhs.id
+        lhs.id == rhs.id && lhs.activeConnections.count == rhs.activeConnections.count && lhs.speedHistory == rhs.speedHistory
     }
     
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
+        hasher.combine(activeConnections.count)
+    }
+}
+
+/// Generic Group Node for non-App grouping (e.g. Proxy, Host)
+struct ActivityGroup: Identifiable, Hashable, Sendable {
+    let id: String              // Unique ID (e.g. Proxy Name or Host)
+    let title: String           // Display Title
+    let icon: String            // SF Symbol Name
+    let connections: [Connection] // Child connections
+    
+    // Aggregated Stats
+    var upload: Int64 { connections.reduce(0) { $0 + $1.upload } }
+    var download: Int64 { connections.reduce(0) { $0 + $1.download } }
+    var uploadSpeed: Int64 { connections.reduce(0) { $0 + $1.uploadSpeed } }
+    var downloadSpeed: Int64 { connections.reduce(0) { $0 + $1.downloadSpeed } }
+    var activeCount: Int { connections.count }
+}
+
+/// Polymorphic Node for Hierarchical Table
+enum ActivityNode: Identifiable, Hashable, Sendable {
+    case app(AppSession)
+    case group(ActivityGroup)
+    case connection(Connection)
+    
+    var id: String {
+        switch self {
+        case .app(let session): return "app_" + session.id
+        case .group(let group): return "group_" + group.id
+        case .connection(let conn): return "conn_" + conn.id
+        }
+    }
+    
+    var children: [ActivityNode]? {
+        switch self {
+        case .app(let session):
+            return session.activeConnections.isEmpty ? nil : session.activeConnections.map { .connection($0) }
+        case .group(let group):
+            return group.connections.isEmpty ? nil : group.connections.map { .connection($0) }
+        case .connection:
+            return nil
+        }
+    }
+    
+    var sortValue: Int64 {
+        switch self {
+        case .app(let session): return session.currentDownloadSpeed
+        case .group(let group): return group.downloadSpeed
+        case .connection(let conn): return conn.downloadSpeed
+        }
+    }
+    
+    var title: String {
+        switch self {
+        case .app(let session): return session.name
+        case .group(let group): return group.title
+        case .connection(let conn): return conn.metadata.host.isEmpty ? conn.metadata.destinationIP : conn.metadata.host
+        }
+    }
+    
+    var icon: String? {
+        switch self {
+        case .app(let session): return session.iconPath
+        case .group(let group): return group.icon
+        case .connection: return nil
+        }
     }
 }
 
@@ -126,12 +195,20 @@ final class TrafficAuditManager: ObservableObject {
             session.activeConnectionCount = session.activeConnections.count
             
             // Update Speeds based on accumulated deltas in this time window
+            var currentDownSpeed: Int64 = 0
             if let deltas = appDeltas[key] {
                 session.currentUploadSpeed = Int64(Double(deltas.up) / safeTimeDiff)
-                session.currentDownloadSpeed = Int64(Double(deltas.down) / safeTimeDiff)
+                currentDownSpeed = Int64(Double(deltas.down) / safeTimeDiff)
+                session.currentDownloadSpeed = currentDownSpeed
             } else {
                 session.currentUploadSpeed = 0
                 session.currentDownloadSpeed = 0
+            }
+            
+            // Update History (Keep last 40 points)
+            session.speedHistory.append(currentDownSpeed)
+            if session.speedHistory.count > 40 {
+                session.speedHistory.removeFirst()
             }
             
             // Determine "Running" State

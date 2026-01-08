@@ -1,7 +1,7 @@
 import Foundation
 
 /// Connection model
-struct Connection: Identifiable, Sendable {
+struct Connection: Identifiable, Sendable, Hashable {
     let id: String
     let metadata: ConnectionMetadata
     let upload: Int64
@@ -41,6 +41,14 @@ struct Connection: Identifiable, Sendable {
     var sourceString: String { "\(metadata.sourceIP):\(metadata.sourcePort)" }
     var destinationString: String { "\(metadata.destinationIP):\(metadata.destinationPort)" }
     var typeString: String { "\(metadata.network.uppercased())(\(metadata.type.lowercased()))" }
+    
+    static func == (lhs: Connection, rhs: Connection) -> Bool {
+        lhs.id == rhs.id
+    }
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
 }
 
 struct ConnectionMetadata: Codable, Sendable {
