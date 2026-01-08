@@ -64,13 +64,14 @@ actor ConfigService {
         
         // Dynamic Rules: Inject Bypass rules and MITM rules
         // Fetch bypass rules and MITM settings from UserDefaults via MainActor
-        let (mitmEnabled, mitmPort, bypassRules, mitmPortsString, mitmHosts, tlsFingerprint) = await MainActor.run {
+        let (mitmEnabled, mitmPort, bypassRules, localRules, mitmPortsString, mitmHosts, tlsFingerprint) = await MainActor.run {
             let mitm = NetworkMITMService.shared
             let defaults = UserDefaults.standard
             return (
                 mitm.isRunning,
                 Int(mitm.currentPort),
                 defaults.string(forKey: "bypassRules") ?? "",
+                defaults.string(forKey: "localRules") ?? "",
                 defaults.string(forKey: "mitmPorts") ?? "80, 443, 8080, 8443",
                 defaults.string(forKey: "mitmHosts") ?? "",  // Whitelist domains
                 defaults.string(forKey: "tlsFingerprint") ?? "none"
@@ -82,7 +83,7 @@ actor ConfigService {
             cleanedProfile = injectFingerprint(into: cleanedProfile, fingerprint: tlsFingerprint)
         }
         
-        cleanedProfile = injectDynamicRules(into: cleanedProfile, tunEnabled: tunEnabled, mitmEnabled: mitmEnabled, mitmPort: mitmPort, bypassRules: bypassRules, mitmPortsString: mitmPortsString, mitmHosts: mitmHosts)
+        cleanedProfile = injectDynamicRules(into: cleanedProfile, tunEnabled: tunEnabled, mitmEnabled: mitmEnabled, mitmPort: mitmPort, bypassRules: bypassRules, localRules: localRules, mitmPortsString: mitmPortsString, mitmHosts: mitmHosts)
         
         // Build base Clash config with TUN setting (MainActor required for ClashConfig)
         let baseConfig = await MainActor.run {
@@ -211,10 +212,11 @@ actor ConfigService {
     
     /// Inject Dynamic Rules (Bypass & MITM) into existing profile sections
     /// - bypassRules: User-defined bypass domains (DIRECT)
+    /// - localRules: User-defined raw rules (from Rules interface)
     /// - mitm: MITM interception rules (hijack configured ports/domains)
     /// - mitmHosts: Whitelist domains - only these will be routed to MITM
-    nonisolated private func injectDynamicRules(into yaml: String, tunEnabled: Bool, mitmEnabled: Bool, mitmPort: Int, bypassRules: String, mitmPortsString: String, mitmHosts: String) -> String {
-        print("[ConfigService] 🛠 Injecting Rules - Bypass: [\(bypassRules)], MITM Ports: [\(mitmPortsString)], MITM Hosts: [\(mitmHosts)], TUN: \(tunEnabled), MITM: \(mitmEnabled)")
+    nonisolated private func injectDynamicRules(into yaml: String, tunEnabled: Bool, mitmEnabled: Bool, mitmPort: Int, bypassRules: String, localRules: String, mitmPortsString: String, mitmHosts: String) -> String {
+        print("[ConfigService] 🛠 Injecting Rules - Bypass: [\(bypassRules)], LocalRules: [\(localRules.count) chars], MITM Ports: [\(mitmPortsString)], MITM Hosts: [\(mitmHosts)], TUN: \(tunEnabled), MITM: \(mitmEnabled)")
         
         var result = yaml
         var rulesToInject: [String] = []  // No indentation yet
@@ -223,7 +225,14 @@ actor ConfigService {
         // This is handled by a separate helper, but we should make sure this method focuses on Rules.
         // Fingerprint injection is best done before rule injection to keep logic clean.
         
-        // 1. Generate Bypass Rules (Highest Priority)
+        // 1. Generate Local Overrides (Highest Priority)
+        let localLines = localRules.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && $0.hasPrefix("-") }
+        
+        rulesToInject.append(contentsOf: localLines)
+        
+        // 2. Generate Bypass Rules
         let bypassItems = bypassRules.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         
         for item in bypassItems {
@@ -244,7 +253,7 @@ actor ConfigService {
             }
         }
         
-        // 2. Generate MITM Rules (If Enabled in TUN mode)
+        // 3. Generate MITM Rules (If Enabled in TUN mode)
         if tunEnabled && mitmEnabled && mitmPort > 0 {
             // Prevent loop: The MITM port itself MUST be DIRECT
             rulesToInject.append("- DST-PORT,\(mitmPort),DIRECT")
@@ -300,7 +309,7 @@ actor ConfigService {
         
         print("[ConfigService] 📋 Generated \(rulesToInject.count) dynamic rules")
         
-        // 3. Inject Rules Buffer at the top of "rules:"
+        // 4. Inject Rules Buffer at the top of "rules:"
         if !rulesToInject.isEmpty {
             // Detect indentation for rules
             var ruleIndent = "  "

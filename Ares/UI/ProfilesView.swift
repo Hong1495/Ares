@@ -10,6 +10,7 @@ struct ProfilesView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var editingProfile: Profile?
+    @State private var editingRawProfile: Profile?
     
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -53,6 +54,9 @@ struct ProfilesView: View {
                         onEdit: {
                             editingProfile = profile
                         },
+                        onEditRaw: {
+                            editingRawProfile = profile
+                        },
                         onDelete: {
                             profileService.deleteProfile(id: profile.id)
                         }
@@ -86,6 +90,10 @@ struct ProfilesView: View {
             EditProfileSheet(profile: profile) { name, url in
                 try profileService.editProfile(id: profile.id, name: name, urlString: url)
             }
+        }
+        .sheet(item: $editingRawProfile) { profile in
+            ProfileEditorView(profile: profile)
+                .environmentObject(profileService)
         }
         .fileImporter(
             isPresented: $showingFileImporter,
@@ -141,130 +149,156 @@ struct ProfileCard: View {
     let isActive: Bool
     let onSelect: () -> Void
     let onEdit: () -> Void
+    let onEditRaw: () -> Void
     let onDelete: () -> Void
     
     @State private var isUpdating = false
     @EnvironmentObject var profileService: ProfileService
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                VStack(alignment: .leading) {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                // Profile Avatar/Logo Representative
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(isActive ? Color.blue : Color.primary.opacity(0.05))
+                        .frame(width: 44, height: 44)
+                    
+                    Image(systemName: profile.type == .remote ? "cloud.fill" : "doc.fill")
+                        .font(.system(size: 18))
+                        .foregroundStyle(isActive ? .white : .blue)
+                }
+                .shadow(color: isActive ? Color.blue.opacity(0.3) : Color.clear, radius: 4, x: 0, y: 2)
+                
+                VStack(alignment: .leading, spacing: 2) {
                     Text(profile.name)
-                        .font(.headline)
-                    if let url = profile.url {
-                        Text(url.absoluteString)
-                            .font(.footnote)
-                            .fontWeight(.medium)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(.primary)
+                    
+                    if let urlString = profile.url?.absoluteString {
+                        Text(urlString)
+                            .font(.system(size: 10, weight: .medium, design: .monospaced))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
-                    }
-                    if let lastUpdated = profile.lastUpdated {
-                        HStack(spacing: 4) {
-                            Image(systemName: "clock")
-                                .font(.footnote)
-                            Text(lastUpdated, style: .relative)
-                                .font(.footnote)
-                                .fontWeight(.medium)
-                        }
-                        .foregroundStyle(.secondary)
+                            .truncationMode(.middle)
+                    } else {
+                        Text("Local Configuration")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.secondary)
                     }
                 }
+                
                 Spacer()
+                
                 if isActive {
-                    Image(systemName: "checkmark.circle.fill")
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 20))
                         .foregroundStyle(.blue)
                 }
             }
             
             // Subscription Info Section
             if let sub = profile.subscriptionInfo {
-                VStack(alignment: .leading, spacing: 6) {
-                    // Traffic Usage
+                VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("Traffic")
-                            .font(.caption2)
+                        Label("Traffic Usage", systemImage: "chart.pie.fill")
+                            .font(.system(size: 10, weight: .bold))
                             .foregroundStyle(.secondary)
                         Spacer()
                         Text("\(formatBytes(sub.used)) / \(formatBytes(sub.total))")
-                            .font(.caption2)
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
                             .foregroundStyle(.secondary)
                     }
                     
-                    ProgressView(value: Double(sub.used), total: Double(sub.total))
-                        .progressViewStyle(.linear)
-                        .tint(usageColor(used: sub.used, total: sub.total))
-                        .scaleEffect(x: 1, y: 0.5, anchor: .center)
-                    
-                    // Expiry Date
-                    if let expire = sub.expire {
-                        HStack(spacing: 4) {
-                            Image(systemName: "calendar")
-                                .font(.caption2)
-                            Text("Expires: \(expire, style: .date)")
-                                .font(.caption2)
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule()
+                                .fill(Color.primary.opacity(0.05))
+                                .frame(height: 6)
+                            
+                            Capsule()
+                                .fill(LinearGradient(
+                                    colors: [usageColor(used: sub.used, total: sub.total), usageColor(used: sub.used, total: sub.total).opacity(0.7)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                ))
+                                .frame(width: max(0, min(geo.size.width, geo.size.width * Double(sub.used) / Double(sub.total))), height: 6)
+                                .shadow(color: usageColor(used: sub.used, total: sub.total).opacity(0.3), radius: 2, x: 0, y: 1)
                         }
-                        .foregroundStyle(.secondary)
                     }
+                    .frame(height: 6)
+                    
+                    // Expiry & Last Update
+                    HStack {
+                        if let expire = sub.expire {
+                            HStack(spacing: 4) {
+                                Image(systemName: "calendar")
+                                Text(expire, style: .date)
+                            }
+                        }
+                        
+                        Spacer()
+                        
+                        if let lastUpdated = profile.lastUpdated {
+                            HStack(spacing: 4) {
+                                Image(systemName: "clock")
+                                Text(lastUpdated, style: .relative)
+                                Text("ago")
+                            }
+                        }
+                    }
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.tertiary)
                 }
-                .padding(.vertical, 4)
+                .padding(12)
+                .background(Color.primary.opacity(0.03))
+                .cornerRadius(10)
             }
             
-            HStack(spacing: 8) {
-                Button("Select") {
-                    onSelect()
+            Spacer(minLength: 0)
+            
+            // Actions
+            HStack(spacing: 10) {
+                Button(action: onSelect) {
+                    Text(isActive ? "Selected" : "Select")
+                        .font(.system(size: 11, weight: .bold))
+                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderedProminent)
+                .tint(isActive ? .blue : .secondary)
                 .disabled(isActive)
                 
-                // Update button for remote profiles
-                if case .remote = profile.type {
-                    Button {
-                        Task {
-                            isUpdating = true
-                            try? await profileService.updateProfile(id: profile.id)
-                            isUpdating = false
+                HStack(spacing: 4) {
+                    if profile.type == .remote {
+                        ActionButton(icon: "arrow.clockwise", tooltip: "Update") {
+                            Task {
+                                isUpdating = true
+                                try? await profileService.updateProfile(id: profile.id)
+                                isUpdating = false
+                            }
                         }
-                    } label: {
-                        if isUpdating {
-                            ProgressView()
-                                .scaleEffect(0.7)
-                                .frame(width: 16, height: 16)
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                        }
+                        .disabled(isUpdating)
                     }
-                    .buttonStyle(.borderless)
-                    .disabled(isUpdating)
-                    .help("Update subscription")
                     
-                    // Edit Button
-                    Button {
-                        onEdit()
-                    } label: {
-                        Image(systemName: "pencil")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Edit profile")
+                    ActionButton(icon: "pencil", tooltip: "Rename") { onEdit() }
+                    ActionButton(icon: "curlybraces", tooltip: "Code") { onEditRaw() }
+                    
+                    Spacer()
+                    
+                    ActionButton(icon: "trash", tooltip: "Delete", color: .red) { onDelete() }
                 }
-                
-                Spacer()
-                
-                Button(role: .destructive) {
-                    onDelete()
-                } label: {
-                    Image(systemName: "trash")
-                }
-                .buttonStyle(.borderless)
             }
         }
-        .padding()
-        .frame(maxWidth: .infinity, minHeight: 140, alignment: .topLeading)
-        .background(isActive ? Color.blue.opacity(0.1) : Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(12)
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: 160)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(nsColor: .controlBackgroundColor))
+                .shadow(color: Color.black.opacity(isActive ? 0.08 : 0.04), radius: 10, x: 0, y: 5)
+        )
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(isActive ? Color.blue : Color.clear, lineWidth: 2)
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(isActive ? Color.blue.opacity(0.5) : Color.primary.opacity(0.05), lineWidth: isActive ? 2 : 1)
         )
     }
     
@@ -282,6 +316,29 @@ struct ProfileCard: View {
         if ratio > 0.9 { return .red }
         if ratio > 0.7 { return .orange }
         return .blue
+    }
+}
+
+struct ActionButton: View {
+    let icon: String
+    let tooltip: String
+    var color: Color = .primary
+    let action: () -> Void
+    
+    @State private var isHovered = false
+    
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(isHovered ? color : color.opacity(0.6))
+                .frame(width: 24, height: 24)
+                .background(isHovered ? color.opacity(0.1) : Color.clear)
+                .cornerRadius(6)
+        }
+        .buttonStyle(.plain)
+        .help(tooltip)
+        .onHover { isHovered = $0 }
     }
 }
 

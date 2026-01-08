@@ -258,6 +258,42 @@ class ProfileService: ObservableObject {
         }
     }
     
+    /// Read the raw content of a profile
+    func readProfileContent(id: UUID) async throws -> String {
+        guard let profile = profiles.first(where: { $0.id == id }),
+              let path = profile.path else {
+            throw NSError(domain: "ProfileService", code: 10, userInfo: [NSLocalizedDescriptionKey: "Profile or path not found"])
+        }
+        
+        return try String(contentsOf: path, encoding: .utf8)
+    }
+    
+    /// Update the raw content of a profile
+    func updateProfileContent(id: UUID, content: String) async throws {
+        guard let index = profiles.firstIndex(where: { $0.id == id }),
+              let path = profiles[index].path else {
+            throw NSError(domain: "ProfileService", code: 11, userInfo: [NSLocalizedDescriptionKey: "Profile or path not found"])
+        }
+        
+        // Write content to file
+        try content.write(to: path, atomically: true, encoding: .utf8)
+        
+        // Update metadata (lastUpdated)
+        profiles[index].lastUpdated = Date()
+        saveProfiles()
+        
+        let profileName = profiles[index].name
+        Task { @MainActor in
+            ClashViewModel.shared.addLog("[ProfileService] 📝 Raw content updated for profile: \(profileName)")
+            
+            // If this is the active profile, reload Clash
+            if self.activeProfileID == id {
+                ClashViewModel.shared.addLog("[ProfileService] 🔄 Reloading Clash to apply manual changes...")
+                await self.reloadClashWithCurrentProfile()
+            }
+        }
+    }
+    
     /// Delete a profile
     func deleteProfile(id: UUID) {
         guard let index = profiles.firstIndex(where: { $0.id == id }) else { return }

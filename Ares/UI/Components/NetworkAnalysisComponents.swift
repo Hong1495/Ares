@@ -141,11 +141,6 @@ struct InspectorView: View {
                         }
                     }
                     
-                    if !request.hits.isEmpty {
-                        DetailSection(title: "Hit History") {
-                            HitTimelineView(hits: request.hits)
-                        }
-                    }
                     
                     if request.requestBody != nil || request.responseBody != nil {
                         DetailSection(title: "Payload") {

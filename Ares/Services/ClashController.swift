@@ -13,6 +13,7 @@ struct ClashRule: Codable, Identifiable {
     let type: String
     let payload: String
     let proxy: String
+    let hit: Int
 }
 
 /// Controller for interacting with Clash API
@@ -503,7 +504,8 @@ class ClashController: ObservableObject {
             if let type = ruleData["type"] as? String,
                let payload = ruleData["payload"] as? String,
                let proxy = ruleData["proxy"] as? String {
-                fetchedRules.append(ClashRule(id: UUID(), type: type, payload: payload, proxy: proxy))
+                let hit = ruleData["hit"] as? Int ?? 0
+                fetchedRules.append(ClashRule(id: UUID(), type: type, payload: payload, proxy: proxy, hit: hit))
             }
         }
         

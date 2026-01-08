@@ -12,25 +12,19 @@ class AppState: ObservableObject {
     // Navigation State
     enum NavigationItem: Hashable {
         case dashboard
-        case proxies
-        case profiles
+        case policies
         case connections
         case analysis
         case logs
-
-        case rules
         case settings
         
         var displayName: String {
             switch self {
             case .dashboard: return "Dashboard"
-            case .proxies: return "Proxies"
-            case .profiles: return "Profiles"
+            case .policies: return "Policies"
             case .connections: return "Activity"
             case .analysis: return "Analysis"
             case .logs: return "Logs"
-
-            case .rules: return "Rules"
             case .settings: return "Settings"
             }
         }
@@ -132,8 +126,9 @@ class AppState: ObservableObject {
             }
         }
         
-        // 2. Refresh proxies data (Consolidated from ClashController timer)
+        // 2. Refresh proxies & rules data
         try? await clashController.fetchProxiesData()
+        try? await clashController.fetchRules()
         
         // 3. Monitor connections count
         await clashController.monitorConnections()
