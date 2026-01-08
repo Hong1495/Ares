@@ -376,10 +376,25 @@ struct SimpleProxyButton: View {
                 Spacer()
                 
                 if isTesting {
-                    ProgressView()
-                        .scaleEffect(0.5)
-                        .frame(width: 12, height: 12)
-                        .colorInvert()
+                    if isSelected {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .colorInvert()
+                    } else {
+                        ProgressView()
+                            .controlSize(.mini)
+                    }
+                } else {
+                    Button {
+                        onTest()
+                    } label: {
+                        Image(systemName: "bolt.fill")
+                            .font(.system(size: 14)) // Slightly larger for tap target
+                            .foregroundStyle(isSelected ? .white.opacity(0.9) : .secondary.opacity(0.4))
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Test Latency")
                 }
             }
         }
