@@ -2,6 +2,8 @@ import SwiftUI
 import Combine
 import UniformTypeIdentifiers
 
+// MARK: - Models
+
 /// Connection model
 struct Connection: Identifiable, Sendable {
     let id: String
@@ -42,7 +44,6 @@ struct ConnectionMetadata: Codable, Sendable {
     let host: String
     let processPath: String?
    
- 
     enum CodingKeys: String, CodingKey {
         case network, type
         case sourceIP = "sourceIP"
@@ -54,11 +55,38 @@ struct ConnectionMetadata: Codable, Sendable {
     }
 }
 
-/// Connections View
+/// Aggregated statistics for a single application
+struct ApplicationStats: Identifiable, Sendable {
+    let id: String              // Process path or "Unknown"
+    let name: String            // Display name
+    var iconPath: String?       // For icon retrieval
+    var upload: Int64
+    var download: Int64
+    var uploadSpeed: Int64
+    var downloadSpeed: Int64
+    var connectionCount: Int
+    
+    var totalTraffic: Int64 { upload + download }
+    var totalSpeed: Int64 { uploadSpeed + downloadSpeed }
+}
+
+enum ConnectionViewMode: String, CaseIterable, Identifiable {
+    case connections = "Connections"
+    case applications = "Applications"
+    
+    var id: String { rawValue }
+}
+
+// MARK: - View
+
 struct ConnectionsView: View {
     @StateObject private var viewModel = ConnectionsViewModel()
     @State private var searchText = ""
-    @State private var sortOrder = [KeyPathComparator(\Connection.start, order: .reverse)]
+    @State private var viewMode: ConnectionViewMode = .connections
+    
+    // Sort orders
+    @State private var connectionSortOrder = [KeyPathComparator(\Connection.start, order: .reverse)]
+    @State private var applicationSortOrder = [KeyPathComparator(\ApplicationStats.download, order: .reverse)]
     
     var filteredConnections: [Connection] {
         let filtered = searchText.isEmpty ? viewModel.connections : viewModel.connections.filter { conn in
@@ -66,17 +94,60 @@ struct ConnectionsView: View {
             conn.metadata.destinationIP.contains(searchText) ||
             conn.rule.localizedCaseInsensitiveContains(searchText)
         }
-        return filtered.sorted(using: sortOrder)
+        return filtered.sorted(using: connectionSortOrder)
+    }
+    
+    var filteredApplications: [ApplicationStats] {
+        let filtered = searchText.isEmpty ? viewModel.applications : viewModel.applications.filter { app in
+            app.name.localizedCaseInsensitiveContains(searchText)
+        }
+        return filtered.sorted(using: applicationSortOrder)
     }
     
     var body: some View {
         VStack(spacing: 0) {
             // Toolbar
             HStack(spacing: 12) {
-                Text("\(filteredConnections.count) connections")
-                    .font(.footnote)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.secondary)
+                // View Mode Picker
+                Picker("", selection: $viewMode) {
+                    ForEach(ConnectionViewMode.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 200)
+                
+                // Stats Summary
+                HStack(spacing: 16) {
+                    Divider()
+                        .frame(height: 14)
+                    
+                    if viewMode == .connections {
+                        Text("\(filteredConnections.count) connections")
+                            .font(.footnote)
+                            .fontWeight(.medium)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        HStack(spacing: 12) {
+                            Text("\(filteredApplications.count) apps")
+                                .fontWeight(.medium)
+                            
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.down")
+                                    .foregroundStyle(.blue)
+                                Text(formatBytes(viewModel.totalDownload))
+                            }
+                            
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.up")
+                                    .foregroundStyle(.orange)
+                                Text(formatBytes(viewModel.totalUpload))
+                            }
+                        }
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    }
+                }
                 
                 Spacer()
                 
@@ -84,7 +155,7 @@ struct ConnectionsView: View {
                 HStack {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
-                    TextField("Search connections...", text: $searchText)
+                    TextField("Search...", text: $searchText)
                         .textFieldStyle(.plain)
                 }
                 .padding(6)
@@ -92,137 +163,38 @@ struct ConnectionsView: View {
                 .cornerRadius(6)
                 .frame(width: 250)
                 
-                // Close All / Clear button
-                Button {
-                    Task {
-                        await viewModel.closeAllConnections()
+                if viewMode == .connections {
+                    // Actions for Connections Mode
+                    Button {
+                        Task {
+                            await viewModel.closeAllConnections()
+                        }
+                    } label: {
+                        Image(systemName: "trash")
+                            .fontWeight(.medium)
                     }
-                } label: {
-                    Image(systemName: "trash")
-                        .fontWeight(.medium)
+                    .help("Close all connections")
+                    
+                    Button {
+                        exportConnections()
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                            .fontWeight(.medium)
+                    }
+                    .help("Export connections")
                 }
-                .help("Close all connections")
-                
-                // Export button
-                Button {
-                    exportConnections()
-                } label: {
-                    Image(systemName: "square.and.arrow.up")
-                        .fontWeight(.medium)
-                }
-                .help("Export connections")
             }
             .padding()
             .background(Color(nsColor: .windowBackgroundColor))
             
             Divider()
             
-            // Native Table
-            Table(filteredConnections, sortOrder: $sortOrder) {
-                TableColumn("Host", value: \.metadata.host) { conn in
-                    let host = conn.metadata.host.isEmpty ? conn.metadata.destinationIP : conn.metadata.host
-                    Text(host)
-                        .font(.system(.body, design: .monospaced))
-                        .foregroundStyle(.primary)
-                }
-                .width(min: 150, ideal: 250)
-                
-                TableColumn("Traffic", value: \.download) { conn in
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.down")
-                                .font(.system(size: 11, weight: .light))
-                                .foregroundStyle(.blue)
-                            Text(formatBytes(conn.download))
-                        }
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.up")
-                                .font(.system(size: 11, weight: .light))
-                                .foregroundStyle(.orange)
-                            Text(formatBytes(conn.upload))
-                        }
-                    }
-                    .font(.system(.footnote, design: .monospaced))
-                    .fontWeight(.medium)
-                }
-                .width(ideal: 110)
-                
-                TableColumn("Speed", value: \.downloadSpeed) { conn in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("↓ \(formatSpeed(conn.downloadSpeed))").foregroundStyle(.blue)
-                        Text("↑ \(formatSpeed(conn.uploadSpeed))").foregroundStyle(.orange)
-                    }
-                    .font(.system(.footnote, design: .monospaced))
-                    .fontWeight(.medium)
-                }
-                .width(ideal: 110)
-                
-                TableColumn("Chains", value: \.chainsString) { conn in
-                    Text(conn.chainsString)
-                        .font(.footnote)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-                .width(min: 150, ideal: 220)
-                
-                TableColumn("Rule", value: \.rule) { conn in
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(conn.rule)
-                            .font(.footnote)
-                            .fontWeight(.medium)
-                            .foregroundStyle(.primary)
-                        if !conn.rulePayload.isEmpty {
-                            Text(conn.rulePayload)
-                                .font(.system(size: 11))
-                                .fontWeight(.medium)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .width(ideal: 130)
-                
-                TableColumn("Process", value: \.processName) { conn in
-                    Text(conn.processName)
-                        .font(.footnote)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.primary)
-                }
-                .width(ideal: 100)
-                
-                TableColumn("Time", value: \.start) { conn in
-                    Text(formatDuration(conn.duration))
-                        .font(.footnote)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
-                }
-                .width(ideal: 70)
-                
-                TableColumn("Source", value: \.sourceString) { conn in
-                    Text(conn.sourceString)
-                        .font(.system(.footnote, design: .monospaced))
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
-                }
-                .width(ideal: 140)
-                
-                TableColumn("Destination", value: \.destinationString) { conn in
-                    Text(conn.destinationString)
-                        .font(.system(.footnote, design: .monospaced))
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
-                }
-                .width(ideal: 140)
-                
-                TableColumn("Type", value: \.typeString) { conn in
-                    Text(conn.typeString)
-                        .font(.footnote)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
-                }
-                .width(ideal: 90)
+            // Content
+            if viewMode == .connections {
+                connectionsTable
+            } else {
+                applicationsTable
             }
-            .scrollIndicators(.hidden)
         }
         .navigationTitle("Connections")
         .task {
@@ -233,6 +205,183 @@ struct ConnectionsView: View {
             viewModel.stopMonitoring()
         }
     }
+    
+    // MARK: - Connections Table
+    private var connectionsTable: some View {
+        Table(filteredConnections, sortOrder: $connectionSortOrder) {
+            TableColumn("Host", value: \.metadata.host) { conn in
+                let host = conn.metadata.host.isEmpty ? conn.metadata.destinationIP : conn.metadata.host
+                Text(host)
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundStyle(.primary)
+            }
+            .width(min: 150, ideal: 250)
+            
+            // Merged Download Column
+            TableColumn("Download", value: \.download) { conn in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(formatBytes(conn.download))
+                        .font(.system(.footnote, design: .monospaced))
+                        .fontWeight(.medium)
+                        .foregroundStyle(.primary)
+                    
+                    if conn.downloadSpeed > 0 {
+                        Text("↓ \(formatSpeed(conn.downloadSpeed))")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(.blue)
+                    } else {
+                        Text("—")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            }
+            .width(ideal: 90)
+            
+            // Merged Upload Column
+            TableColumn("Upload", value: \.upload) { conn in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(formatBytes(conn.upload))
+                        .font(.system(.footnote, design: .monospaced))
+                        .fontWeight(.medium)
+                        .foregroundStyle(.primary)
+                    
+                    if conn.uploadSpeed > 0 {
+                        Text("↑ \(formatSpeed(conn.uploadSpeed))")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(.orange)
+                    } else {
+                        Text("—")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            }
+            .width(ideal: 90)
+            
+            TableColumn("Chains", value: \.chainsString) { conn in
+                Text(conn.chainsString)
+                    .font(.footnote)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            .width(min: 150, ideal: 220)
+            
+            TableColumn("Rule", value: \.rule) { conn in
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(conn.rule)
+                        .font(.footnote)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.primary)
+                    if !conn.rulePayload.isEmpty {
+                        Text(conn.rulePayload)
+                            .font(.system(size: 11))
+                            .fontWeight(.medium)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .width(ideal: 130)
+            
+            TableColumn("Process", value: \.processName) { conn in
+                Text(conn.processName)
+                    .font(.footnote)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.primary)
+            }
+            .width(ideal: 100)
+            
+            TableColumn("Time", value: \.start) { conn in
+                Text(formatDuration(conn.duration))
+                    .font(.footnote)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+            }
+            .width(ideal: 70)
+            
+            TableColumn("Type", value: \.typeString) { conn in
+                Text(conn.typeString)
+                    .font(.footnote)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+            }
+            .width(ideal: 90)
+        }
+        .scrollIndicators(.hidden)
+    }
+    
+    // MARK: - Applications Table
+    private var applicationsTable: some View {
+        Table(filteredApplications, sortOrder: $applicationSortOrder) {
+            TableColumn("Application", value: \.name) { app in
+                HStack(spacing: 8) {
+                    ApplicationIconView(path: app.iconPath)
+                        .frame(width: 20, height: 20)
+                    
+                    Text(app.name)
+                        .font(.system(.body))
+                        .fontWeight(.medium)
+                        .lineLimit(1)
+                }
+            }
+            .width(min: 150, ideal: 250)
+            
+            TableColumn("Connections", value: \.connectionCount) { app in
+                Text("\(app.connectionCount)")
+                    .font(.footnote)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            .width(ideal: 90)
+            
+            // Merged Download Column
+            TableColumn("Download", value: \.download) { app in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(formatBytes(app.download))
+                        .font(.system(.footnote, design: .monospaced))
+                        .fontWeight(.medium)
+                        .foregroundStyle(.primary)
+                    
+                    if app.downloadSpeed > 0 {
+                        Text("↓ \(formatSpeed(app.downloadSpeed))")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(.blue)
+                    } else {
+                        Text("—")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            }
+            .width(ideal: 100)
+            
+            // Merged Upload Column
+            TableColumn("Upload", value: \.upload) { app in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(formatBytes(app.upload))
+                        .font(.system(.footnote, design: .monospaced))
+                        .fontWeight(.medium)
+                        .foregroundStyle(.primary)
+                    
+                    if app.uploadSpeed > 0 {
+                        Text("↑ \(formatSpeed(app.uploadSpeed))")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(.orange)
+                    } else {
+                        Text("—")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            }
+            .width(ideal: 100)
+        }
+        .scrollIndicators(.hidden)
+    }
+    
+    // MARK: - Formatters
     
     private func formatBytes(_ bytes: Int64) -> String {
         let formatter = ByteCountFormatter()
@@ -283,16 +432,53 @@ struct ConnectionsView: View {
     }
 }
 
-// Deleted ConnectionRow [NATIVE TABLE REPLACEMENT]
+// MARK: - Subviews
 
+struct ApplicationIconView: View {
+    let path: String?
+    
+    var body: some View {
+        if let path = path, !path.isEmpty {
+            Image(nsImage: getAppIcon(from: path))
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+        } else {
+            Image(systemName: "app")
+                .foregroundStyle(.secondary)
+        }
+    }
+    
+    private func getAppIcon(from processPath: String) -> NSImage {
+        var url = URL(fileURLWithPath: processPath)
+        while url.pathExtension != "app" && url.path != "/" {
+            url = url.deletingLastPathComponent()
+        }
+        
+        if url.pathExtension == "app" {
+            return NSWorkspace.shared.icon(forFile: url.path)
+        }
+        return NSWorkspace.shared.icon(forFile: processPath)
+    }
+}
 
-/// ViewModel for Connections
+// MARK: - ViewModel
+
 @MainActor
 final class ConnectionsViewModel: ObservableObject {
     @Published var connections: [Connection] = []
+    @Published var applications: [ApplicationStats] = []
+    
+    var totalDownload: Int64 {
+        applications.reduce(0) { $0 + $1.download } // or sum connections
+    }
+    
+    var totalUpload: Int64 {
+        applications.reduce(0) { $0 + $1.upload }
+    }
     
     // Track previous snapshots for speed calculation
     private var previousSnapshots: [String: (up: Int64, down: Int64, time: Date)] = [:]
+    private var appSnapshots: [String: (up: Int64, down: Int64, time: Date)] = [:]
     
     private var webSocketTask: URLSessionWebSocketTask?
     private var isMonitoring = false
@@ -366,12 +552,13 @@ final class ConnectionsViewModel: ObservableObject {
         Task.detached(priority: .userInitiated) {
             // Get current snapshots to compare
             let oldSnapshots = await self.previousSnapshots
+            let oldAppSnapshots = await self.appSnapshots
             
             // Use static method to avoid capturing 'self' during parsing
             var newConnections = Self.parseJSON(jsonString)
             let now = Date()
             
-            // Calculate speeds
+            // Process Connections & Calculate Speeds
             for i in 0..<newConnections.count {
                 let conn = newConnections[i]
                 if let prev = oldSnapshots[conn.id] {
@@ -383,22 +570,72 @@ final class ConnectionsViewModel: ObservableObject {
                 }
             }
             
-                // Update UI on MainActor
-                let finalConnections = newConnections
-                await MainActor.run { [weak self] in
-                    guard let self = self else { return }
-                    DispatchQueue.main.async {
-                        self.connections = finalConnections
+            // Aggregate Applications Data
+            var appStats: [String: ApplicationStats] = [:]
+            for conn in newConnections {
+                let processPath = conn.metadata.processPath ?? ""
+                let appName = conn.processName
+                let key = processPath.isEmpty ? "Unknown" : processPath
+                
+                if var stats = appStats[key] {
+                    stats.upload += conn.upload
+                    stats.download += conn.download
+                    stats.connectionCount += 1
+                    appStats[key] = stats
+                } else {
+                    appStats[key] = ApplicationStats(
+                        id: key,
+                        name: appName,
+                        iconPath: processPath.isEmpty ? nil : processPath,
+                        upload: conn.upload,
+                        download: conn.download,
+                        uploadSpeed: 0,
+                        downloadSpeed: 0,
+                        connectionCount: 1
+                    )
+                }
+            }
+            
+            var finalApps = Array(appStats.values)
+            // Calculate App Speeds
+            for i in 0..<finalApps.count {
+                let app = finalApps[i]
+                if let prev = oldAppSnapshots[app.id] {
+                    let timeDiff = now.timeIntervalSince(prev.time)
+                    if timeDiff > 0 {
+                        finalApps[i].uploadSpeed = Int64(Double(app.upload - prev.up) / timeDiff)
+                        finalApps[i].downloadSpeed = Int64(Double(app.download - prev.down) / timeDiff)
                         
-                        // Update snapshots for next time
-                        self.previousSnapshots.removeAll()
-                        for conn in finalConnections {
-                            self.previousSnapshots[conn.id] = (conn.upload, conn.download, now)
-                        }
+                        if finalApps[i].uploadSpeed < 0 { finalApps[i].uploadSpeed = 0 }
+                        if finalApps[i].downloadSpeed < 0 { finalApps[i].downloadSpeed = 0 }
+                    }
+                }
+            }
+            // Sort by total download default for stable list
+            finalApps.sort { $0.download > $1.download }
+            
+            // Update UI on MainActor
+            let finalConnections = newConnections
+            await MainActor.run { [weak self] in
+                guard let self = self else { return }
+                DispatchQueue.main.async {
+                    self.connections = finalConnections
+                    self.applications = finalApps
+                    
+                    // Update snapshots for next time
+                    self.previousSnapshots.removeAll()
+                    for conn in finalConnections {
+                        self.previousSnapshots[conn.id] = (conn.upload, conn.download, now)
+                    }
+                    
+                    self.appSnapshots.removeAll()
+                    for app in finalApps {
+                        self.appSnapshots[app.id] = (app.upload, app.download, now)
                     }
                 }
             }
         }
+    }
     
     // Pure function for parsing, isolates logic from instance state
     nonisolated private static func parseJSON(_ jsonString: String) -> [Connection] {
