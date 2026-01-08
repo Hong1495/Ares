@@ -26,7 +26,7 @@ class AppState: ObservableObject {
             case .dashboard: return "Dashboard"
             case .proxies: return "Proxies"
             case .profiles: return "Profiles"
-            case .connections: return "Connections"
+            case .connections: return "Activity"
             case .analysis: return "Analysis"
             case .logs: return "Logs"
 

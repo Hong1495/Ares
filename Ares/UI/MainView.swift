@@ -15,6 +15,7 @@ struct MainView: View {
                     }
                 }
             )) {
+                // 1. Dashboard
                 NavigationLink(value: AppState.NavigationItem.dashboard) {
                     Label {
                         Text("Dashboard")
@@ -25,6 +26,21 @@ struct MainView: View {
                             .frame(width: 20)
                     }
                 }
+                
+                // 2. Activity (Connections) - Moved here per user request
+                NavigationLink(value: AppState.NavigationItem.connections) {
+                    Label {
+                        Text("Activity") // Renamed from Connections
+                    } icon: {
+                        // Use a chart icon to represent activity
+                        Image(systemName: "arrow.up.arrow.down")
+                            .imageScale(.medium)
+                            .fontWeight(.light)
+                            .frame(width: 20)
+                    }
+                }
+                
+                // 3. Proxies
                 NavigationLink(value: AppState.NavigationItem.proxies) {
                     Label {
                         Text("Proxies")
@@ -35,6 +51,8 @@ struct MainView: View {
                             .frame(width: 20)
                     }
                 }
+                
+                // 4. Rules
                 NavigationLink(value: AppState.NavigationItem.rules) {
                     Label {
                         Text("Rules")
@@ -45,6 +63,8 @@ struct MainView: View {
                             .frame(width: 20)
                     }
                 }
+                
+                // 5. Profiles
                 NavigationLink(value: AppState.NavigationItem.profiles) {
                     Label {
                         Text("Profiles")
@@ -55,16 +75,8 @@ struct MainView: View {
                             .frame(width: 20)
                     }
                 }
-                NavigationLink(value: AppState.NavigationItem.connections) {
-                    Label {
-                        Text("Connections")
-                    } icon: {
-                        Image(systemName: "arrow.up.arrow.down")
-                            .imageScale(.medium)
-                            .fontWeight(.light)
-                            .frame(width: 20)
-                    }
-                }
+                
+                // 6. Analysis
                 NavigationLink(value: AppState.NavigationItem.analysis) {
                     Label {
                         Text("Analysis")
@@ -76,6 +88,7 @@ struct MainView: View {
                     }
                 }
 
+                // 7. Logs
                 NavigationLink(value: AppState.NavigationItem.logs) {
                     Label {
                         Text("Logs")
@@ -86,6 +99,8 @@ struct MainView: View {
                             .frame(width: 20)
                     }
                 }
+                
+                // 8. Settings
                 NavigationLink(value: AppState.NavigationItem.settings) {
                     Label {
                         Text("Settings")
@@ -113,7 +128,6 @@ struct MainView: View {
                 AnalysisView()
             case .logs:
                 LogsView()
-
             case .rules:
                 RulesView()
             case .settings:
