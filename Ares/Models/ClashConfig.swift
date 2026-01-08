@@ -27,10 +27,16 @@ struct ClashConfig: Codable {
     // TUN settings
     var enableTun: Bool = false
     var tunStack: String = "system"
+    var mptcp: Bool = false
     
     // MITM Integration (for TUN mode)
     var mitmEnabled: Bool = false
     var mitmPort: Int = 0
+    
+    // AI Enhancement (Anti-jitter)
+    var aggressiveAntiJitter: Bool = false
+    
+    /// Initialize with default values
     
     /// Initialize with default values
     init() {}
@@ -59,6 +65,8 @@ struct ClashConfig: Codable {
             if let modeStr = defaults.string(forKey: "clashMode"), let m = Mode(rawValue: modeStr) {
                 self.mode = m
             }
+            
+            self.aggressiveAntiJitter = defaults.bool(forKey: "aggressiveAntiJitterEnabled")
         }
     }
     
@@ -103,8 +111,11 @@ struct ClashConfig: Codable {
             yaml += """
             
             # Performance Settings
-            keep-alive-interval: 15
+            keep-alive-interval: \(aggressiveAntiJitter ? 8 : 15)
             find-process-mode: always
+            tcp-concurrent: \(aggressiveAntiJitter ? "true" : "false")
+            udp-timeout: \(aggressiveAntiJitter ? 300 : 120)
+            mptcp: \(aggressiveAntiJitter)
             
             # DNS Configuration (Critical for TUN mode speed)
             dns:

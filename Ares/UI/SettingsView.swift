@@ -232,6 +232,19 @@ struct SettingsView: View {
             
             // Advanced Features
             Section("Advanced") {
+                Toggle(isOn: Binding(
+                    get: { appState.aggressiveAntiJitterEnabled },
+                    set: { _ in appState.toggleAggressiveAntiJitter() }
+                )) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Anti-Jitter (Aggressive)")
+                            .fontWeight(.medium)
+                        Text("Optimized for Stability (gVisor + Keep-alive)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                
                 Picker("TLS Fingerprint", selection: $tlsFingerprint) {
                     Text("Disabled (Default)").tag("none")
                     Text("Chrome (Recommended)").tag("chrome")
@@ -247,9 +260,10 @@ struct SettingsView: View {
                 }
                 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Mimic browser fingerprints to bypass Deep Packet Inspection (DPI).")
-                    Text("• Helps reduce connection drops and throttling")
-                    Text("• Applies to supported proxy protocols automatically")
+                    Text("Mimic browser fingerprints and optimize TCP/UDP timeouts to bypass DPI and reduce drops for AI models.")
+                    Text("• Forces gVisor stack for superior stability")
+                    Text("• Aggressive TCP Keep-alive (8s)")
+                    Text("• Enables TCP Concurrent & Extended UDP Timeouts")
                 }
                 .font(.footnote)
                 .foregroundStyle(.secondary)

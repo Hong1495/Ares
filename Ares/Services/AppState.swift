@@ -34,6 +34,7 @@ class AppState: ObservableObject {
     // System toggles
     @Published var systemProxyEnabled = false
     @Published var tunEnabled = false
+    @Published var aggressiveAntiJitterEnabled = false
     
     // Toggle state guards to prevent race conditions during fast switching
     private var isMITMToggling = false
@@ -58,6 +59,7 @@ class AppState: ObservableObject {
     private init() {
         // Restore properties synchronously where possible
         tunEnabled = UserDefaults.standard.bool(forKey: "tunEnabled")
+        aggressiveAntiJitterEnabled = UserDefaults.standard.bool(forKey: "aggressiveAntiJitterEnabled")
         
         // Start polling timer (Unified Heartbeat)
         pollingTimer = Timer.publish(every: 3.0, on: .main, in: .common)
@@ -315,6 +317,38 @@ class AppState: ObservableObject {
         
         // 6. Final verification - non-blocking but ensures state is correct
         try? await self.verifyTUNStatus()
+    }
+
+    /// Toggle Aggressive Anti-Jitter mode
+    func toggleAggressiveAntiJitter() {
+        guard !clashViewModel.isToggling else { return }
+        
+        let newState = !aggressiveAntiJitterEnabled
+        aggressiveAntiJitterEnabled = newState
+        UserDefaults.standard.set(newState, forKey: "aggressiveAntiJitterEnabled")
+        
+        clashViewModel.isToggling = true
+        clashViewModel.objectWillChange.send()
+        
+        clashViewModel.addLog("[AntiJitter] ⚡️ \(newState ? "Enabling" : "Disabling") Aggressive Anti-Jitter mode...")
+        
+        Task.detached { [weak self] in
+            guard let self = self else { return }
+            
+            await MainActor.run {
+                self.clashViewModel.addLog("[AntiJitter] 🔄 Restarting Clash to apply optimized network parameters...")
+            }
+            
+            // Re-use TUN toggle logic for a clean restart
+            await self.clashViewModel.stopCore(intendedRestart: true)
+            await self.clashViewModel.startCore(isRestart: true)
+            
+            await MainActor.run {
+                self.clashViewModel.isToggling = false
+                self.objectWillChange.send()
+                self.clashViewModel.addLog("[AntiJitter] ✅ Aggressive Anti-Jitter \(newState ? "Active" : "Disabled")")
+            }
+        }
     }
 
     // MARK: - MITM Toggle

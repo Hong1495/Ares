@@ -64,9 +64,10 @@ actor ConfigService {
         
         // Dynamic Rules: Inject Bypass rules and MITM rules
         // Fetch bypass rules and MITM settings from UserDefaults via MainActor
-        let (mitmEnabled, mitmPort, bypassRules, localRules, mitmPortsString, mitmHosts, tlsFingerprint) = await MainActor.run {
+        let (mitmEnabled, mitmPort, bypassRules, localRules, mitmPortsString, mitmHosts, tlsFingerprint, aiEnhancement) = await MainActor.run {
             let mitm = NetworkMITMService.shared
             let defaults = UserDefaults.standard
+            let appState = AppState.shared
             return (
                 mitm.isRunning,
                 Int(mitm.currentPort),
@@ -74,13 +75,16 @@ actor ConfigService {
                 defaults.string(forKey: "localRules") ?? "",
                 defaults.string(forKey: "mitmPorts") ?? "80, 443, 8080, 8443",
                 defaults.string(forKey: "mitmHosts") ?? "",  // Whitelist domains
-                defaults.string(forKey: "tlsFingerprint") ?? "none"
+                defaults.string(forKey: "tlsFingerprint") ?? "none",
+                appState.aggressiveAntiJitterEnabled
             )
         }
         
+        let activeFingerprint = (aiEnhancement && tlsFingerprint == "none") ? "chrome" : tlsFingerprint
+        
         // Inject TLS Fingerprint if enabled (Do this before rule injection for cleaner logic)
-        if tlsFingerprint != "none" {
-            cleanedProfile = injectFingerprint(into: cleanedProfile, fingerprint: tlsFingerprint)
+        if activeFingerprint != "none" {
+            cleanedProfile = injectFingerprint(into: cleanedProfile, fingerprint: activeFingerprint)
         }
         
         cleanedProfile = injectDynamicRules(into: cleanedProfile, tunEnabled: tunEnabled, mitmEnabled: mitmEnabled, mitmPort: mitmPort, bypassRules: bypassRules, localRules: localRules, mitmPortsString: mitmPortsString, mitmHosts: mitmHosts)
@@ -89,7 +93,11 @@ actor ConfigService {
         let baseConfig = await MainActor.run {
             var clashConfig = ClashConfig(fromUserDefaults: true)
             clashConfig.enableTun = tunEnabled
-            // Note: mitmEnabled/mitmPort no longer used in toYAML()
+            // Apply AI Enhancement parameters to ClashConfig
+            if aiEnhancement {
+                clashConfig.tunStack = "gvisor" // Force gVisor for better anti-jitter
+                // Note: Other params like keep-alive-interval are applied in toYAML()
+            }
             return clashConfig.toYAML()
         }
         
@@ -394,50 +402,136 @@ actor ConfigService {
     }
 
     
-    /// Inject TLS Fingerprint into proxy definitions
+    /// Inject TLS Fingerprint into proxy definitions (Robust Flow & Block support)
     nonisolated private func injectFingerprint(into yaml: String, fingerprint: String) -> String {
-        print("[ConfigService] 🕵️ Injecting TLS Fingerprint: \(fingerprint)")
-        
-        // Strategy:
-        // We target Single-Line Flow Style JSON objects commonly used in subscriptions.
-        // e.g. - { name: "...", type: vmess, ... }
-        // We look for proxies that have type: (ss|vmess|vless|trojan|hysteria2?) AND do NOT already have client-fingerprint.
-        // Note: For SS (Shadowsocks), fingerprint is ignored by Core but harmless to add.
-        // Note: We use a simplified regex that assumes standard key: value formatting.
+        print("[ConfigService] 🕵️ Injecting TLS Fingerprint (Enhanced): \(fingerprint)")
         
         let lines = yaml.components(separatedBy: .newlines)
         var result: [String] = []
         var count = 0
         
-        // Create regex object
-        guard let regex = try? NSRegularExpression(pattern: #"\btype:\s*(ss|vmess|vless|trojan|hysteria2?)\b"#, options: .caseInsensitive) else {
-            return yaml
-        }
+        // Target protocols for fingerprint injection
+        let targets = ["ss", "vmess", "vless", "trojan", "hysteria", "hysteria2", "tuic"]
         
-        for line in lines {
-            // Check if line is a proxy definition (starts with - {)
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("-") && trimmed.contains("{") && trimmed.contains("}") {
-                // Check if it's a target protocol
-                let range = NSRange(location: 0, length: line.utf16.count)
-                if regex.firstMatch(in: line, options: [], range: range) != nil {
-                     // Check if fingerprint already exists
-                    if !line.contains("client-fingerprint") {
-                        // Find the last "}" and insert before it
-                        if let lastBraceIndex = line.lastIndex(of: "}") {
-                            var mutableLine = line
-                            mutableLine.insert(contentsOf: ", client-fingerprint: \(fingerprint)", at: lastBraceIndex)
-                            result.append(mutableLine)
+        // State Machine
+        var inProxiesSection = false
+        var proxyBuffer: [String] = []
+        
+        // Helper: Process and flush the current buffered proxy item
+        func flushBuffer() {
+            guard !proxyBuffer.isEmpty else { return }
+            
+            let joined = proxyBuffer.joined(separator: "\n")
+            let lowerJoined = joined.lowercased()
+            
+            // Check if this proxy block contains a target protocol
+            var isTarget = false
+            for t in targets {
+                // Check for "type: t" or "type: "t""
+                if lowerJoined.contains("type: \(t)") || lowerJoined.contains("type: \"\(t)\"") {
+                    isTarget = true
+                    break
+                }
+            }
+            
+            // Check if fingerprint already exists
+            let hasFingerprint = lowerJoined.contains("client-fingerprint")
+            
+            if isTarget && !hasFingerprint {
+                // Determine injection strategy
+                var injected = false
+                
+                // Strategy A: Flow Style (Single line with braces)
+                // If buffer is 1 line and has braces
+                if proxyBuffer.count == 1 && proxyBuffer[0].contains("{") && proxyBuffer[0].contains("}") {
+                    var line = proxyBuffer[0]
+                    if let lastBrace = line.lastIndex(of: "}") {
+                        line.insert(contentsOf: ", client-fingerprint: \(fingerprint)", at: lastBrace)
+                        result.append(line)
+                        count += 1
+                        injected = true
+                    }
+                }
+                
+                // Strategy B: Block Style (Multi-line)
+                if !injected {
+                    // Find the "type:" line and inject after it
+                    for line in proxyBuffer {
+                        result.append(line)
+                        
+                        let trimmed = line.trimmingCharacters(in: .whitespaces).lowercased()
+                        if !injected && (trimmed.hasPrefix("type:") || trimmed.hasPrefix("- type:")) {
+                            // Calculate indentation
+                            let indent = String(line.prefix(while: { $0 == " " || $0 == "\t" }))
+                            var padding = indent
+                            
+                            // If line starts with "-", usually subsequent keys are indented by 2 more spaces
+                            if line.trimmingCharacters(in: .whitespaces).hasPrefix("-") {
+                                padding += "  "
+                            }
+                            
+                            result.append("\(padding)client-fingerprint: \(fingerprint)")
+                            
                             count += 1
-                            continue
+                            injected = true
                         }
                     }
                 }
+            } else {
+                // No injection needed, passthrough
+                result.append(contentsOf: proxyBuffer)
             }
-            result.append(line)
+            
+            proxyBuffer.removeAll()
         }
         
-        print("[ConfigService] ✅ Injected fingerprint into \(count) nodes")
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            
+            // 1. Detect Section Headers
+            // Root keys have no indentation (or minimal if messy) and end with colon.
+            // Be careful not to trigger on comments or empty lines.
+            if !trimmed.isEmpty && !trimmed.hasPrefix("#") {
+                let isRootKey = !line.hasPrefix(" ") && !line.hasPrefix("\t") && trimmed.hasSuffix(":")
+                
+                if isRootKey {
+                    if inProxiesSection {
+                        flushBuffer() // Flush last proxy item
+                        inProxiesSection = false
+                    }
+                    
+                    if trimmed == "proxies:" {
+                        inProxiesSection = true
+                        result.append(line)
+                        continue
+                    }
+                }
+            }
+            
+            // 2. Proxies Section Logic
+            if inProxiesSection {
+                // Check if it's a new list item
+                if trimmed.hasPrefix("-") {
+                    flushBuffer() // Flush previous proxy
+                    proxyBuffer.append(line)
+                } else {
+                    // Continuation or Comment?
+                    if proxyBuffer.isEmpty {
+                        // Random noise in proxies section
+                        result.append(line)
+                    } else {
+                        proxyBuffer.append(line)
+                    }
+                }
+            } else {
+                // Passthrough for non-proxy lines
+                result.append(line)
+            }
+        }
+        
+        flushBuffer() // Final flush if ended in proxy section
+        
+        print("[ConfigService] ✅ Injected fingerprint into \(count) nodes (Robust Mode)")
         return result.joined(separator: "\n")
     }
 }
