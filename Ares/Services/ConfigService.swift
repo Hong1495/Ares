@@ -63,11 +63,9 @@ actor ConfigService {
         var cleanedProfile = removeConflictingKeys(from: profileContent)
         
         // Dynamic Rules: Inject Bypass rules and MITM rules
-        // Fetch bypass rules and MITM settings from UserDefaults via MainActor
-        let (mitmEnabled, mitmPort, bypassRules, localRules, mitmPortsString, mitmHosts, tlsFingerprint, aiEnhancement) = await MainActor.run {
+        let (mitmEnabled, mitmPort, bypassRules, localRules, mitmPortsString, mitmHosts, tlsFingerprint) = await MainActor.run {
             let mitm = NetworkMITMService.shared
             let defaults = UserDefaults.standard
-            let appState = AppState.shared
             return (
                 mitm.isRunning,
                 Int(mitm.currentPort),
@@ -75,12 +73,11 @@ actor ConfigService {
                 defaults.string(forKey: "localRules") ?? "",
                 defaults.string(forKey: "mitmPorts") ?? "80, 443, 8080, 8443",
                 defaults.string(forKey: "mitmHosts") ?? "",  // Whitelist domains
-                defaults.string(forKey: "tlsFingerprint") ?? "none",
-                appState.aggressiveAntiJitterEnabled
+                defaults.string(forKey: "tlsFingerprint") ?? "none"
             )
         }
         
-        let activeFingerprint = (aiEnhancement && tlsFingerprint == "none") ? "chrome" : tlsFingerprint
+        let activeFingerprint = tlsFingerprint
         
         // Inject TLS Fingerprint if enabled (Do this before rule injection for cleaner logic)
         if activeFingerprint != "none" {
@@ -92,11 +89,8 @@ actor ConfigService {
         // Build base Clash config with TUN setting (MainActor required for ClashConfig)
         let baseConfig = await MainActor.run {
             var clashConfig = ClashConfig(fromUserDefaults: true)
-            clashConfig.enableTun = tunEnabled
-            // Apply AI Enhancement parameters to ClashConfig
-            if aiEnhancement {
-                clashConfig.tunStack = "gvisor" // Force gVisor for better anti-jitter
-                // Note: Other params like keep-alive-interval are applied in toYAML()
+            if tunEnabled {
+                clashConfig.enableTun = true
             }
             return clashConfig.toYAML()
         }
