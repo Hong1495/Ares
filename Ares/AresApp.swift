@@ -30,8 +30,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if UserDefaults.standard.bool(forKey: "systemProxyEnabled") {
             print("🔌 Disabling system proxy...")
             SystemProxyManager.shared.disableAllProxiesSync()
-            // Clear the preference so we don't re-enable on next launch if user quits intentionally
-            UserDefaults.standard.set(false, forKey: "systemProxyEnabled")
+            // NOTE: Keep systemProxyEnabled = true so proxy auto-restarts on next launch
+            // User's preference is preserved, only runtime state is cleaned up
         }
         
         // 2. Kill Clash process

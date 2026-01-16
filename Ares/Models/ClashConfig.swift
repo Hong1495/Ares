@@ -27,11 +27,17 @@ struct ClashConfig: Codable {
     // TUN settings
     var enableTun: Bool = false
     var tunStack: String = "system"
+    var tunAutoRoute: Bool = true
+    var tunAutoDetectInterface: Bool = true
     var mptcp: Bool = false
     
     // MITM Integration (for TUN mode)
     var mitmEnabled: Bool = false
     var mitmPort: Int = 0
+    
+    // Config skip flags (preserve subscription's optimized config)
+    var skipDNS: Bool = false
+    var skipSniffer: Bool = false
     
 
     
@@ -51,6 +57,15 @@ struct ClashConfig: Codable {
             self.socksPort = Int(defaults.string(forKey: "socksPort") ?? "7891") ?? 7891
             self.mixedPort = Int(defaults.string(forKey: "mixedPort") ?? "7890") ?? 7890 // Default 7890
             self.tunStack = defaults.string(forKey: "tunStack") ?? "system"
+            self.tunAutoRoute = defaults.bool(forKey: "tunAutoRoute")
+            self.tunAutoDetectInterface = defaults.bool(forKey: "tunAutoDetectInterface")
+            // Handle case where keys don't exist (default to true)
+            if defaults.object(forKey: "tunAutoRoute") == nil {
+                self.tunAutoRoute = true
+            }
+            if defaults.object(forKey: "tunAutoDetectInterface") == nil {
+                self.tunAutoDetectInterface = true
+            }
             
             // Check legacy keys or string/bool variants if needed? 
             // SwiftUI AppStorage usually stores as the type defined.
@@ -115,85 +130,63 @@ struct ClashConfig: Codable {
             udp-timeout: 120
             mptcp: false
             
-            # DNS Configuration (Critical for TUN mode speed)
-            dns:
-              enable: true
-              listen: 0.0.0.0:1053
-              ipv6: \(ipv6)
-              enhanced-mode: fake-ip
-              fake-ip-range: 198.18.0.1/16
-              # CRITICAL: Exclude proxy server domains from fake-ip to prevent DNS loop
-              fake-ip-filter:
-                - "*.lan"
-                - "*.local"
-                - "*.localdomain"
-                - "localhost"
-                - "*.localhost"
-                # Common proxy server domain patterns
-                - "+.wgnmdgfw.com"
-                - "+.ssr.gg"
-                - "+.v2ray.com"
-                - "+.trojan.com"
-                - "+.node.com"
-                - "+.proxy.com"
-                - "*.airport.com"
-                - "stun.*.*"
-                - "stun.*.*.*"
-                - "+.stun.*.*"
-                - "+.stun.*.*.*"
-                - "+.turn.*.*"
-                - "+.turn.*.*.*"
-              default-nameserver:
-                - 223.5.5.5
-                - 119.29.29.29
-                - 1.1.1.1
-                - 8.8.8.8
-              nameserver:
-                - https://doh.pub/dns-query
-                - https://dns.alidns.com/dns-query
-                - 223.5.5.5
-                - 114.114.114.114
-              fallback:
-                - https://1.1.1.1/dns-query
-                - https://8.8.8.8/dns-query
-                - tls://8.8.4.4:853
-                - tcp://8.8.8.8
-              fallback-filter:
-                geoip: true
-                geoip-code: CN
-                ipcidr:
-                  - 240.0.0.0/4
-              # CRITICAL: Proxy server domains must be resolved directly (not through proxy)
-              # Otherwise TUN mode creates a DNS loop where proxy can't connect
-              nameserver-policy:
-                "+.wgnmdgfw.com": [223.5.5.5, 119.29.29.29]
-                "+.ssr.gg": [223.5.5.5, 119.29.29.29]
-                "+.v2ray.com": [223.5.5.5, 119.29.29.29]
-                "+.trojan.com": [223.5.5.5, 119.29.29.29]
-            
-            # Sniffer Configuration (Recover domain names from TLS/HTTP)
-            sniffer:
-              enable: true
-              force-domain:
-                - "+"
-              override-destination: true
-              sniff:
-                TLS:
-                  ports: [443, 8443]
-                HTTP:
-                  ports: [80, 8080-8880]
-                QUIC:
-                  ports: [443, 8443]
-            
             # TUN Mode Configuration
             tun:
               enable: true
               stack: \(tunStack)
               dns-hijack:
                 - any:53
-              auto-route: true
-              auto-detect-interface: true
+              auto-route: \(tunAutoRoute)
+              auto-detect-interface: \(tunAutoDetectInterface)
             """
+            
+            // Only add our DNS config if subscription doesn't have one
+            if !skipDNS {
+                yaml += """
+            
+            # DNS Configuration (Fallback - subscription didn't provide)
+            dns:
+              enable: true
+              listen: 0.0.0.0:1053
+              ipv6: \(ipv6)
+              enhanced-mode: fake-ip
+              fake-ip-range: 198.18.0.1/16
+              fake-ip-filter:
+                - "*.lan"
+                - "*.local"
+                - "*.localdomain"
+                - "localhost"
+                - "*.localhost"
+              default-nameserver:
+                - 223.5.5.5
+                - 119.29.29.29
+              nameserver:
+                - 223.5.5.5
+                - 119.29.29.29
+                - 114.114.114.114
+              fallback:
+                - 1.1.1.1
+                - 8.8.8.8
+              fallback-filter:
+                geoip: true
+                geoip-code: CN
+            """
+            }
+            
+            // Only add our sniffer config if subscription doesn't have one
+            if !skipSniffer {
+                yaml += """
+            
+            # Sniffer Configuration (Fallback - subscription didn't provide)
+            sniffer:
+              enable: true
+              sniff:
+                TLS:
+                  ports: [443, 8443]
+                HTTP:
+                  ports: [80, 8080-8880]
+            """
+            }
         }
         
         // NOTE: MITM integration is handled by ConfigService.injectMITMConfig()

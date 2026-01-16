@@ -3,6 +3,7 @@ import SwiftUI
 // Current Proxy Card - Shows active proxy selections with latency
 struct CurrentProxyCard: View {
     @EnvironmentObject var clashController: ClashController
+    @EnvironmentObject var clashViewModel: ClashViewModel
     @EnvironmentObject var appState: AppState
     
     // Auto-refresh latency
@@ -134,14 +135,20 @@ struct CurrentProxyCard: View {
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
         .task {
-            // Initial delay wait
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            // Wait for Clash to be fully ready before testing
+            while !clashViewModel.isRunning || clashViewModel.isToggling {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+            // Additional wait for core stabilization
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
             await updateLatencies()
             
             // Periodic update
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 5_000_000_000) // 5s
-                await updateLatencies()
+                if clashViewModel.isRunning && !clashViewModel.isToggling {
+                    await updateLatencies()
+                }
             }
         }
     }
@@ -574,6 +581,7 @@ struct NodeAnalysisCard: View {
 /// Connections Card - Active Connections Stats
 struct ConnectionsCard: View {
     @EnvironmentObject var clashController: ClashController
+    @EnvironmentObject var clashViewModel: ClashViewModel
     @State private var totalConnections: Int = 0
     
     var body: some View {
@@ -632,16 +640,24 @@ struct ConnectionsCard: View {
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
         .task {
+            // Wait for Clash to be fully ready
+            while !clashViewModel.isRunning || clashViewModel.isToggling {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            
             // Poll connections count every few seconds
-             while !Task.isCancelled {
-                do {
-                    let json = try await clashController.fetchConnections()
-                    if let connections = json["connections"] as? [[String: Any]] {
-                        await MainActor.run {
-                            self.totalConnections = connections.count
+            while !Task.isCancelled {
+                if clashViewModel.isRunning && !clashViewModel.isToggling {
+                    do {
+                        let json = try await clashController.fetchConnections()
+                        if let connections = json["connections"] as? [[String: Any]] {
+                            await MainActor.run {
+                                self.totalConnections = connections.count
+                            }
                         }
-                    }
-                } catch {}
+                    } catch {}
+                }
                 try? await Task.sleep(nanoseconds: 5_000_000_000) // 5s
             }
         }

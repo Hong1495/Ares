@@ -64,7 +64,7 @@ struct SettingsView: View {
             }
             
             // Core Networking
-            Section("Clash Core") {
+            Section {
                 LabeledContent {
                     TextField("", text: $httpPort)
                         .multilineTextAlignment(.trailing)
@@ -107,6 +107,11 @@ struct SettingsView: View {
                     }
                 }
                 .buttonStyle(.bordered)
+            } header: {
+                Text("Clash Core")
+            } footer: {
+                Text("Port changes require core restart to take effect")
+                    .font(.footnote)
             }
             
             // Unified TUN Mode Info

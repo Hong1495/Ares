@@ -56,9 +56,42 @@ class ClashViewModel: ObservableObject {
         await startCore(isRestart: true)
     }
     
-    /// Add log message to UI
-    /// - Parameter message: Log message
-    func addLog(_ message: String) {
+    /// Log levels matching Clash core levels
+    enum LogLevel: Int, Comparable {
+        case debug = 0
+        case info = 1
+        case warning = 2
+        case error = 3
+        case silent = 4
+        
+        static func < (lhs: LogLevel, rhs: LogLevel) -> Bool {
+            return lhs.rawValue < rhs.rawValue
+        }
+        
+        static func from(string: String) -> LogLevel {
+            switch string.lowercased() {
+            case "debug": return .debug
+            case "info": return .info
+            case "warning": return .warning
+            case "error": return .error
+            case "silent": return .silent
+            default: return .info
+            }
+        }
+    }
+    
+    /// Add log message to UI with level filtering
+    /// - Parameters:
+    ///   - message: Log message
+    ///   - level: Log level (default: .info)
+    func addLog(_ message: String, level: LogLevel = .info) {
+        // Get user's log level setting
+        let userLogLevelString = UserDefaults.standard.string(forKey: "logLevel") ?? "info"
+        let userLogLevel = LogLevel.from(string: userLogLevelString)
+        
+        // Filter: only show logs at or above user's level
+        guard level >= userLogLevel else { return }
+        
         let timestamp = DateFormatter.localizedString(
             from: Date(),
             dateStyle: .none,

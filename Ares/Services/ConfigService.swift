@@ -86,11 +86,17 @@ actor ConfigService {
         
         cleanedProfile = injectDynamicRules(into: cleanedProfile, tunEnabled: tunEnabled, mitmEnabled: mitmEnabled, mitmPort: mitmPort, bypassRules: bypassRules, localRules: localRules, mitmPortsString: mitmPortsString, mitmHosts: mitmHosts)
         
+        // Check if subscription has its own dns/sniffer config (preserve subscription's optimized config)
+        let profileHasDNS = cleanedProfile.lowercased().contains("\ndns:")
+        let profileHasSniffer = cleanedProfile.lowercased().contains("\nsniffer:")
+        
         // Build base Clash config with TUN setting (MainActor required for ClashConfig)
         let baseConfig = await MainActor.run {
             var clashConfig = ClashConfig(fromUserDefaults: true)
             if tunEnabled {
                 clashConfig.enableTun = true
+                clashConfig.skipDNS = profileHasDNS         // Skip our dns if subscription has one
+                clashConfig.skipSniffer = profileHasSniffer // Skip our sniffer if subscription has one
             }
             return clashConfig.toYAML()
         }
@@ -115,9 +121,9 @@ actor ConfigService {
         // Write to config.yaml (Async, non-blocking)
         do {
             await MainActor.run {
-                ClashViewModel.shared.addLog("[Config] 📝 Writing config content (Preview lines 1-10):")
+                ClashViewModel.shared.addLog("[Config] 📝 Writing config content (Preview lines 1-10):", level: .debug)
                 let preview = finalConfig.components(separatedBy: "\n").prefix(10).joined(separator: "\n")
-                ClashViewModel.shared.addLog(preview)
+                ClashViewModel.shared.addLog(preview, level: .debug)
             }
             try await fileManager.writeText(finalConfig, to: targetPath)
             await MainActor.run {
@@ -157,10 +163,9 @@ actor ConfigService {
         ]
         
         // Multi-line block keys (need to remove entire block including children)
+        // NOTE: Only remove TUN - preserve subscription's DNS and sniffer for optimal performance
         let blockKeys = [
-            "tun",      // Use our own TUN config
-            "dns",      // CRITICAL: Avoid duplicate dns: key in TUN mode
-            "sniffer"   // Use our own sniffer config in TUN mode
+            "tun"       // Use our own TUN config (required for TUN mode control)
         ]
         
         let lines = yaml.components(separatedBy: .newlines)
