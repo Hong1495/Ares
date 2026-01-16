@@ -187,4 +187,33 @@ class SystemProxyManager {
         
         return false
     }
+    
+    /// Synchronously disable all system proxies (for app termination)
+    /// This method blocks and should ONLY be called during applicationWillTerminate
+    func disableAllProxiesSync() {
+        print("[SystemProxy] 🛑 Synchronous cleanup - disabling all proxies...")
+        
+        let priorityServices = ["Wi-Fi", "Ethernet", "USB 10/100/1000 LAN"]
+        
+        for service in priorityServices {
+            let commands: [[String]] = [
+                ["-setwebproxystate", service, "off"],
+                ["-setsecurewebproxystate", service, "off"],
+                ["-setsocksfirewallproxystate", service, "off"]
+            ]
+            
+            for args in commands {
+                let task = Process()
+                task.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
+                task.arguments = ["-n", "/usr/sbin/networksetup"] + args
+                task.standardOutput = FileHandle.nullDevice
+                task.standardError = FileHandle.nullDevice
+                
+                try? task.run()
+                task.waitUntilExit()
+            }
+        }
+        
+        print("[SystemProxy] ✅ All proxies disabled")
+    }
 }

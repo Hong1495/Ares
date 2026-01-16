@@ -111,7 +111,7 @@ struct ClashConfig: Codable {
             # Performance Settings
             keep-alive-interval: 15
             find-process-mode: always
-            tcp-concurrent: false
+            tcp-concurrent: true
             udp-timeout: 120
             mptcp: false
             

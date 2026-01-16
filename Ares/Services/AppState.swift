@@ -236,14 +236,15 @@ class AppState: ObservableObject {
     func toggleTUN() {
         print("[AppState] ⚡️ ENTERED toggleTUN()")
         
-        // 1. Check if already toggling via ClashViewModel
-        guard !clashViewModel.isToggling else {
+        // 1. Double-guard: Check both local and ViewModel toggle state
+        guard !isTUNToggling && !clashViewModel.isToggling else {
             print("[AppState] 🚫 Toggle rejected - already in progress")
             return
         }
         
         // 2. IMMEDIATE Synchronous Locking & UI Update
-        clashViewModel.isToggling = true // Lock IMMEDIATELY
+        isTUNToggling = true // Local guard
+        clashViewModel.isToggling = true // Global guard for UI
         clashViewModel.objectWillChange.send()
         
         let oldTUN = tunEnabled
@@ -266,6 +267,7 @@ class AppState: ObservableObject {
             
             // 4. Cleanup on Main Thread
             await MainActor.run {
+                self.isTUNToggling = false
                 self.clashViewModel.isToggling = false
                 self.objectWillChange.send()
                 self.clashViewModel.addLog("[TUN] ✅ Mode switch completed")

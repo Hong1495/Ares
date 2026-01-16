@@ -24,6 +24,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Force cleanup on exit
         print("🛑 App Terminating - Cleaning up...")
         
+        // 1. CRITICAL: Disable system proxy FIRST to prevent network outage
+        // This must happen BEFORE we kill Clash, otherwise macOS traffic
+        // will try to connect to a dead port (127.0.0.1:7890)
+        if UserDefaults.standard.bool(forKey: "systemProxyEnabled") {
+            print("🔌 Disabling system proxy...")
+            SystemProxyManager.shared.disableAllProxiesSync()
+            // Clear the preference so we don't re-enable on next launch if user quits intentionally
+            UserDefaults.standard.set(false, forKey: "systemProxyEnabled")
+        }
+        
+        // 2. Kill Clash process
         // Synchronous cleanup using sudo pkill directly
         // We use a direct Process call to avoid async/Task issues during termination
         let task = Process()
@@ -32,7 +43,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         try? task.run()
         task.waitUntilExit()
         
-        print("✅ Cleanup command executed")
+        print("✅ Cleanup complete")
     }
     
     private func checkAndRecoverState() async {
