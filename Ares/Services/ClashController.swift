@@ -269,58 +269,54 @@ class ClashController: ObservableObject {
     
     /// Fetch and parse proxies from Clash API
     func fetchProxiesData() async throws {
-        await Task.yield()
         // Removed noisy log: ClashService.shared.addLog("[ClashController] 📡 Fetching proxy data...")
         let url = URL(string: "\(baseURL)/proxies")!
         
         let (data, _) = try await URLSession.shared.data(from: url)
-        guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              let proxiesDict = json["proxies"] as? [String: [String: Any]] else {
-            // Removed noisy log: ClashViewModel.shared.addLog("[ClashController] ❌ No proxies found in response or invalid JSON")
-            return
-        }
         
-        var groups: [ProxyGroup] = []
-        var nodes: [String: ProxyNode] = [:]
-        
-        // Parse ALL proxy groups and nodes
-        for (name, proxyData) in proxiesDict {
-            if let type = proxyData["type"] as? String {
-                // Check if it's a node (has history or delay)
-                if let history = proxyData["history"] as? [[String: Any]] {
-                    let delay = history.first?["delay"] as? Int
-                    let node = ProxyNode(
-                        name: name,
-                        type: type,
-                        delay: delay
-                    )
-                    nodes[name] = node
-                }
-                
-                // Parse ALL proxy groups (Selector, URLTest, Fallback, LoadBalance, Relay, etc.)
-                // Don't filter - include everything that has 'all' array
-                if let all = proxyData["all"] as? [String], !all.isEmpty {
-                    let now = proxyData["now"] as? String
+        // Parse in background to avoid blocking Main Actor
+        let (groups, nodes) = await Task.detached(priority: .userInitiated) {
+            guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                  let proxiesDict = json["proxies"] as? [String: [String: Any]] else {
+                return ([], [:]) as ([ProxyGroup], [String: ProxyNode])
+            }
+            
+            var groups: [ProxyGroup] = []
+            var nodes: [String: ProxyNode] = [:]
+            
+            for (name, proxyData) in proxiesDict {
+                if let type = proxyData["type"] as? String {
+                    // Check if it's a node (has history or delay)
+                    if let history = proxyData["history"] as? [[String: Any]] {
+                        let delay = history.first?["delay"] as? Int
+                        let node = ProxyNode(
+                            name: name,
+                            type: type,
+                            delay: delay
+                        )
+                        nodes[name] = node
+                    }
                     
-                    let group = ProxyGroup(
-                        name: name,
-                        type: type,
-                        now: now,
-                        all: all
-                    )
-                    groups.append(group)
+                    // Parse ALL proxy groups
+                    if let all = proxyData["all"] as? [String], !all.isEmpty {
+                        let now = proxyData["now"] as? String
+                        
+                        let group = ProxyGroup(
+                            name: name,
+                            type: type,
+                            now: now,
+                            all: all
+                        )
+                        groups.append(group)
+                    }
                 }
             }
-        }
+            return (groups, nodes)
+        }.value
         
-        await MainActor.run {
-            DispatchQueue.main.async {
-                self.proxyGroups = groups
-                self.proxyNodes = nodes
-            }
-            // Only log on first fetch or significant changes
-            // Removed: ClashService.shared.addLog("[ClashController] ✅ Loaded \(groups.count) groups, \(nodes.count) nodes")
-        }
+        // Update UI state
+        self.proxyGroups = groups
+        self.proxyNodes = nodes
     }
     
     /// Select a proxy in a group
@@ -488,7 +484,6 @@ class ClashController: ObservableObject {
     }
     /// Fetch active rules from Clash API
     func fetchRules() async throws {
-        await Task.yield()
         guard let url = URL(string: "\(baseURL)/rules") else { return }
         
         let (data, response) = try await URLSession.shared.data(from: url)
@@ -496,23 +491,25 @@ class ClashController: ObservableObject {
             return
         }
         
-        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        guard let rulesList = json?["rules"] as? [[String: Any]] else { return }
-        
-        var fetchedRules: [ClashRule] = []
-        for ruleData in rulesList {
-            if let type = ruleData["type"] as? String,
-               let payload = ruleData["payload"] as? String,
-               let proxy = ruleData["proxy"] as? String {
-                let hit = ruleData["hit"] as? Int ?? 0
-                fetchedRules.append(ClashRule(id: UUID(), type: type, payload: payload, proxy: proxy, hit: hit))
+        // Parse rules in background
+        let rules = await Task.detached(priority: .utility) {
+            guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                  let rulesList = json["rules"] as? [[String: Any]] else {
+                return [] as [ClashRule]
             }
-        }
-        
-        await MainActor.run {
-            DispatchQueue.main.async {
-                self.rules = fetchedRules
+            
+            var fetchedRules: [ClashRule] = []
+            for ruleData in rulesList {
+                if let type = ruleData["type"] as? String,
+                   let payload = ruleData["payload"] as? String,
+                   let proxy = ruleData["proxy"] as? String {
+                    let hit = ruleData["hit"] as? Int ?? 0
+                    fetchedRules.append(ClashRule(id: UUID(), type: type, payload: payload, proxy: proxy, hit: hit))
+                }
             }
-        }
+            return fetchedRules
+        }.value
+        
+        self.rules = rules
     }
 }

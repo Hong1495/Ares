@@ -161,18 +161,34 @@ class ProfileService: ObservableObject {
             profile.subscriptionInfo = parseSubscriptionInfo(from: httpResponse)
         }
         
+        // Destination path
+        let filename = "\(profile.id.uuidString).yaml"
+        let destination = profilesDir.appendingPathComponent(filename)
+
         // Fallback: Parse from YAML content if header info is missing
         if profile.subscriptionInfo == nil || profile.subscriptionInfo?.total == 0 {
             if let content = String(data: data, encoding: .utf8) {
                 if let info = parseSubscriptionInfo(fromContent: content) {
                     profile.subscriptionInfo = info
                 }
+                   
+                // Check if content needs conversion (Base64 -> YAML)
+                if let converted = SubscriptionConverter.convert(content: content) {
+                    print("[ProfileService] 🔄 Converted Base64 subscription to YAML")
+                    // Use converted content
+                    try converted.write(to: destination, atomically: true, encoding: .utf8)
+                    
+                    // Update profile path and timestamp
+                    profile.path = destination
+                    profile.lastUpdated = Date()
+                    
+                    print("[ProfileService] Profile updated: \(profile.name)")
+                    return
+                }
             }
         }
         
         // Save to file
-        let filename = "\(profile.id.uuidString).yaml"
-        let destination = profilesDir.appendingPathComponent(filename)
         try data.write(to: destination)
         
         // Update profile
@@ -211,6 +227,17 @@ class ProfileService: ObservableObject {
         if profiles[index].subscriptionInfo == nil || profiles[index].subscriptionInfo?.total == 0 {
             if let info = parseSubscriptionInfo(fromContent: content) {
                 profiles[index].subscriptionInfo = info
+            }
+        }
+        
+        // Check if content needs conversion (Base64 -> YAML)
+        var finalContent = content
+        if let converted = SubscriptionConverter.convert(content: content) {
+            print("[ProfileService] 🔄 Converted Base64 subscription to YAML")
+            finalContent = converted
+            // Log for debugging
+            Task { @MainActor in
+                ClashViewModel.shared.addLog("[ProfileService] 🔄 Automatically converted subscription format")
             }
         }
         

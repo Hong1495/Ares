@@ -146,7 +146,14 @@ actor ConfigService {
             "ipv6",
             "external-controller",
             "secret",
-            "keep-alive-interval"
+            "keep-alive-interval",
+            "tcp-concurrent",
+            "unified-delay",
+            "global-client-fingerprint",
+            "find-process-mode",
+            "geodata-mode",
+            "geodata-loader",
+            "geox-url"
         ]
         
         // Multi-line block keys (need to remove entire block including children)
