@@ -134,7 +134,25 @@ struct AresMenuBarView: View {
         Button(action: {
             NSApp.activate(ignoringOtherApps: true)
             appState.selection = .dashboard
-            openWindow(id: "main")
+            
+            // Try to find and activate existing window first
+            // Match based on WindowGroup ID or known navigation titles from MainView
+            let existingWindow = NSApp.windows.first { window in
+                guard window.styleMask.contains(.titled) else { return false }
+                
+                // 1. Check Identifier (Primary)
+                if let id = window.identifier?.rawValue, id.contains("main") { return true }
+                
+                // 2. Check Title (Fallback - matches navigation titles in MainView)
+                let mainTitles = ["Dashboard", "Activity", "Policies", "Analysis", "Logs", "Settings"]
+                return mainTitles.contains(window.title)
+            }
+            
+            if let window = existingWindow {
+                window.makeKeyAndOrderFront(nil)
+            } else {
+                openWindow(id: "main")
+            }
         }) {
             Label {
                 Text("Dashboard")

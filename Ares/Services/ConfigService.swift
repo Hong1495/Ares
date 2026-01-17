@@ -86,17 +86,13 @@ actor ConfigService {
         
         cleanedProfile = injectDynamicRules(into: cleanedProfile, tunEnabled: tunEnabled, mitmEnabled: mitmEnabled, mitmPort: mitmPort, bypassRules: bypassRules, localRules: localRules, mitmPortsString: mitmPortsString, mitmHosts: mitmHosts)
         
-        // Check if subscription has its own dns/sniffer config (preserve subscription's optimized config)
-        let profileHasDNS = cleanedProfile.lowercased().contains("\ndns:")
-        let profileHasSniffer = cleanedProfile.lowercased().contains("\nsniffer:")
-        
         // Build base Clash config with TUN setting (MainActor required for ClashConfig)
         let baseConfig = await MainActor.run {
             var clashConfig = ClashConfig(fromUserDefaults: true)
             if tunEnabled {
                 clashConfig.enableTun = true
-                clashConfig.skipDNS = profileHasDNS         // Skip our dns if subscription has one
-                clashConfig.skipSniffer = profileHasSniffer // Skip our sniffer if subscription has one
+                clashConfig.skipDNS = false         // Always use our DNS
+                clashConfig.skipSniffer = false     // Always use our Sniffer
             }
             return clashConfig.toYAML()
         }
@@ -163,10 +159,12 @@ actor ConfigService {
         ]
         
         // Multi-line block keys (need to remove entire block including children)
-        // NOTE: Only remove TUN and profile - preserve subscription's DNS and sniffer for optimal performance
+        // We enforce our own TUN, DNS, and Sniffer config to ensure stability in TUN mode
         let blockKeys = [
             "tun",      // Use our own TUN config (required for TUN mode control)
-            "profile"   // Use our own profile config (required for node selection persistence)
+            "profile",  // Use our own profile config (required for node selection persistence)
+            "dns",      // Use our own DNS config (force Fake-IP for TUN stability)
+            "sniffer"   // Use our own Sniffer config
         ]
         
         let lines = yaml.components(separatedBy: .newlines)
