@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct SubscriptionCard: View {
-    @ObservedObject var profileService = ProfileService.shared
+    @EnvironmentObject var profileService: ProfileService
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {

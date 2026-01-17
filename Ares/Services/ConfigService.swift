@@ -163,9 +163,10 @@ actor ConfigService {
         ]
         
         // Multi-line block keys (need to remove entire block including children)
-        // NOTE: Only remove TUN - preserve subscription's DNS and sniffer for optimal performance
+        // NOTE: Only remove TUN and profile - preserve subscription's DNS and sniffer for optimal performance
         let blockKeys = [
-            "tun"       // Use our own TUN config (required for TUN mode control)
+            "tun",      // Use our own TUN config (required for TUN mode control)
+            "profile"   // Use our own profile config (required for node selection persistence)
         ]
         
         let lines = yaml.components(separatedBy: .newlines)

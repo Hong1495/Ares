@@ -7,6 +7,7 @@ class ProfileService: ObservableObject {
     
     @Published var profiles: [Profile] = []
     @Published var activeProfileID: UUID?
+    @Published var isSwitchingProfile: Bool = false
     
     private let profilesDir: URL
     private let profilesMetadataFile: URL
@@ -21,10 +22,9 @@ class ProfileService: ObservableObject {
         // Create directories if needed
         try? FileManager.default.createDirectory(at: profilesDir, withIntermediateDirectories: true)
         
-        // Load profiles asynchronously on next run loop
-        Task { @MainActor in
-            self.loadProfiles()
-        }
+        // Load profiles synchronously to ensure they're ready before Clash starts
+        // This is critical for startup timing - Clash needs the active profile to build config
+        self.loadProfiles()
     }
     
     /// Load profiles from disk
@@ -206,7 +206,12 @@ class ProfileService: ObservableObject {
             throw NSError(domain: "ProfileService", code: 3, userInfo: [NSLocalizedDescriptionKey: "Profile not found or not remote"])
         }
         
-        print("[ProfileService] Updating profile: \(profiles[index].name)")
+        let profileName = profiles[index].name
+        let isActive = activeProfileID == id
+        
+        await MainActor.run {
+            ClashViewModel.shared.addLog("[ProfileService] 🔄 Updating profile: \(profileName)")
+        }
         
         // Download updated content with Clash User-Agent
         var request = URLRequest(url: url)
@@ -233,22 +238,20 @@ class ProfileService: ObservableObject {
         // Check if content needs conversion (Base64 -> YAML)
         var finalContent = content
         if let converted = SubscriptionConverter.convert(content: content) {
-            print("[ProfileService] 🔄 Converted Base64 subscription to YAML")
-            finalContent = converted
-            // Log for debugging
-            Task { @MainActor in
+            await MainActor.run {
                 ClashViewModel.shared.addLog("[ProfileService] 🔄 Automatically converted subscription format")
             }
+            finalContent = converted
         }
         
-        // Save to existing path
+        // Save to existing path (use finalContent, not content!)
         if let path = profiles[index].path {
-            try content.write(to: path, atomically: true, encoding: .utf8)
+            try finalContent.write(to: path, atomically: true, encoding: .utf8)
         } else {
             // Create path if missing
             let filename = "\(id.uuidString).yaml"
             let path = profilesDir.appendingPathComponent(filename)
-            try content.write(to: path, atomically: true, encoding: .utf8)
+            try finalContent.write(to: path, atomically: true, encoding: .utf8)
             profiles[index].path = path
         }
         
@@ -258,7 +261,17 @@ class ProfileService: ObservableObject {
         // Save metadata
         saveProfiles()
         
-        print("[ProfileService] Updated profile: \(profiles[index].name)")
+        await MainActor.run {
+            ClashViewModel.shared.addLog("[ProfileService] ✅ Updated profile: \(profileName)")
+        }
+        
+        // If this is the active profile, reload Clash to apply changes
+        if isActive {
+            await MainActor.run {
+                ClashViewModel.shared.addLog("[ProfileService] 🔄 Reloading Clash with updated profile...")
+            }
+            await reloadClashWithCurrentProfile()
+        }
     }
     
     /// Edit profile metadata (Name, URL)
@@ -326,6 +339,7 @@ class ProfileService: ObservableObject {
         guard let index = profiles.firstIndex(where: { $0.id == id }) else { return }
         
         let profile = profiles[index]
+        let wasActive = activeProfileID == id
         
         // Delete file if exists
         if let path = profile.path {
@@ -335,13 +349,28 @@ class ProfileService: ObservableObject {
         // Remove from list
         profiles.remove(at: index)
         
-        // Clear active if deleted
-        if activeProfileID == id {
+        // Clear active if deleted and switch to next available
+        if wasActive {
             activeProfileID = profiles.first?.id
         }
         
         saveProfiles()
-        print("[ProfileService] Deleted profile: \(profile.name)")
+        
+        Task { @MainActor in
+            ClashViewModel.shared.addLog("[ProfileService] 🗑️ Deleted profile: \(profile.name)")
+            
+            // If we deleted the active profile, we need to reload Clash
+            if wasActive {
+                if let newActive = profiles.first {
+                    ClashViewModel.shared.addLog("[ProfileService] 🔄 Switching to profile: \(newActive.name)")
+                    await reloadClashWithCurrentProfile()
+                } else {
+                    // No profiles left, stop Clash
+                    ClashViewModel.shared.addLog("[ProfileService] ⚠️ No profiles remaining, stopping Clash...")
+                    await ClashViewModel.shared.stop()
+                }
+            }
+        }
     }
     
     /// Get the active profile
@@ -353,7 +382,15 @@ class ProfileService: ObservableObject {
     /// Set active profile and reload Clash with new configuration
     func setActiveProfile(id: UUID) {
         guard activeProfileID != id else { return } // No-op if already active
+        guard !isSwitchingProfile else {
+            print("[ProfileService] ⚠️ Profile switch already in progress, ignoring request")
+            return
+        }
         
+        // Mark switching state to prevent multiple rapid switches
+        isSwitchingProfile = true
+        
+        // Update the active profile ID
         activeProfileID = id
         saveProfiles()
         
@@ -365,6 +402,12 @@ class ProfileService: ObservableObject {
             
             // Rebuild config and restart Clash
             await reloadClashWithCurrentProfile()
+            
+            // Clear switching state
+            isSwitchingProfile = false
+            
+            // Notify observers that profile has changed (force UI refresh)
+            objectWillChange.send()
         }
     }
     
@@ -372,8 +415,9 @@ class ProfileService: ObservableObject {
     @MainActor
     func reloadClashWithCurrentProfile() async {
         let tunEnabled = AppState.shared.tunEnabled
+        let systemProxyEnabled = AppState.shared.systemProxyEnabled
         
-        ClashViewModel.shared.addLog("[ProfileService] 📝 Rebuilding configuration...")
+        ClashViewModel.shared.addLog("[ProfileService] 📝 Rebuilding configuration (TUN=\(tunEnabled))...")
         
         do {
             // 1. Rebuild config with new profile
@@ -404,6 +448,19 @@ class ProfileService: ObservableObject {
                     ClashViewModel.shared.addLog("[ProfileService] 📡 Refreshed UI data for new profile")
                 } catch {
                      ClashViewModel.shared.addLog("[ProfileService] ⚠️ Failed to fetch fresh data: \(error)")
+                }
+                
+                // 5. CRITICAL: Restore system proxy if it was enabled
+                // This ensures proxy continues to work after profile switch
+                // In TUN mode, enableSystemProxy is still needed for DNS hijacking in some configurations
+                if systemProxyEnabled {
+                    ClashViewModel.shared.addLog("[ProfileService] 🌐 Restoring system proxy...")
+                    await AppState.shared.enableSystemProxy()
+                }
+                
+                // 6. Log TUN mode status
+                if tunEnabled {
+                    ClashViewModel.shared.addLog("[ProfileService] 🛡️ TUN mode active, profile switch complete")
                 }
             } else {
                 ClashViewModel.shared.addLog("[ProfileService] ⚠️ Clash API not ready after restart")

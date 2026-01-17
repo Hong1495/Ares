@@ -117,6 +117,11 @@ struct ClashConfig: Codable {
         ipv6: \(ipv6)
         external-controller: \(actualController)
         secret: "\(secret)"
+        
+        # Profile Settings - Enable proxy selection persistence
+        profile:
+          store-selected: true
+          store-fake-ip: true
         """
         
         // TUN configuration

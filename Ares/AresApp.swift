@@ -99,6 +99,11 @@ struct AresApp: App {
                 }
                 .preferredColorScheme(themeService.theme == "dark" ? .dark : (themeService.theme == "light" ? .light : nil))
         }
+        .commands {
+            // Disable "New Window" to enforce single window behavior
+            CommandGroup(replacing: .newItem) { }
+        }
+        .handlesExternalEvents(matching: Set(arrayLiteral: "main"))
         
         WindowGroup(id: "network-inspector", for: String.self) { $requestId in
             if let id = requestId {

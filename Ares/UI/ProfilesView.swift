@@ -260,13 +260,19 @@ struct ProfileCard: View {
             // Actions
             HStack(spacing: 10) {
                 Button(action: onSelect) {
-                    Text(isActive ? "Selected" : "Select")
-                        .font(.system(size: 11, weight: .bold))
-                        .frame(maxWidth: .infinity)
+                    HStack(spacing: 6) {
+                        if profileService.isSwitchingProfile && isActive {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                        Text(isActive ? (profileService.isSwitchingProfile ? "Switching..." : "Selected") : "Select")
+                            .font(.system(size: 11, weight: .bold))
+                    }
+                    .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(isActive ? .blue : .secondary)
-                .disabled(isActive)
+                .disabled(isActive || profileService.isSwitchingProfile)
                 
                 HStack(spacing: 4) {
                     if profile.type == .remote {

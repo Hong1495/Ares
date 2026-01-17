@@ -85,6 +85,18 @@ actor ClashServiceActor {
         }
         
         if tunEnabled {
+            // Ensure permissions for TUN mode
+            // This is critical for restart/profile switch flows where the outer UI toggle check isn't run
+            let hasPrivileges = await PrivilegeService.shared.checkPrivileges()
+            if !hasPrivileges {
+                addLog("[ClashServiceActor] 🛡️ TUN permissions missing, attempting install...")
+                // Note: installSudoers might trigger UI prompt, which is fine
+                let installed = await PrivilegeService.shared.installSudoers()
+                if !installed {
+                     addLog("[ClashServiceActor] ❌ Failed to acquire TUN privileges. Fallback to Normal mode?")
+                     // For now, let it try startWithTUN, it will likely fail with sudo error if not installed
+                }
+            }
             await startWithTUN()
         } else {
             await startNormal()
