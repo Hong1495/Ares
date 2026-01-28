@@ -5,14 +5,14 @@ import Combine
 /// Enhanced Real-time Traffic Graph using SwiftUI Charts
 struct EnhancedTrafficGraphView: View {
     @StateObject private var viewModel = TrafficGraphViewModel()
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Label("Network Traffic", systemImage: "chart.xyaxis.line")
                     .font(.headline)
                 Spacer()
-                
+
                 // Legend with traffic rates
                 HStack(spacing: 16) {
                     HStack(spacing: 6) {
@@ -44,7 +44,7 @@ struct EnhancedTrafficGraphView: View {
                 }
                 .foregroundStyle(.secondary)
             }
-            
+
             // Speed Chart using SwiftUI Charts
             Chart(viewModel.dataPoints) { point in
                 // Upload Area
@@ -58,7 +58,7 @@ struct EnhancedTrafficGraphView: View {
                     endPoint: .bottom
                 ))
                 .interpolationMethod(.catmullRom)
-                
+
                 // Upload Line
                 LineMark(
                     x: .value("Time", point.time),
@@ -67,7 +67,7 @@ struct EnhancedTrafficGraphView: View {
                 .foregroundStyle(.cyan)
                 .interpolationMethod(.catmullRom)
                 .lineStyle(StrokeStyle(lineWidth: 2))
-                
+
                 // Download Area
                 AreaMark(
                     x: .value("Time", point.time),
@@ -79,7 +79,7 @@ struct EnhancedTrafficGraphView: View {
                     endPoint: .bottom
                 ))
                 .interpolationMethod(.catmullRom)
-                
+
                 // Download Line
                 LineMark(
                     x: .value("Time", point.time),
@@ -109,7 +109,7 @@ struct EnhancedTrafficGraphView: View {
             viewModel.stopMonitoring()
         }
     }
-    
+
     private func formatSpeed(_ bytes: Int64) -> String {
         let formatter = ByteCountFormatter()
         formatter.allowedUnits = [.useKB, .useMB, .useGB]
@@ -133,9 +133,9 @@ class TrafficGraphViewModel: ObservableObject {
     @Published var dataPoints: [TrafficDataPoint] = []
     @Published var currentUpload: Int64 = 0
     @Published var currentDownload: Int64 = 0
-    
+
     private var cancellables = Set<AnyCancellable>()
-    
+
     init() {
         // Initialize with 60 data points
         let now = Date()
@@ -147,12 +147,12 @@ class TrafficGraphViewModel: ObservableObject {
             )
         }
     }
-    
+
     func startMonitoring() {
         // Immediately update with current data if available
         let current = ClashController.shared.traffic
         updateTraffic(up: current.up, down: current.down)
-        
+
         // Observe ClashController traffic updates
         ClashController.shared.$traffic
             .receive(on: RunLoop.main)
@@ -161,27 +161,27 @@ class TrafficGraphViewModel: ObservableObject {
             }
             .store(in: &cancellables)
     }
-    
+
     func stopMonitoring() {
         cancellables.removeAll()
     }
-    
+
     private func updateTraffic(up: Int64, down: Int64) {
-        DispatchQueue.main.async {
-            self.currentUpload = up
-            self.currentDownload = down
-            
-            // Update graph data
-            let newPoint = TrafficDataPoint(
-                time: Date(),
-                upload: up,
-                download: down
-            )
-            
-            self.dataPoints.append(newPoint)
-            if self.dataPoints.count > 60 {
-                self.dataPoints.removeFirst()
-            }
+        // 已在 @MainActor 上，无需再次调度到主线程
+        self.currentUpload = up
+        self.currentDownload = down
+
+        // Update graph data
+        let newPoint = TrafficDataPoint(
+            time: Date(),
+            upload: up,
+            download: down
+        )
+
+        self.dataPoints.append(newPoint)
+        // 保持固定大小的数据点数组
+        if self.dataPoints.count > 60 {
+            self.dataPoints.removeFirst()
         }
     }
 }

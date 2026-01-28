@@ -12,7 +12,7 @@ struct RequestHit: Identifiable, Codable, Equatable, Sendable {
     let duration: Double?
     var requestBody: String?
     var responseBody: String?
-    
+
     func asRequest(original: BrowserRequest) -> BrowserRequest {
         var copy = original
         copy.timestamp = self.timestamp
@@ -46,7 +46,7 @@ struct BrowserRequest: Identifiable, Codable, Equatable, Sendable {
     var responseBody: String?
     var errorMessage: String?
     var hits: [RequestHit] = []
-    
+
     enum RequestStatus: String, Codable, Sendable {
         case pending = "pending"
         case active = "active"
@@ -64,11 +64,11 @@ struct BrowserRequest: Identifiable, Codable, Equatable, Sendable {
         // Record the first hit on initialization
         self.hits = [RequestHit(timestamp: timestamp, statusCode: nil, duration: nil, requestBody: nil, responseBody: nil)]
     }
-    
+
     // Custom Decodable initializer to handle missing fields from browser extension
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        
+
         // Required fields
         id = try container.decode(String.self, forKey: .id)
         url = try container.decode(String.self, forKey: .url)
@@ -76,7 +76,7 @@ struct BrowserRequest: Identifiable, Codable, Equatable, Sendable {
         type = try container.decode(String.self, forKey: .type)
         timestamp = try container.decode(Date.self, forKey: .timestamp)
         status = try container.decode(RequestStatus.self, forKey: .status)
-        
+
         // Optional fields
         initiator = try container.decodeIfPresent(String.self, forKey: .initiator)
         statusCode = try container.decodeIfPresent(Int.self, forKey: .statusCode)
@@ -90,7 +90,7 @@ struct BrowserRequest: Identifiable, Codable, Equatable, Sendable {
         responseBody = try container.decodeIfPresent(String.self, forKey: .responseBody)
         errorMessage = try container.decodeIfPresent(String.self, forKey: .errorMessage)
         lastUpdateTimestamp = try container.decodeIfPresent(Date.self, forKey: .lastUpdateTimestamp)
-        
+
         // New fields with defaults - these won't exist in browser extension JSON
         hitCount = try container.decodeIfPresent(Int.self, forKey: .hitCount) ?? 1
         hits = try container.decodeIfPresent([RequestHit].self, forKey: .hits) ?? []
@@ -99,7 +99,7 @@ struct BrowserRequest: Identifiable, Codable, Equatable, Sendable {
     var sortSize: Int { displaySize }
     var sortDuration: Double { duration ?? 0.0 }
     var sortStatus: String { status.rawValue }
-    
+
     /// Calculate display size from either header or body content
     var displaySize: Int {
         if let s = size, s > 0 { return s }
@@ -108,9 +108,9 @@ struct BrowserRequest: Identifiable, Codable, Equatable, Sendable {
     }
 
     static func == (lhs: BrowserRequest, rhs: BrowserRequest) -> Bool {
-        lhs.id == rhs.id && 
-        lhs.status == rhs.status && 
-        lhs.hitCount == rhs.hitCount && 
+        lhs.id == rhs.id &&
+        lhs.status == rhs.status &&
+        lhs.hitCount == rhs.hitCount &&
         lhs.lastUpdateTimestamp == rhs.lastUpdateTimestamp &&
         (lhs.requestBody != nil) == (rhs.requestBody != nil) &&
         (lhs.responseBody != nil) == (rhs.responseBody != nil)
@@ -123,7 +123,7 @@ struct BrowserTab: Identifiable, Codable, Equatable, Sendable {
     var title: String
     var lastUpdate: Date
     var requests: [BrowserRequest] = []
-    
+
     static func == (lhs: BrowserTab, rhs: BrowserTab) -> Bool {
         lhs.id == rhs.id && lhs.url == rhs.url && lhs.title == rhs.title && lhs.lastUpdate == rhs.lastUpdate && lhs.requests == rhs.requests
     }
@@ -168,12 +168,12 @@ final class ConnectionBuffer: @unchecked Sendable {
         }
         return nil
     }
-    
+
     func peek(_ limit: Int) -> Data {
         lock.lock(); defer { lock.unlock() }
         return data.prefix(limit)
     }
-    
+
     var size: Int {
         lock.lock(); defer { lock.unlock() }
         return data.count
@@ -205,26 +205,26 @@ final class TelemetryWorker: @unchecked Sendable {
             // Small delay to allow port to be released
             Thread.sleep(forTimeInterval: 0.1)
         }
-        
+
         do {
             let params = NWParameters.tcp
             params.allowLocalEndpointReuse = true
             listener = try NWListener(using: params, on: 10086)
-            
+
             listener?.stateUpdateHandler = { state in
                 Task { @MainActor in
                     BrowserAnalysisService.shared.isListening = (state == .ready)
                 }
                 print("[TeleWorker] 📡 State: \(state)")
             }
-            
+
             listener?.newConnectionHandler = { [weak self] conn in
                 guard let self = self else { return }
                 let buffer = ConnectionBuffer(connection: conn)
                 conn.start(queue: .global(qos: .userInteractive))
                 self.receive(buffer)
             }
-            
+
             listener?.start(queue: .global(qos: .utility))
             print("[TeleWorker] 🚀 Listener started on port 10086")
         } catch {
@@ -236,17 +236,17 @@ final class TelemetryWorker: @unchecked Sendable {
         // High performance receive: max 512KB per chunk
         buffer.connection.receive(minimumIncompleteLength: 1, maximumLength: 1024 * 512) { [weak self] data, _, isComplete, err in
             guard let self = self else { return }
-            
+
             if let data = data {
                 buffer.append(data)
-                
+
                 // 1. Detect and handle HTTP Preflight (OPTIONS) or PNA checks
                 // We check the first few bytes for the OPTIONS method
                 if let payloadStr = String(data: buffer.peek(32), encoding: .utf8), payloadStr.hasPrefix("OPTIONS") {
                     self.sendPreflightResponse(buffer.connection)
                     return
                 }
-                
+
                 // 2. Attempt to process JSON IMMEDIATELY (Deadlock Avoidance)
                 if let payload = buffer.getPayload(), self.process(payload) {
                     self.sendACK(buffer.connection)
@@ -272,7 +272,7 @@ final class TelemetryWorker: @unchecked Sendable {
         // Attempt to find the end of the JSON object/array
         // to avoid partial decoding attempts on very large streams
         guard data.count > 2 else { return false }
-        
+
         // 1. Try Batched (Array)
         if let updates = try? decoder.decode([PayloadWrapper].self, from: data) {
             // Debug: Log received request methods
@@ -293,7 +293,7 @@ final class TelemetryWorker: @unchecked Sendable {
             }
             return true
         }
-        
+
         // 2. Try Single (Object)
         if let wrapper = try? decoder.decode(PayloadWrapper.self, from: data) {
             /*
@@ -306,7 +306,7 @@ final class TelemetryWorker: @unchecked Sendable {
             }
             return true
         }
-        
+
         return false // Data not yet complete or malformed
     }
 
@@ -318,18 +318,18 @@ final class TelemetryWorker: @unchecked Sendable {
 
     private func sendACK(_ conn: NWConnection) {
         let ack = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 0\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Private-Network: true\r\nConnection: close\r\n\r\n"
-        conn.send(content: ack.data(using: .utf8), completion: .contentProcessed({ _ in 
-            conn.cancel() 
+        conn.send(content: ack.data(using: .utf8), completion: .contentProcessed({ _ in
+            conn.cancel()
         }))
     }
-    
+
     private func sendPreflightResponse(_ conn: NWConnection) {
         let resp = "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\nAccess-Control-Allow-Private-Network: true\r\nConnection: close\r\n\r\n"
-        conn.send(content: resp.data(using: .utf8), completion: .contentProcessed({ _ in 
-            conn.cancel() 
+        conn.send(content: resp.data(using: .utf8), completion: .contentProcessed({ _ in
+            conn.cancel()
         }))
     }
-    
+
     func stop() {
         listener?.cancel()
         listener = nil
@@ -345,33 +345,33 @@ final class TelemetryWorker: @unchecked Sendable {
 @MainActor
 class BrowserAnalysisService: ObservableObject {
     static let shared = BrowserAnalysisService()
-    
+
     @Published var activeTabs: [BrowserTab] = []
     @Published var isListening = false
     @Published var lastReceived: Date?
     @Published var connectionCount: Int = 0
-    
+
     private let worker = TelemetryWorker()
     private var pruningTimer: AnyCancellable?
     private let staleThreshold: TimeInterval = 600 // Keep tabs for 10 mins without updates
-    
+
     private init() {
         worker.start()
         startPruningTimer()
     }
-    
+
     /// Start listening for browser extension data
     func startListening() {
         guard !isListening else { return }
         worker.start()
     }
-    
+
     /// Stop listening for browser extension data
     func stopListening() {
         guard isListening else { return }
         worker.stop()
     }
-    
+
     /// Toggle listening state
     func toggleListening() {
         if isListening {
@@ -384,10 +384,10 @@ class BrowserAnalysisService: ObservableObject {
     func handleBatchedUpdates(_ wrappers: [PayloadWrapper]) {
         self.lastReceived = Date()
         self.connectionCount += wrappers.count
-        
+
         // Batch updates to reduce View redraws
         objectWillChange.send()
-        
+
         for w in wrappers {
             if let req = w.request, let tid = w.tabId {
                 addRequestToTab(tabId: tid, request: req)
@@ -398,7 +398,7 @@ class BrowserAnalysisService: ObservableObject {
             }
         }
     }
-    
+
     private func updateTab(_ tab: BrowserTab) {
         if let i = activeTabs.firstIndex(where: { $0.id == tab.id }) {
             activeTabs[i].url = tab.url
@@ -408,31 +408,31 @@ class BrowserAnalysisService: ObservableObject {
             activeTabs.append(tab)
         }
     }
-    
+
     func addRequestToTab(tabId: String, request: BrowserRequest) {
         // Ensure subscribers know an update occurred, crucial for TrafficAnalyzer
         self.lastReceived = Date()
-        
+
         if let i = activeTabs.firstIndex(where: { $0.id == tabId }) {
             addRequestToTabIndex(i, request: request)
         } else {
             // Race condition: request arrived before tab metadata. Create placeholder.
             activeTabs.append(BrowserTab(
-                id: tabId, 
-                url: request.url, 
-                title: "Loading...", 
-                lastUpdate: Date(), 
+                id: tabId,
+                url: request.url,
+                title: "Loading...",
+                lastUpdate: Date(),
                 requests: [request]
             ))
         }
     }
-    
+
     private func addRequestToTabIndex(_ i: Int, request: BrowserRequest) {
         // 1. Precise ID Matching (Internal tracking)
         if let ri = activeTabs[i].requests.firstIndex(where: { $0.id == request.id }) {
             print("[BrowserAnalysisService] ✅ Found matching request by ID: \(request.id)")
             merge(request, into: &activeTabs[i].requests[ri])
-        } 
+        }
         // 2. Heuristic Body Matching (IDs starting with "body-")
         // IMPORTANT: Body capture should ONLY merge, NEVER create new entries
         // Only telemetry (chrome.webRequest) should create entries to avoid duplicates
@@ -452,24 +452,24 @@ class BrowserAnalysisService: ObservableObject {
                 // This prevents duplicate entries from body capture + telemetry
                 // print("[TeleWorker] ⏳ Body capture waiting (no matching telemetry yet): \(request.url.prefix(40))...")
             }
-        } 
+        }
         // 3. New Entry or Polling Coalescing
         else {
             var nr = request; nr.lastUpdateTimestamp = Date()
-            
+
             // Only merge true duplicates/retries within 500ms - NOT normal polling
             // CRITICAL: Do NOT merge POST/PUT/PATCH methods, as bodies might differ.
             // Only merge GET/HEAD where parameters are fully visible in the URL.
             let isSafeMethod = ["GET", "HEAD", "OPTIONS"].contains(request.method.uppercased())
-            
+
             let recentThreshold = 0.5
             if isSafeMethod, let ei = activeTabs[i].requests.firstIndex(where: {
-                $0.url == request.url && $0.method == request.method && 
+                $0.url == request.url && $0.method == request.method &&
                 abs($0.timestamp.timeIntervalSince(request.timestamp)) < recentThreshold
             }) {
                 // print("[TeleWorker] 🔄 POLLING MERGE: \(request.method) \(request.url.prefix(40))... (id: \(request.id.prefix(20)))")
                 activeTabs[i].requests[ei].hitCount += 1
-                
+
                 // Record the new hit in the history
                 // Record the new hit in the history with its specific body
                 let newHit = RequestHit(
@@ -480,7 +480,13 @@ class BrowserAnalysisService: ObservableObject {
                     responseBody: request.responseBody
                 )
                 activeTabs[i].requests[ei].hits.append(newHit)
-                
+
+                // 限制 hits 历史记录数量，防止内存无限增长
+                let maxHitsPerRequest = 50
+                if activeTabs[i].requests[ei].hits.count > maxHitsPerRequest {
+                    activeTabs[i].requests[ei].hits.removeFirst(activeTabs[i].requests[ei].hits.count - maxHitsPerRequest)
+                }
+
                 // IMPORTANT: Use merge to preserve body data and other fields!
                 merge(request, into: &activeTabs[i].requests[ei])
             } else {
@@ -488,19 +494,19 @@ class BrowserAnalysisService: ObservableObject {
                 activeTabs[i].requests.insert(nr, at: 0)
             }
         }
-        
+
         activeTabs[i].lastUpdate = Date()
-        
+
         // History limit: keep it under 500 items per tab
         if activeTabs[i].requests.count > 500 {
             activeTabs[i].requests.removeLast()
         }
     }
-    
+
     private func removeTab(id: String) {
         activeTabs.removeAll(where: { $0.id == id })
     }
-    
+
     private func startPruningTimer() {
         pruningTimer = Timer.publish(every: 60, on: .main, in: .common)
             .autoconnect()
@@ -508,12 +514,12 @@ class BrowserAnalysisService: ObservableObject {
                 self?.pruneStaleTabs()
             }
     }
-    
+
     private func pruneStaleTabs() {
         let now = Date()
         activeTabs.removeAll { now.timeIntervalSince($0.lastUpdate) > staleThreshold }
     }
-    
+
     private func merge(_ src: BrowserRequest, into dst: inout BrowserRequest) {
         if src.status != .pending { dst.status = src.status }
         if let c = src.statusCode { dst.statusCode = c }
@@ -536,18 +542,18 @@ class BrowserAnalysisService: ObservableObject {
             dst.responseBody = resB
         }
         if let msg = src.errorMessage { dst.errorMessage = msg }
-        
+
         // Update the most recent hit with finalized status/duration if it was previously nil
         if !dst.hits.isEmpty {
             let lastIdx = dst.hits.count - 1
             if let c = src.statusCode { dst.hits[lastIdx] = RequestHit(timestamp: dst.hits[lastIdx].timestamp, statusCode: c, duration: dst.hits[lastIdx].duration, requestBody: dst.hits[lastIdx].requestBody, responseBody: dst.hits[lastIdx].responseBody) }
             if let d = src.duration { dst.hits[lastIdx] = RequestHit(timestamp: dst.hits[lastIdx].timestamp, statusCode: dst.hits[lastIdx].statusCode, duration: d, requestBody: dst.hits[lastIdx].requestBody, responseBody: dst.hits[lastIdx].responseBody) }
-            
+
             // Also update body in the latest hit if captured
             if let rb = src.requestBody { dst.hits[lastIdx].requestBody = rb }
             if let sb = src.responseBody { dst.hits[lastIdx].responseBody = sb }
         }
-        
+
         dst.lastUpdateTimestamp = Date()
     }
 }
@@ -556,64 +562,64 @@ extension BrowserRequest {
     func generateCurl() -> String {
         var curl = "curl '\(self.url)'"
         curl += " \\\n  -X \(self.method.uppercased())"
-        
+
         if let headers = self.requestHeaders {
             for (k, v) in headers {
                 curl += " \\\n  -H '\(k): \(v)'"
             }
         }
-        
+
         if let body = self.requestBody, !body.isEmpty {
             // Attempt to escape single quotes
             let escapedBody = body.replacingOccurrences(of: "'", with: "'\\''")
             curl += " \\\n  --data-raw '\(escapedBody)'"
         }
-        
+
         return curl
     }
-    
+
     var securityIssues: [String] {
         var issues: [String] = []
         let headers = self.responseHeaders ?? [:]
         let keys = headers.keys.map { $0.lowercased() }
-        
+
         // CORS
         if !keys.contains("access-control-allow-origin") {
             issues.append("Missing CORS Header (Access-Control-Allow-Origin)")
         }
-        
+
         // CSP
         if !keys.contains("content-security-policy") {
             issues.append("Missing Content-Security-Policy")
         }
-        
+
         // HSTS
         if self.url.lowercased().hasPrefix("https") && !keys.contains("strict-transport-security") {
             issues.append("Missing Strict-Transport-Security (HSTS)")
         }
-        
+
         // X-Content-Type
         if !keys.contains("x-content-type-options") {
             issues.append("Missing X-Content-Type-Options: nosniff")
         }
-        
+
         return issues
     }
-    
+
     var performanceInsights: [String] {
         var insights: [String] = []
         if let d = self.duration {
             if d > 1.0 { insights.append("Slow Request (>1s). Consider optimizing backend or caching.") }
             else if d > 0.5 { insights.append("Moderate Latency (>500ms).") }
         }
-        
+
         // Compression
         let headers = self.responseHeaders ?? [:]
         let encoding = headers.first { $0.key.lowercased() == "content-encoding" }?.value.lowercased()
         if let size = self.size, size > 1024, encoding == nil {
             insights.append("Large response (\(size) bytes) without Content-Encoding (gzip/br).")
         }
-        
+
         return insights
     }
 }

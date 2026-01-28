@@ -9,7 +9,7 @@ enum GroupingMode: String, CaseIterable, Identifiable {
     case proxy = "Proxy Node"
     case host = "Host / Domain"
     case rule = "Rule"
-    
+
     var id: String { rawValue }
     var icon: String {
         switch self {
@@ -28,10 +28,10 @@ struct ConnectionsView: View {
     @State private var searchText = ""
     @State private var selectedNodeID: ActivityNode.ID? // For Inspector
     @State private var showInspector: Bool = true
-    
+
     // Sort orders
     @State private var sessionSortOrder = [KeyPathComparator(\ActivityNode.sortValue, order: .reverse)]
-    
+
     var body: some View {
         HSplitView {
             // Main Content
@@ -40,15 +40,15 @@ struct ConnectionsView: View {
                 toolbarView
                     .padding()
                     .background(Color(nsColor: .windowBackgroundColor))
-                
+
                 Divider()
-                
+
                 // Table
                 hierarchicalTable
             }
             .layoutPriority(1)
             .frame(minWidth: 400)
-            
+
             // Inspector Sidebar
             if showInspector {
                 ConnectionInspectorView(nodeID: selectedNodeID, viewModel: viewModel)
@@ -64,9 +64,9 @@ struct ConnectionsView: View {
             viewModel.stopMonitoring()
         }
     }
-    
+
     // MARK: - Toolbar
-    
+
     private var toolbarView: some View {
         HStack(spacing: 12) {
             // Grouping Picker
@@ -77,20 +77,20 @@ struct ConnectionsView: View {
             }
             .pickerStyle(.segmented)
             .frame(width: 320)
-            
+
             // Stats Summary
             HStack(spacing: 16) {
                 Divider().frame(height: 14)
-                
+
                 HStack(spacing: 12) {
                     Text("\(viewModel.groupedNodes.count) items")
                         .fontWeight(.medium)
-                    
+
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.down").foregroundStyle(.blue)
                         Text(formatBytes(viewModel.totalDownload))
                     }
-                    
+
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.up").foregroundStyle(.orange)
                         Text(formatBytes(viewModel.totalUpload))
@@ -99,9 +99,9 @@ struct ConnectionsView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             }
-            
+
             Spacer()
-            
+
             // Search
             HStack {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
@@ -112,7 +112,7 @@ struct ConnectionsView: View {
             .background(Color(nsColor: .controlBackgroundColor))
             .cornerRadius(6)
             .frame(width: 200)
-            
+
             // Actions
             HStack(spacing: 0) {
                 Button {
@@ -123,9 +123,9 @@ struct ConnectionsView: View {
                 .help("Reset Usage Statistics")
                 .buttonStyle(.plain)
                 .padding(.horizontal, 8)
-                
+
                 Divider().frame(height: 12)
-                
+
                 Button {
                     withAnimation { showInspector.toggle() }
                 } label: {
@@ -136,7 +136,7 @@ struct ConnectionsView: View {
                 .help("Toggle Inspector")
                 .buttonStyle(.plain)
                 .padding(.horizontal, 8)
-                
+
                 Button {
                     exportConnections()
                 } label: {
@@ -148,7 +148,7 @@ struct ConnectionsView: View {
             }
         }
     }
-    
+
     // MARK: - Hierarchical Table
     private var hierarchicalTable: some View {
         Table(nodes, children: \.children, selection: $selectedNodeID, sortOrder: $sessionSortOrder) {
@@ -156,11 +156,11 @@ struct ConnectionsView: View {
                 HStack {
                     iconView(for: node)
                         .frame(width: 24, height: 24)
-                    
+
                     VStack(alignment: .leading, spacing: 2) {
                         Text(node.title)
                             .fontWeight(.medium)
-                        
+
                         // Subtitles
                         switch node {
                         case .app(let session):
@@ -175,9 +175,9 @@ struct ConnectionsView: View {
                              Text(conn.chainsString).font(.caption2).foregroundStyle(.secondary)
                         }
                     }
-                    
+
                     Spacer()
-                    
+
                     // Sparkline (Only for Apps currently)
                     switch node {
                     case .app(let session):
@@ -191,7 +191,7 @@ struct ConnectionsView: View {
                 }
             }
             .width(min: 250, ideal: 320)
-            
+
             TableColumn("Download", value: \.sortValue) { node in
                 // Use sortValue for sorting, but we need formatting
                 switch node {
@@ -201,7 +201,7 @@ struct ConnectionsView: View {
                 }
             }
             .width(ideal: 100)
-            
+
             TableColumn("Upload") { node in
                 switch node {
                 case .app(let x): trafficCell(bytes: x.totalUpload, speed: x.currentUploadSpeed, color: .orange, arrow: "arrow.up")
@@ -210,7 +210,7 @@ struct ConnectionsView: View {
                 }
             }
             .width(ideal: 100)
-            
+
         }
         .contextMenu(forSelectionType: ActivityNode.ID.self) { selection in
              // Context Menu for Selected Items
@@ -220,9 +220,9 @@ struct ConnectionsView: View {
                      NSPasteboard.general.clearContents()
                      NSPasteboard.general.setString(node.title, forType: .string)
                  }
-                 
+
                  Divider()
-                 
+
                  // --- Detailed Actions ---
                  if case .connection(let conn) = node {
                      // Host
@@ -231,42 +231,42 @@ struct ConnectionsView: View {
                             copyToClipboard(conn.metadata.host)
                          }
                      }
-                     
+
                      // IP
                      Button("Copy Remote IP") {
                          copyToClipboard(conn.metadata.destinationIP)
                      }
-                     
+
                      // Address
                      Button("Copy Remote Address") {
                          copyToClipboard("\(conn.metadata.destinationIP):\(conn.metadata.destinationPort)")
                      }
-                     
+
                      Button("Copy Source Address") {
                          copyToClipboard("\(conn.metadata.sourceIP):\(conn.metadata.sourcePort)")
                      }
-                     
+
                      // Rule
                      if !conn.rule.isEmpty {
                          Button("Copy Rule") {
                              copyToClipboard(conn.rule)
                          }
                      }
-                     
+
                      Divider()
-                     
+
                      Button("Close Connection") {
                          Task { await viewModel.closeConnection(id: conn.id) }
                      }
                  }
-                
+
                 if case .app(let session) = node {
                     Button("Copy Process Path") {
                         copyToClipboard(session.id)
                     }
-                    
+
                     Divider()
-                    
+
                     Button("Force Termination (Aggressive)") {
                         viewModel.killProcess(for: session)
                     }
@@ -275,19 +275,19 @@ struct ConnectionsView: View {
         }
         .scrollIndicators(.hidden)
     }
-    
+
     private func copyToClipboard(_ content: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(content, forType: .string)
     }
-    
+
     // Computed Nodes for Table
     var nodes: [ActivityNode] {
         let all = viewModel.groupedNodes
         if searchText.isEmpty { return all.sorted(using: sessionSortOrder) }
         return all.filter { $0.title.localizedCaseInsensitiveContains(searchText) }.sorted(using: sessionSortOrder)
     }
-    
+
     private func findNode(id: String, nodes: [ActivityNode]) -> ActivityNode? {
         for node in nodes {
              if node.id == id { return node }
@@ -299,7 +299,7 @@ struct ConnectionsView: View {
     }
 
     // MARK: - Helpers
-    
+
     @ViewBuilder
     private func iconView(for node: ActivityNode) -> some View {
          if let iconPath = node.icon {
@@ -318,13 +318,13 @@ struct ConnectionsView: View {
                  .foregroundStyle(.secondary)
          }
     }
-    
+
     private func trafficCell(bytes: Int64, speed: Int64, color: Color, arrow: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(formatBytes(bytes))
                 .font(.system(.footnote, design: .monospaced))
                 .fontWeight(.medium)
-            
+
             if speed > 0 {
                 HStack(spacing: 2) {
                     Image(systemName: arrow)
@@ -337,14 +337,14 @@ struct ConnectionsView: View {
             }
         }
     }
-    
+
     private func formatBytes(_ bytes: Int64) -> String {
         let formatter = ByteCountFormatter()
         formatter.allowedUnits = [.useKB, .useMB, .useGB]
         formatter.countStyle = .file
         return formatter.string(fromByteCount: bytes)
     }
-    
+
     private func formatSpeed(_ bytesPerSecond: Int64) -> String {
         let formatter = ByteCountFormatter()
         formatter.allowedUnits = [.useKB, .useMB, .useGB]
@@ -352,12 +352,12 @@ struct ConnectionsView: View {
         let formatted = formatter.string(fromByteCount: bytesPerSecond)
         return formatted == "Zero KB" ? "0 KB/s" : formatted + "/s"
     }
-    
+
     private func exportConnections() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [UTType.commaSeparatedText]
         panel.nameFieldStringValue = "Ares_Activity_Export_\(Date().ISO8601Format()).csv"
-        
+
         panel.begin { response in
             if response == .OK, let url = panel.url {
                 Task {
@@ -374,11 +374,11 @@ extension ConnectionsViewModel {
     func killProcess(for session: AppSession) {
         // Find PID from active connections if possible, or use `pkill` by process name/path?
         // Since we aggregated by bundle path, we might kill all instances.
-        
+
         // Strategy: Iterate all active connections of this session, find PIDs (we don't store PID in public Contract yet but metadata might have it implicitly or we use path)
         // Actually, TrafficAudit logic uses path.
         // We will attempt to kill by path matching active running applications.
-        
+
         if let app = NSWorkspace.shared.runningApplications.first(where: {
             $0.bundleURL?.path == session.id || $0.executableURL?.path == session.id
         }) {
@@ -391,7 +391,7 @@ extension ConnectionsViewModel {
              try? task.run()
         }
     }
-    
+
     func exportData(to url: URL) async {
         var csv = "Time,ID,Type,Host,RemoteIP,RemotePort,Upload,Download,Duration,Rule,Chains\n"
         for conn in self.connections {
@@ -410,14 +410,14 @@ extension ConnectionsViewModel {
             ].map { "\"\($0)\"" }.joined(separator: ",")
             csv += line + "\n"
         }
-        
+
         try? csv.write(to: url, atomically: true, encoding: .utf8)
     }
 }
 
 struct ApplicationIconView: View {
     let path: String?
-    
+
     var body: some View {
         if let path = path, !path.isEmpty {
             Image(nsImage: getAppIcon(from: path))
@@ -428,7 +428,7 @@ struct ApplicationIconView: View {
                 .foregroundStyle(.secondary)
         }
     }
-    
+
     private func getAppIcon(from processPath: String) -> NSImage {
         var url = URL(fileURLWithPath: processPath)
         while url.pathExtension != "app" && url.path != "/" {
@@ -446,32 +446,32 @@ struct ApplicationIconView: View {
 @MainActor
 final class ConnectionsViewModel: ObservableObject {
     @Published var groupedNodes: [ActivityNode] = []
-    
+
     // Grouping
     @Published var groupingMode: GroupingMode = .app {
         didSet { computeNodes() }
     }
-    
+
     // Raw Data
     private var connections: [Connection] = []
     private var appSessions: [AppSession] = []
-    
+
     private var webSocketTask: URLSessionWebSocketTask?
     private var isMonitoring = false
     private var cancellables = Set<AnyCancellable>()
-    
+
     // Speed calculation
     private var previousSnapshots: [String: (up: Int64, down: Int64, time: Date)] = [:]
-    
+
     var totalDownload: Int64 {
         // AppSession is source of truth for totals
         appSessions.reduce(0) { $0 + $1.totalDownload }
     }
-    
+
     var totalUpload: Int64 {
         appSessions.reduce(0) { $0 + $1.totalUpload }
     }
-    
+
     init() {
         // Bind to TrafficAuditManager
         TrafficAuditManager.shared.$sessions
@@ -482,19 +482,19 @@ final class ConnectionsViewModel: ObservableObject {
             }
             .store(in: &cancellables)
     }
-    
+
     func resetStatistics() {
         TrafficAuditManager.shared.reset()
     }
-    
+
     // MARK: - Core Logic
-    
+
     private func computeNodes() {
         switch groupingMode {
         case .app:
             // Use persistent AppSessions
             self.groupedNodes = appSessions.map { ActivityNode.app($0) }
-            
+
         case .proxy:
             // Group active connections by Chain's last node
             let groups = Dictionary(grouping: connections) { conn -> String in
@@ -503,7 +503,7 @@ final class ConnectionsViewModel: ObservableObject {
             self.groupedNodes = groups.map { id, conns in
                 ActivityNode.group(ActivityGroup(id: id, title: id, icon: "network", connections: conns))
             }
-            
+
         case .host:
              // Group by Host or Destination IP
              let groups = Dictionary(grouping: connections) { conn -> String in
@@ -512,7 +512,7 @@ final class ConnectionsViewModel: ObservableObject {
              self.groupedNodes = groups.map { id, conns in
                  ActivityNode.group(ActivityGroup(id: id, title: id, icon: "globe", connections: conns))
              }
-             
+
         case .rule:
               // Group by Rule
               let groups = Dictionary(grouping: connections) { conn -> String in
@@ -523,32 +523,32 @@ final class ConnectionsViewModel: ObservableObject {
               }
         }
     }
-    
+
     // MARK: - Monitoring
-    
+
     func startMonitoring(isRetry: Bool = false) async {
         if !isRetry {
             guard !isMonitoring else { return }
             isMonitoring = true
         }
-        
+
         let tunEnabled = AppState.shared.tunEnabled
         let port = tunEnabled ? 19097 : 9097
         let url = URL(string: "ws://127.0.0.1:\(port)/connections")!
-        
+
         webSocketTask?.cancel()
         webSocketTask = URLSession.shared.webSocketTask(with: url)
         webSocketTask?.resume()
-        
+
         await receiveMessages()
     }
-    
+
     func stopMonitoring() {
         isMonitoring = false
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
     }
-    
+
     private func receiveMessages() async {
         guard let webSocket = webSocketTask else { return }
         do {
@@ -568,19 +568,19 @@ final class ConnectionsViewModel: ObservableObject {
             }
         }
     }
-    
+
     private func parseConnectionsData(_ jsonString: String) {
         Task.detached(priority: .userInitiated) {
             let rawConnections = Self.parseJSON(jsonString)
             let now = Date()
-            
+
             // 2. Update Traffic Audit
             await TrafficAuditManager.shared.update(with: rawConnections)
-            
+
             // 3. Process Speed Calculation
             await MainActor.run { [weak self] in
                 guard let self = self else { return }
-                
+
                 var computedConnections = rawConnections
                 for i in 0..<computedConnections.count {
                     let conn = computedConnections[i]
@@ -592,13 +592,16 @@ final class ConnectionsViewModel: ObservableObject {
                         }
                     }
                 }
-                
+
+                // 只保留当前活跃连接的快照，防止内存无限增长
+                let activeIDs = Set(computedConnections.map { $0.id })
                 var newSnapshots: [String: (up: Int64, down: Int64, time: Date)] = [:]
                 for conn in computedConnections {
                     newSnapshots[conn.id] = (conn.upload, conn.download, now)
                 }
+                // 移除已关闭连接的快照
                 self.previousSnapshots = newSnapshots
-                
+
                 self.connections = computedConnections
                 self.computeNodes() // Re-compute grouping on new data
             }
@@ -611,9 +614,9 @@ final class ConnectionsViewModel: ObservableObject {
               let connectionsDict = json["connections"] as? [[String: Any]] else {
             return []
         }
-        
+
         var connections: [Connection] = []
-        
+
         for connData in connectionsDict {
             guard let id = connData["id"] as? String,
                   let metadataDict = connData["metadata"] as? [String: Any],
@@ -626,7 +629,7 @@ final class ConnectionsViewModel: ObservableObject {
                   let host = metadataDict["host"] as? String else {
                 continue
             }
-            
+
             let metadata = ConnectionMetadata(
                 network: network,
                 type: type,
@@ -637,20 +640,20 @@ final class ConnectionsViewModel: ObservableObject {
                 host: host,
                 processPath: metadataDict["processPath"] as? String
             )
-            
+
             let upload = connData["upload"] as? Int64 ?? 0
             let download = connData["download"] as? Int64 ?? 0
             let chains = connData["chains"] as? [String] ?? []
             let rule = connData["rule"] as? String ?? ""
             let rulePayload = connData["rulePayload"] as? String ?? ""
-            
+
             var startDate = Date()
             if let startStr = connData["start"] as? String {
                 let formatter = ISO8601DateFormatter()
                 formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
                 startDate = formatter.date(from: startStr) ?? Date()
             }
-            
+
             let connection = Connection(
                 id: id,
                 metadata: metadata,
@@ -665,7 +668,7 @@ final class ConnectionsViewModel: ObservableObject {
         }
         return connections
     }
-    
+
     func closeConnection(id: String) async {
          let tunEnabled = AppState.shared.tunEnabled
          let port = tunEnabled ? 19097 : 9097
