@@ -247,33 +247,44 @@ final class TrafficAuditManager: ObservableObject {
     // MARK: - Helper
 
     /// Finds the main app bundle path from a process path.
-    /// E.g. /Applications/App.app/Contents/Helpers/Helper.app -> /Applications/App.app
+    /// Priority:
+    /// 1. Standard .app Bundle (Everything inside App.app belongs to App)
+    /// 2. Known Extension Paths (VSCode/Cursor extensions)
+    /// 3. Known Standalone Binaries
     private func findMainBundle(_ path: String?) -> String {
         guard let path = path, !path.isEmpty else { return "Unknown" }
 
-        // 1. IDE Extensions (VS Code, Cursor, etc.)
+        // 1. STANDARD MERGING: Check for .app Bundle FIRST
+        // If it's inside an app, it belongs to that app. Period.
+        if let appBundle = findEnclosingAppBundle(path) {
+            return appBundle
+        }
+
+        // 2. Extensions (Outside of .app, e.g. ~/.vscode/extensions)
         if path.contains(".vscode/extensions") { return "/Applications/Visual Studio Code.app" }
         if path.contains(".cursor/extensions") { return "/Applications/Cursor.app" }
+
+        // 3. Standalone Binaries (Fallback for tools outside apps)
         if path.hasSuffix("language_server_macos_arm") { return "Code Intelligence (LSP)" }
 
-        // Fast path check: if not in an app bundle, return original
-        if !path.contains(".app") {
-            return path
-        }
+        // 4. Default: Return original path
+        return path
+    }
+
+    /// Helper to find the nearest .app parent
+    private func findEnclosingAppBundle(_ path: String) -> String? {
+        if !path.contains(".app") { return nil }
 
         let components = path.split(separator: "/")
         var currentPath = ""
 
-        // Reconstruct path components
         for component in components {
             currentPath += "/" + component
             if component.hasSuffix(".app") {
-                // Found the top-level app bundle
                 return currentPath
             }
         }
-
-        return path
+        return nil
     }
 
     private func processName(from path: String) -> String {

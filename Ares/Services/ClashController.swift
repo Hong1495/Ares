@@ -486,7 +486,6 @@ class ClashController: ObservableObject {
             for conn in connections {
                 guard let id = conn["id"] as? String,
                       let metadata = conn["metadata"] as? [String: Any],
-                      let host = metadata["host"] as? String,
                       let chains = conn["chains"] as? [String],
                       let rule = conn["rule"] as? String,
                       let upload = conn["upload"] as? Int64,
@@ -494,20 +493,42 @@ class ClashController: ObservableObject {
                     continue
                 }
 
-                let process = metadata["processPath"] as? String ?? metadata["process"] as? String ?? "Unknown"
-                let cleanProcess = process.components(separatedBy: "/").last ?? process
-
+                let processPath = metadata["processPath"] as? String ?? metadata["process"] as? String ?? "Unknown"
                 let destinationIP = metadata["destinationIP"] as? String ?? "0.0.0.0"
 
+                // HOSTNAME FIX:
+                // Direct IP connections might have empty host. Fallback to IP.
+                let rawHost = metadata["host"] as? String ?? ""
+                let host = rawHost.isEmpty ? destinationIP : rawHost
+
+                // DATA CONSISTENCY FIX:
+                // Apply the same "Standard Merging" logic as TrafficAuditManager.
+                // 1. If it's inside an .app, use the App Name.
+                // 2. Otherwise keep original filename.
+                var finalProcessName = processPath.components(separatedBy: "/").last ?? processPath
+
+                if processPath.contains(".app") {
+                    let components = processPath.split(separator: "/")
+                    var currentPath = ""
+                    for component in components {
+                        currentPath += "/" + component
+                        if component.hasSuffix(".app") {
+                            // Found the App Bundle -> Use App Name
+                            finalProcessName = URL(fileURLWithPath: currentPath).deletingPathExtension().lastPathComponent
+                            break
+                        }
+                    }
+                }
+
                 // Filter out self-traffic from "Ares" (Robust check)
-                if cleanProcess.localizedCaseInsensitiveContains("Ares") || cleanProcess.localizedCaseInsensitiveContains("com.herastudio.ares") {
+                if finalProcessName.localizedCaseInsensitiveContains("Ares") || finalProcessName.localizedCaseInsensitiveContains("com.herastudio.ares") {
                     continue
                 }
 
                 let chain = ConnectionChain(
                     id: id,
                     host: host,
-                    sourceProcess: cleanProcess,
+                    sourceProcess: finalProcessName,
                     rule: rule,
                     chains: chains,
                     destinationIP: destinationIP,

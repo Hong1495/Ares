@@ -6,8 +6,8 @@ import MapKit
 struct RouteMapPageView: View {
     @EnvironmentObject var clashController: ClashController
     @State private var position: MapCameraPosition = .region(MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 31.23, longitude: 121.47), // Center on Shanghai (User Location)
-        span: MKCoordinateSpan(latitudeDelta: 80, longitudeDelta: 80) // Global view but centered
+        center: CLLocationCoordinate2D(latitude: 20, longitude: 0),
+        span: MKCoordinateSpan(latitudeDelta: 160, longitudeDelta: 360)
     ))
 
     // User Location (Simulated default to Beijing/Shanghai/HK for demo if not available)
@@ -19,17 +19,17 @@ struct RouteMapPageView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Map(position: $position) {
+            Map(position: $position, bounds: MapCameraBounds(minimumDistance: 1000, maximumDistance: 400_000_000)) {
                 // 1. Draw Lines (Geodesic)
                 ForEach(uniqueConnections, id: \.id) { conn in
                     MapPolyline(coordinates: [localLocation, conn.coordinate], contourStyle: .geodesic)
                         .stroke(
                             LinearGradient(
-                                colors: [conn.color.opacity(0.9), conn.color.opacity(0.4)], // Increased opacity
+                                colors: [conn.color.opacity(0.8), conn.color.opacity(0.3)], // Slightly reduced opacity for elegance
                                 startPoint: .leading,
                                 endPoint: .trailing
                             ),
-                            lineWidth: 3 // Thicker lines
+                            lineWidth: 1.5 // Refined: Slightly thicker lines (User Choice)
                         )
                 }
 
@@ -38,20 +38,22 @@ struct RouteMapPageView: View {
                     Annotation(conn.host, coordinate: conn.coordinate) {
                         Circle()
                             .fill(conn.color)
-                            .frame(width: 8, height: 8)
-                            .shadow(color: conn.color.opacity(0.5), radius: 4)
+                            .frame(width: 6, height: 6) // Smaller nodes
+                            .overlay(Circle().stroke(Color.primary.opacity(0.2), lineWidth: 0.5)) // Adaptive border
+                            .shadow(radius: 2)
                     }
                 }
 
                 // 3. User Node
                 Annotation("My Mac", coordinate: localLocation) {
                     Image(systemName: "macbook.and.iphone")
-                        .foregroundColor(.blue)
+                        .foregroundColor(.white) // White for contrast on Satellite
                         .padding(6)
-                        .background(Circle().fill(.white).shadow(radius: 2))
+                        .background(Circle().fill(.blue).shadow(radius: 2))
                 }
             }
-            .mapStyle(.standard) // Standard 2D map, adapts to light/dark automatically
+            .mapStyle(.standard) // Reverted to 2D Standard per user request
+            .mapControlVisibility(.hidden) // Keep controls hidden for clean UI
             .cornerRadius(12)
             .shadow(radius: 2)
         }
@@ -96,38 +98,60 @@ struct RouteMapPageView: View {
         return Array(map.values)
     }
 
-    // Deterministic Random to simulate "Real" distribution for Eye Candy
+    // MARK: - Safe Coordinate Simulation (City Snapping)
+
+    struct CityLocation {
+        let name: String
+        let coordinate: CLLocationCoordinate2D
+    }
+
+    // Major Internet Hubs (Guaranteed Land)
+    let globalHubs: [CityLocation] = [
+        // US
+        CityLocation(name: "San Francisco", coordinate: CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194)),
+        CityLocation(name: "New York", coordinate: CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060)),
+        CityLocation(name: "Ashburn (AWS)", coordinate: CLLocationCoordinate2D(latitude: 39.0438, longitude: -77.4874)),
+        CityLocation(name: "Dallas", coordinate: CLLocationCoordinate2D(latitude: 32.7767, longitude: -96.7970)),
+
+        // Europe
+        CityLocation(name: "London", coordinate: CLLocationCoordinate2D(latitude: 51.5074, longitude: -0.1278)),
+        CityLocation(name: "Frankfurt", coordinate: CLLocationCoordinate2D(latitude: 50.1109, longitude: 8.6821)),
+        CityLocation(name: "Amsterdam", coordinate: CLLocationCoordinate2D(latitude: 52.3676, longitude: 4.9041)),
+        CityLocation(name: "Paris", coordinate: CLLocationCoordinate2D(latitude: 48.8566, longitude: 2.3522)),
+
+        // Asia
+        CityLocation(name: "Tokyo", coordinate: CLLocationCoordinate2D(latitude: 35.6762, longitude: 139.6503)),
+        CityLocation(name: "Singapore", coordinate: CLLocationCoordinate2D(latitude: 1.3521, longitude: 103.8198)),
+        CityLocation(name: "Hong Kong", coordinate: CLLocationCoordinate2D(latitude: 22.3193, longitude: 114.1694)),
+        CityLocation(name: "Taipei", coordinate: CLLocationCoordinate2D(latitude: 25.0330, longitude: 121.5654)),
+        CityLocation(name: "Seoul", coordinate: CLLocationCoordinate2D(latitude: 37.5665, longitude: 126.9780)),
+
+        // Oceania
+        CityLocation(name: "Sydney", coordinate: CLLocationCoordinate2D(latitude: -33.8688, longitude: 151.2093))
+    ]
+
     func simulatedCoordinate(for key: String) -> CLLocationCoordinate2D {
-        // Check cache first (Not thread safe but okay for main thread UI)
-        let hash = key.hashValue
-        // Seeded random
+        // Deterministic City Selection
+        // This ensures points are ALWAYS on land (known cities)
+        // and grouped logically like real internet traffic
+        let hash = abs(key.hashValue)
+        let index = hash % globalHubs.count
+
+        // Add a TINY random jitter so points overlaying the same city
+        // show as a cluster rather than a single dot
+        let city = globalHubs[index]
+
+        // Jitter: +/- 0.5 degree (approx 50km) - keeps it near the city but distinct
         var seed = UInt64(bitPattern: Int64(hash))
-        func next() -> Double {
-            seed ^= seed << 13
-            seed ^= seed >> 7
-            seed ^= seed << 17
-            // Modulo to keep range 0.0 - 1.0
-            let m = seed % 1000
-            return Double(m) / 1000.0
-        }
+        seed ^= seed << 13
+        seed ^= seed >> 7
+        let jitterLat = (Double(seed % 100) / 100.0 - 0.5) * 0.5
+        let jitterLon = (Double((seed >> 10) % 100) / 100.0 - 0.5) * 0.5
 
-        // Distribute mostly in US, EU, Asia regions
-        let region = Int(next() * 3)
-        var lat: Double
-        var lon: Double
-
-        if region == 0 { // US
-            lat = 30 + next() * 20
-            lon = -120 + next() * 50
-        } else if region == 1 { // EU
-            lat = 40 + next() * 15
-            lon = 0 + next() * 30
-        } else { // Asia (HK, JP, SG)
-            lat = 10 + next() * 30
-            lon = 100 + next() * 40
-        }
-
-        return CLLocationCoordinate2D(latitude: lat, longitude: lon)
+        return CLLocationCoordinate2D(
+            latitude: city.coordinate.latitude + jitterLat,
+            longitude: city.coordinate.longitude + jitterLon
+        )
     }
 
     // Stable Color Generator (Same as Topology)

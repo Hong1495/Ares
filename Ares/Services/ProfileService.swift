@@ -4,29 +4,29 @@ import Combine
 /// Service for managing Clash profiles
 class ProfileService: ObservableObject {
     static let shared = ProfileService()
-    
+
     @Published var profiles: [Profile] = []
     @Published var activeProfileID: UUID?
     @Published var isSwitchingProfile: Bool = false
-    
+
     private let profilesDir: URL
     private let profilesMetadataFile: URL
-    
+
     private init() {
         // Setup directories
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let aresDir = appSupport.appendingPathComponent("Ares")
         self.profilesDir = aresDir.appendingPathComponent("profiles")
         self.profilesMetadataFile = aresDir.appendingPathComponent("profiles.json")
-        
+
         // Create directories if needed
         try? FileManager.default.createDirectory(at: profilesDir, withIntermediateDirectories: true)
-        
+
         // Load profiles synchronously to ensure they're ready before Clash starts
         // This is critical for startup timing - Clash needs the active profile to build config
         self.loadProfiles()
     }
-    
+
     /// Load profiles from disk
     func loadProfiles() {
         guard FileManager.default.fileExists(atPath: profilesMetadataFile.path) else {
@@ -35,12 +35,12 @@ class ProfileService: ObservableObject {
             }
             return
         }
-        
+
         do {
             let data = try Data(contentsOf: profilesMetadataFile)
             let decoded = try JSONDecoder().decode([Profile].self, from: data)
             self.profiles = decoded
-            
+
             // Restore active profile ID from UserDefaults
             if let savedIDString = UserDefaults.standard.string(forKey: "activeProfileID"),
                let savedID = UUID(uuidString: savedIDString),
@@ -50,7 +50,7 @@ class ProfileService: ObservableObject {
                 // Fallback to first profile if saved ID is invalid
                 activeProfileID = first.id
             }
-            
+
             Task { @MainActor in
                 ClashViewModel.shared.addLog("[ProfileService] ✅ Loaded \(self.profiles.count) profiles")
                 if let active = self.activeProfile {
@@ -66,45 +66,45 @@ class ProfileService: ObservableObject {
             print("[ProfileService] Failed to load profiles: \(error)")
         }
     }
-    
+
     /// Save profiles to disk
     func saveProfiles() {
         do {
             let data = try JSONEncoder().encode(profiles)
             try data.write(to: profilesMetadataFile)
-            
+
             // Also persist active profile ID
             if let activeID = activeProfileID {
                 UserDefaults.standard.set(activeID.uuidString, forKey: "activeProfileID")
             }
-            
+
             print("[ProfileService] Saved \(profiles.count) profiles, active: \(activeProfileID?.uuidString ?? "none")")
         } catch {
             print("[ProfileService] Failed to save profiles: \(error)")
         }
     }
-    
+
     /// Add a new remote profile
     func addRemoteProfile(name: String, url: URL) async throws {
         var profile = Profile.remote(name: name, url: url)
-        
+
         // Download profile content
         try await updateProfile(&profile)
-        
+
         // Add to list
         profiles.append(profile)
-        
+
         // Auto-select if first profile OR always activate new profile for better UX
         let shouldActivate = profiles.count == 1 || activeProfileID == nil
         if shouldActivate {
             activeProfileID = profile.id
         }
-        
+
         saveProfiles()
-        
+
         Task { @MainActor in
             ClashViewModel.shared.addLog("[ProfileService] ✅ Added remote profile: \(name)")
-            
+
             // If this is the active profile, reload Clash
             if shouldActivate {
                 ClashViewModel.shared.addLog("[ProfileService] 🔄 Activating new profile...")
@@ -112,28 +112,28 @@ class ProfileService: ObservableObject {
             }
         }
     }
-    
+
     /// Add a local profile
     func addLocalProfile(name: String, fileURL: URL) throws {
         // Copy file to profiles directory
         let filename = "\(UUID().uuidString).yaml"
         let destination = profilesDir.appendingPathComponent(filename)
         try FileManager.default.copyItem(at: fileURL, to: destination)
-        
+
         let profile = Profile.local(name: name, path: destination)
         profiles.append(profile)
-        
+
         // Auto-select if first profile OR no active profile
         let shouldActivate = profiles.count == 1 || activeProfileID == nil
         if shouldActivate {
             activeProfileID = profile.id
         }
-        
+
         saveProfiles()
-        
+
         Task { @MainActor in
             ClashViewModel.shared.addLog("[ProfileService] ✅ Added local profile: \(name)")
-            
+
             // If this is the active profile, reload Clash
             if shouldActivate {
                 ClashViewModel.shared.addLog("[ProfileService] 🔄 Activating new profile...")
@@ -141,26 +141,55 @@ class ProfileService: ObservableObject {
             }
         }
     }
-    
+
     /// Update a remote profile by downloading latest content
     func updateProfile(_ profile: inout Profile) async throws {
         guard profile.type == .remote, let url = profile.url else {
             throw NSError(domain: "ProfileService", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not a remote profile"])
         }
-        
+
         print("[ProfileService] Downloading profile from: \(url)")
-        
-        // Download profile with Clash User-Agent
+
+        // Download profile with Clash.Meta User-Agent (Simpler is better)
         var request = URLRequest(url: url)
-        request.setValue("Clash/1.0 (Ares; macOS)", forHTTPHeaderField: "User-Agent")
-        
+        let userAgent = "Clash.Meta"
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+
+        // DEBUG: Log the User-Agent being used
+        print("[ProfileService] 🔍 DEBUG: Using User-Agent: \(userAgent)")
+
         let (data, response) = try await URLSession.shared.data(for: request)
-        
+
+        // DEBUG: Log response info and proxy count
+        if let content = String(data: data, encoding: .utf8) {
+            let proxyCount = content.components(separatedBy: "type:").count - 1
+            print("[ProfileService] 🔍 DEBUG: Response size: \(data.count) bytes, Proxy count (approx): \(proxyCount)")
+
+            // Log first 100 chars to see if it's Base64 or YAML
+            let prefix = String(content.prefix(100))
+            print("[ProfileService] 🔍 DEBUG: Content Prefix: \(prefix)")
+
+            // Check if HY nodes are present
+            let hasHysteria = content.contains("hysteria2") || content.contains("type: hysteria2")
+            print("[ProfileService] 🔍 DEBUG: Contains Hysteria2 nodes: \(hasHysteria)")
+
+            // Log to ClashViewModel for user visibility
+            Task { @MainActor in
+                ClashViewModel.shared.addLog("[ProfileService] 🔍 Response Size: \(data.count) bytes")
+                ClashViewModel.shared.addLog("[ProfileService] 🔍 Content Type: \(prefix.hasPrefix("proxies:") || prefix.hasPrefix("#") ? "YAML" : "Base64/Other")")
+                let hasHY = content.contains("hysteria2")
+                ClashViewModel.shared.addLog("[ProfileService] 🔍 Hysteria2 present: \(hasHY ? "YES ✅" : "NO ❌")")
+                if !hasHY {
+                    ClashViewModel.shared.addLog("[ProfileService] 🔍 Data Preview: \(prefix)...")
+                }
+            }
+        }
+
         // Parse subscription info from headers
         if let httpResponse = response as? HTTPURLResponse {
             profile.subscriptionInfo = parseSubscriptionInfo(from: httpResponse)
         }
-        
+
         // Destination path
         let filename = "\(profile.id.uuidString).yaml"
         let destination = profilesDir.appendingPathComponent(filename)
@@ -171,33 +200,33 @@ class ProfileService: ObservableObject {
                 if let info = parseSubscriptionInfo(fromContent: content) {
                     profile.subscriptionInfo = info
                 }
-                   
+
                 // Check if content needs conversion (Base64 -> YAML)
                 if let converted = SubscriptionConverter.convert(content: content) {
                     print("[ProfileService] 🔄 Converted Base64 subscription to YAML")
                     // Use converted content
                     try converted.write(to: destination, atomically: true, encoding: .utf8)
-                    
+
                     // Update profile path and timestamp
                     profile.path = destination
                     profile.lastUpdated = Date()
-                    
+
                     print("[ProfileService] Profile updated: \(profile.name)")
                     return
                 }
             }
         }
-        
+
         // Save to file
         try data.write(to: destination)
-        
+
         // Update profile
         profile.path = destination
         profile.lastUpdated = Date()
-        
+
         print("[ProfileService] Profile updated: \(profile.name)")
     }
-    
+
     /// Update a remote profile by re-downloading
     func updateProfile(id: UUID) async throws {
         guard let index = profiles.firstIndex(where: { $0.id == id }),
@@ -205,36 +234,36 @@ class ProfileService: ObservableObject {
               let url = profiles[index].url else {
             throw NSError(domain: "ProfileService", code: 3, userInfo: [NSLocalizedDescriptionKey: "Profile not found or not remote"])
         }
-        
+
         let profileName = profiles[index].name
         let isActive = activeProfileID == id
-        
+
         await MainActor.run {
             ClashViewModel.shared.addLog("[ProfileService] 🔄 Updating profile: \(profileName)")
         }
-        
+
         // Download updated content with Clash User-Agent
         var request = URLRequest(url: url)
-        request.setValue("Clash/1.0 (Ares; macOS)", forHTTPHeaderField: "User-Agent")
-        
+        request.setValue("Clash.Meta/1.16.0 Enforce (Ares; macOS)", forHTTPHeaderField: "User-Agent")
+
         let (data, response) = try await URLSession.shared.data(for: request)
-        
+
         // Parse subscription info from headers
         if let httpResponse = response as? HTTPURLResponse {
             profiles[index].subscriptionInfo = parseSubscriptionInfo(from: httpResponse)
         }
-        
+
         guard let content = String(data: data, encoding: .utf8) else {
             throw NSError(domain: "ProfileService", code: 4, userInfo: [NSLocalizedDescriptionKey: "Invalid profile content"])
         }
-        
+
         // Fallback: Parse from YAML content if header info is missing
         if profiles[index].subscriptionInfo == nil || profiles[index].subscriptionInfo?.total == 0 {
             if let info = parseSubscriptionInfo(fromContent: content) {
                 profiles[index].subscriptionInfo = info
             }
         }
-        
+
         // Check if content needs conversion (Base64 -> YAML)
         var finalContent = content
         if let converted = SubscriptionConverter.convert(content: content) {
@@ -243,7 +272,7 @@ class ProfileService: ObservableObject {
             }
             finalContent = converted
         }
-        
+
         // Save to existing path (use finalContent, not content!)
         if let path = profiles[index].path {
             try finalContent.write(to: path, atomically: true, encoding: .utf8)
@@ -254,17 +283,17 @@ class ProfileService: ObservableObject {
             try finalContent.write(to: path, atomically: true, encoding: .utf8)
             profiles[index].path = path
         }
-        
+
         // Update timestamp
         profiles[index].lastUpdated = Date()
-        
+
         // Save metadata
         saveProfiles()
-        
+
         await MainActor.run {
             ClashViewModel.shared.addLog("[ProfileService] ✅ Updated profile: \(profileName)")
         }
-        
+
         // If this is the active profile, reload Clash to apply changes
         if isActive {
             await MainActor.run {
@@ -273,14 +302,14 @@ class ProfileService: ObservableObject {
             await reloadClashWithCurrentProfile()
         }
     }
-    
+
     /// Edit profile metadata (Name, URL)
     func editProfile(id: UUID, name: String, urlString: String) throws {
         guard let index = profiles.firstIndex(where: { $0.id == id }) else { return }
-        
+
         var profile = profiles[index]
         profile.name = name
-        
+
         // Only update URL for remote profiles
         if profile.type == .remote {
             if let newURL = URL(string: urlString) {
@@ -289,43 +318,43 @@ class ProfileService: ObservableObject {
                 throw NSError(domain: "ProfileService", code: 5, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])
             }
         }
-        
+
         profiles[index] = profile
         saveProfiles()
-        
+
         Task { @MainActor in
             ClashViewModel.shared.addLog("[ProfileService] ✏️ Edited profile: \(name)")
         }
     }
-    
+
     /// Read the raw content of a profile
     func readProfileContent(id: UUID) async throws -> String {
         guard let profile = profiles.first(where: { $0.id == id }),
               let path = profile.path else {
             throw NSError(domain: "ProfileService", code: 10, userInfo: [NSLocalizedDescriptionKey: "Profile or path not found"])
         }
-        
+
         return try String(contentsOf: path, encoding: .utf8)
     }
-    
+
     /// Update the raw content of a profile
     func updateProfileContent(id: UUID, content: String) async throws {
         guard let index = profiles.firstIndex(where: { $0.id == id }),
               let path = profiles[index].path else {
             throw NSError(domain: "ProfileService", code: 11, userInfo: [NSLocalizedDescriptionKey: "Profile or path not found"])
         }
-        
+
         // Write content to file
         try content.write(to: path, atomically: true, encoding: .utf8)
-        
+
         // Update metadata (lastUpdated)
         profiles[index].lastUpdated = Date()
         saveProfiles()
-        
+
         let profileName = profiles[index].name
         Task { @MainActor in
             ClashViewModel.shared.addLog("[ProfileService] 📝 Raw content updated for profile: \(profileName)")
-            
+
             // If this is the active profile, reload Clash
             if self.activeProfileID == id {
                 ClashViewModel.shared.addLog("[ProfileService] 🔄 Reloading Clash to apply manual changes...")
@@ -333,32 +362,32 @@ class ProfileService: ObservableObject {
             }
         }
     }
-    
+
     /// Delete a profile
     func deleteProfile(id: UUID) {
         guard let index = profiles.firstIndex(where: { $0.id == id }) else { return }
-        
+
         let profile = profiles[index]
         let wasActive = activeProfileID == id
-        
+
         // Delete file if exists
         if let path = profile.path {
             try? FileManager.default.removeItem(at: path)
         }
-        
+
         // Remove from list
         profiles.remove(at: index)
-        
+
         // Clear active if deleted and switch to next available
         if wasActive {
             activeProfileID = profiles.first?.id
         }
-        
+
         saveProfiles()
-        
+
         Task { @MainActor in
             ClashViewModel.shared.addLog("[ProfileService] 🗑️ Deleted profile: \(profile.name)")
-            
+
             // If we deleted the active profile, we need to reload Clash
             if wasActive {
                 if let newActive = profiles.first {
@@ -372,13 +401,13 @@ class ProfileService: ObservableObject {
             }
         }
     }
-    
+
     /// Get the active profile
     var activeProfile: Profile? {
         guard let id = activeProfileID else { return nil }
         return profiles.first(where: { $0.id == id })
     }
-    
+
     /// Set active profile and reload Clash with new configuration
     func setActiveProfile(id: UUID) {
         guard activeProfileID != id else { return } // No-op if already active
@@ -386,52 +415,52 @@ class ProfileService: ObservableObject {
             print("[ProfileService] ⚠️ Profile switch already in progress, ignoring request")
             return
         }
-        
+
         // Mark switching state to prevent multiple rapid switches
         isSwitchingProfile = true
-        
+
         // Update the active profile ID
         activeProfileID = id
         saveProfiles()
-        
+
         // Find the new profile name for logging
         let profileName = profiles.first(where: { $0.id == id })?.name ?? "Unknown"
-        
+
         Task { @MainActor in
             ClashViewModel.shared.addLog("[ProfileService] 🔄 Switching to profile: \(profileName)")
-            
+
             // Rebuild config and restart Clash
             await reloadClashWithCurrentProfile()
-            
+
             // Clear switching state
             isSwitchingProfile = false
-            
+
             // Notify observers that profile has changed (force UI refresh)
             objectWillChange.send()
         }
     }
-    
+
     /// Reload Clash with the current active profile
     @MainActor
     func reloadClashWithCurrentProfile() async {
         let tunEnabled = AppState.shared.tunEnabled
         let systemProxyEnabled = AppState.shared.systemProxyEnabled
-        
+
         ClashViewModel.shared.addLog("[ProfileService] 📝 Rebuilding configuration (TUN=\(tunEnabled))...")
-        
+
         do {
             // 1. Rebuild config with new profile
             try await ConfigService.shared.buildConfig(tunEnabled: tunEnabled)
-            
+
             // 2. Restart Clash to apply new config
             ClashViewModel.shared.addLog("[ProfileService] 🔄 Restarting Clash with new profile...")
             await ClashViewModel.shared.restart()
-            
+
             // 3. Wait for API to be ready
             let isReady = await ClashController.shared.waitForAPIReady(timeout: 5.0)
             if isReady {
                 ClashViewModel.shared.addLog("[ProfileService] ✅ Profile switch completed")
-                
+
                 // 4. Force refresh proxies and rules
                 // Clear old state first to avoid UI confusing old data with new
                 await MainActor.run {
@@ -439,9 +468,9 @@ class ProfileService: ObservableObject {
                     ClashController.shared.proxyNodes = [:]
                     ClashController.shared.rules = []
                 }
-                
+
                 try? await Task.sleep(nanoseconds: 500_000_000) // Small delay for core to initialize mappings
-                
+
                 do {
                     try await ClashController.shared.fetchProxiesData()
                     try await ClashController.shared.fetchRules()
@@ -449,7 +478,7 @@ class ProfileService: ObservableObject {
                 } catch {
                      ClashViewModel.shared.addLog("[ProfileService] ⚠️ Failed to fetch fresh data: \(error)")
                 }
-                
+
                 // 5. CRITICAL: Restore system proxy if it was enabled
                 // This ensures proxy continues to work after profile switch
                 // In TUN mode, enableSystemProxy is still needed for DNS hijacking in some configurations
@@ -457,7 +486,7 @@ class ProfileService: ObservableObject {
                     ClashViewModel.shared.addLog("[ProfileService] 🌐 Restoring system proxy...")
                     await AppState.shared.enableSystemProxy()
                 }
-                
+
                 // 6. Log TUN mode status
                 if tunEnabled {
                     ClashViewModel.shared.addLog("[ProfileService] 🛡️ TUN mode active, profile switch complete")
@@ -469,7 +498,7 @@ class ProfileService: ObservableObject {
             ClashViewModel.shared.addLog("[ProfileService] ❌ Failed to reload: \(error.localizedDescription)")
         }
     }
-    
+
     /// Parse subscription info from HTTP headers
     private func parseSubscriptionInfo(from response: HTTPURLResponse) -> SubscriptionInfo? {
         if let userInfo = response.value(forHTTPHeaderField: "subscription-userinfo") {
@@ -480,7 +509,7 @@ class ProfileService: ObservableObject {
         }
         return nil
     }
-    
+
     /// Parse subscription info from YAML content (look for comments at the top)
     private func parseSubscriptionInfo(fromContent content: String) -> SubscriptionInfo? {
         let lines = content.components(separatedBy: .newlines)
@@ -503,7 +532,7 @@ class ProfileService: ObservableObject {
         }
         return nil
     }
-    
+
     /// Robust number parsing (handles floats like 123.45)
     private func parseLong(_ value: String) -> Int64 {
         let cleaned = value.trimmingCharacters(in: CharacterSet.decimalDigits.inverted.subtracting(.init(charactersIn: ".")))
@@ -515,13 +544,13 @@ class ProfileService: ObservableObject {
         }
         return 0
     }
-    
+
     private func parseSubscriptionInfo(fromString userInfo: String) -> SubscriptionInfo? {
         var upload: Int64 = 0
         var download: Int64 = 0
         var total: Int64 = 0
         var expire: Date? = nil
-        
+
         let components = userInfo.components(separatedBy: ";")
         for component in components {
             let part = component.trimmingCharacters(in: .whitespaces)
@@ -529,7 +558,7 @@ class ProfileService: ObservableObject {
             if kv.count == 2 {
                 let key = kv[0].lowercased().trimmingCharacters(in: .whitespaces)
                 let value = kv[1].trimmingCharacters(in: .whitespaces)
-                
+
                 switch key {
                 case "upload": upload = parseLong(value)
                 case "download": download = parseLong(value)
@@ -542,7 +571,7 @@ class ProfileService: ObservableObject {
                 }
             }
         }
-        
+
         if upload == 0 && download == 0 && total == 0 { return nil }
         return SubscriptionInfo(upload: upload, download: download, total: total, expire: expire)
     }
