@@ -571,7 +571,18 @@ final class ConnectionsViewModel: ObservableObject {
 
     private func parseConnectionsData(_ jsonString: String) {
         Task.detached(priority: .userInitiated) {
-            let rawConnections = Self.parseJSON(jsonString)
+            var rawConnections = Self.parseJSON(jsonString)
+
+            // Critical: Filter out "Ares" self-traffic immediately
+            // This prevents feedback loops and UI clutter
+            rawConnections.removeAll { conn in
+                guard let path = conn.metadata.processPath else { return false }
+                let process = (path as NSString).lastPathComponent
+                return process.localizedCaseInsensitiveContains("Ares") ||
+                       process.localizedCaseInsensitiveContains("com.herastudio.ares") ||
+                       path.contains("/Ares.app/")
+            }
+
             let now = Date()
 
             // 2. Update Traffic Audit

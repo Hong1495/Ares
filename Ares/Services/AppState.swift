@@ -15,6 +15,8 @@ class AppState: ObservableObject {
         case policies
         case connections
         case analysis
+        case topology
+        case routeMap
         case logs
         case settings
 
@@ -24,6 +26,8 @@ class AppState: ObservableObject {
             case .policies: return "Policies"
             case .connections: return "Activity"
             case .analysis: return "Analysis"
+            case .topology: return "Topology"
+            case .routeMap: return "Routing"
             case .logs: return "Logs"
             case .settings: return "Settings"
             }

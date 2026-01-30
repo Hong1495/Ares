@@ -4,7 +4,7 @@ struct DashboardView: View {
     @EnvironmentObject var clashViewModel: ClashViewModel
     @EnvironmentObject var clashController: ClashController
     @EnvironmentObject var appState: AppState
-    
+
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -12,19 +12,19 @@ struct DashboardView: View {
                 StatusHeader()
                 MainGrid()
                 EnhancedTrafficGraphView()
-                
+
                 // Subscription & Connectivity Row
                 HStack(alignment: .top, spacing: 16) {
                     SubscriptionCard()
                     ConnectivityTestView()
                 }
-                
+
                 // Core Info Row (Second to Last)
                 InfoGrid()
-                
+
                 // Config Row (DNS, MITM, Bypass)
                 ConfigGrid()
-                
+
                 // Analysis Row (Last)
                 AnalysisGrid()
             }
@@ -39,7 +39,7 @@ private struct MainGrid: View {
     private var columns: [GridItem] {
         [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
     }
-    
+
     var body: some View {
         LazyVGrid(columns: columns, spacing: 16) {
             NetworkTrafficCard()
@@ -55,7 +55,7 @@ private struct InfoGrid: View {
     private var columns: [GridItem] {
         [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
     }
-    
+
     var body: some View {
         LazyVGrid(columns: columns, spacing: 16) {
             ClashInfoCard()
@@ -69,7 +69,7 @@ private struct AnalysisGrid: View {
     private var columns: [GridItem] {
         [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
     }
-    
+
     var body: some View {
         LazyVGrid(columns: columns, spacing: 16) {
             NodeAnalysisCard()
@@ -83,7 +83,7 @@ private struct ConfigGrid: View {
     private var columns: [GridItem] {
         [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
     }
-    
+
     var body: some View {
         LazyVGrid(columns: columns, spacing: 16) {
             DNSConfigCard()
@@ -98,7 +98,7 @@ private struct ConfigGrid: View {
 struct StatusHeader: View {
     @EnvironmentObject var clashController: ClashController
     @EnvironmentObject var clashViewModel: ClashViewModel
-    
+
     var body: some View {
         HStack {
             Label {
@@ -128,7 +128,7 @@ struct StatusHeader: View {
 struct NetworkTrafficCard: View {
     @EnvironmentObject var clashViewModel: ClashViewModel
     @EnvironmentObject var appState: AppState
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
                 Label {
@@ -140,11 +140,11 @@ struct NetworkTrafficCard: View {
                 }
                 .font(.headline.weight(.medium))
                 .frame(height: 24) // Align Header
-            
+
             Divider()
-            
+
             Spacer()
-            
+
             // Combined Clash + System Proxy Toggle
             Toggle("Enable Proxy", isOn: Binding(
                 get: { clashViewModel.isRunning && appState.systemProxyEnabled },
@@ -170,16 +170,16 @@ struct NetworkTrafficCard: View {
             ))
             .toggleStyle(SwitchToggleStyle(tint: .blue))
             .disabled(clashViewModel.isToggling)
-            
-            let statusText = clashViewModel.isRunning ? 
+
+            let statusText = clashViewModel.isRunning ?
                 (appState.systemProxyEnabled ? "Proxy enabled (port 7890)" : "Clash running (Proxy OFF)") :
                 "Proxy disabled"
-            
+
             Text(statusText)
                 .font(.footnote)
                 .fontWeight(.medium)
                 .foregroundStyle(.secondary)
-            
+
             // Spacer() removed for bottom alignment
         }
         .padding()
@@ -192,7 +192,7 @@ struct NetworkTrafficCard: View {
 
 struct ProxyModeCard: View {
     @EnvironmentObject var appState: AppState
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label {
@@ -204,11 +204,11 @@ struct ProxyModeCard: View {
             }
             .font(.headline.weight(.medium))
             .frame(height: 24) // Align Header
-            
+
             Divider()
-            
+
             Spacer()
-            
+
             HStack(spacing: 12) {
                 ForEach([ClashConfig.Mode.rule, .global, .direct], id: \.self) { mode in
                     Button {
@@ -241,7 +241,7 @@ struct ProxyModeCard: View {
                     .buttonStyle(.plain)
                 }
             }
-            
+
             // Spacer() removed for bottom alignment
             // Removed mode description to save space/align
         }
@@ -250,7 +250,7 @@ struct ProxyModeCard: View {
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
     }
-    
+
     private func modeIcon(_ mode: ClashConfig.Mode) -> String {
         switch mode {
         case .rule: return "list.bullet.indent"
@@ -264,7 +264,7 @@ struct ProxyModeCard: View {
 struct TUNModeCard: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var clashViewModel: ClashViewModel
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
                 Label {
@@ -276,11 +276,11 @@ struct TUNModeCard: View {
                 }
                 .font(.headline.weight(.medium))
                 .frame(height: 24) // Align Header
-            
+
             Divider()
-            
+
             Spacer()
-            
+
             Toggle("Enable TUN", isOn: Binding(
                 get: { appState.tunEnabled },
                 set: { _ in
@@ -289,12 +289,12 @@ struct TUNModeCard: View {
             ))
             .toggleStyle(SwitchToggleStyle(tint: .blue))
             .disabled(clashViewModel.isToggling)
-            
+
             Text(appState.tunEnabled ? "TUN Mode is Active" : "TUN Mode is Inactive")
                 .font(.footnote)
                 .fontWeight(.medium)
                 .foregroundStyle(.secondary)
-            
+
             // Spacer() removed for bottom alignment
         }
         .padding()
@@ -308,7 +308,7 @@ struct TUNModeCard: View {
 struct ModeButton: View {
     let mode: String
     let isSelected: Bool
-    
+
     var body: some View {
         Button(action: {}) {
             Text(mode)
@@ -327,7 +327,7 @@ struct ModeButton: View {
 // MITM Mode Card
 struct MITMModeCard: View {
     @EnvironmentObject var appState: AppState
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label {
@@ -340,11 +340,11 @@ struct MITMModeCard: View {
             }
             .font(.headline.weight(.medium))
             .frame(height: 24) // Align Header
-            
+
             Divider()
-            
+
             Spacer()
-            
+
             Toggle("Enable MITM", isOn: Binding(
                 get: { appState.mitmEnabled },
                 set: { _ in
@@ -352,7 +352,7 @@ struct MITMModeCard: View {
                 }
             ))
             .toggleStyle(SwitchToggleStyle(tint: .purple))
-            
+
             HStack {
                 // Port Display
                 let portText = appState.mitmEnabled ? "Active (Port \(NetworkMITMService.shared.currentPort))" : "Inactive"
@@ -360,9 +360,9 @@ struct MITMModeCard: View {
                     .font(.footnote)
                     .fontWeight(.medium)
                     .foregroundStyle(.secondary)
-                
+
                 Spacer()
-                
+
                 Button(action: {
                     Task {
                         do {
@@ -373,9 +373,9 @@ struct MITMModeCard: View {
                                 alert.messageText = "Certificate Added to Keychain"
                                 alert.informativeText = """
                                 The Ares MITM certificate has been added to your keychain.
-                                
+
                                 ⚠️ Important: You must now trust it manually:
-                                
+
                                 1. Open "Keychain Access" app (press OK to open)
                                 2. Find "Ares MITM Proxy CA" in your login keychain
                                 3. Double-click the certificate
@@ -386,7 +386,7 @@ struct MITMModeCard: View {
                                 alert.alertStyle = .informational
                                 alert.addButton(withTitle: "Open Keychain Access")
                                 alert.addButton(withTitle: "OK")
-                                
+
                                 let response = alert.runModal()
                                 if response == .alertFirstButtonReturn {
                                     // Open Keychain Access
@@ -413,7 +413,7 @@ struct MITMModeCard: View {
                 .controlSize(.mini)
                 .help("Export Root CA to Downloads for installation")
             }
-            
+
             // Spacer() removed for bottom alignment
         }
         .padding()

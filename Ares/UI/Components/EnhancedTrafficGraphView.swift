@@ -45,55 +45,15 @@ struct EnhancedTrafficGraphView: View {
                 .foregroundStyle(.secondary)
             }
 
-            // Speed Chart using SwiftUI Charts
-            Chart(viewModel.dataPoints) { point in
-                // Upload Area
-                AreaMark(
-                    x: .value("Time", point.time),
-                    y: .value("Upload", Double(point.upload))
-                )
-                .foregroundStyle(LinearGradient(
-                    colors: [.cyan.opacity(0.2), .cyan.opacity(0.0)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                ))
-                .interpolationMethod(.catmullRom)
+            // Speed Chart using SmoothGraphView for 60fps scrolling
+            let uploadData = viewModel.dataPoints.map { ($0.time, Double($0.upload)) }
+            let downloadData = viewModel.dataPoints.map { ($0.time, Double($0.download)) }
 
-                // Upload Line
-                LineMark(
-                    x: .value("Time", point.time),
-                    y: .value("Upload", Double(point.upload))
-                )
-                .foregroundStyle(.cyan)
-                .interpolationMethod(.catmullRom)
-                .lineStyle(StrokeStyle(lineWidth: 2))
-
-                // Download Area
-                AreaMark(
-                    x: .value("Time", point.time),
-                    y: .value("Download", Double(point.download))
-                )
-                .foregroundStyle(LinearGradient(
-                    colors: [.green.opacity(0.2), .green.opacity(0.0)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                ))
-                .interpolationMethod(.catmullRom)
-
-                // Download Line
-                LineMark(
-                    x: .value("Time", point.time),
-                    y: .value("Download", Double(point.download))
-                )
-                .foregroundStyle(.green)
-                .interpolationMethod(.catmullRom)
-                .lineStyle(StrokeStyle(lineWidth: 2))
-            }
-            .chartYScale(domain: .automatic(includesZero: true))
-            .chartYAxis {
-                AxisMarks(position: .leading)
-            }
-            .chartXAxis(.hidden)
+            DualSmoothGraphView(
+                uploadData: uploadData,
+                downloadData: downloadData,
+                visibleDuration: 60
+            )
             .frame(height: 180)
             .padding(.vertical, 12)
             .padding(.horizontal)

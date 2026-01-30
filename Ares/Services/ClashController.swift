@@ -16,6 +16,22 @@ struct ClashRule: Codable, Identifiable {
     let hit: Int
 }
 
+/// Represents a topological connection chain
+struct ConnectionChain: Identifiable, Equatable {
+    let id: String
+    let host: String
+    let sourceProcess: String
+    let rule: String
+    let chains: [String] // e.g. ["Rule", "HK Node", "Final"]
+    let destinationIP: String
+    let download: Int64
+    let upload: Int64
+
+    static func == (lhs: ConnectionChain, rhs: ConnectionChain) -> Bool {
+        lhs.id == rhs.id && lhs.download == rhs.download && lhs.upload == rhs.upload
+    }
+}
+
 /// Controller for interacting with Clash API
 @MainActor
 class ClashController: ObservableObject {
@@ -36,7 +52,11 @@ class ClashController: ObservableObject {
     @Published var proxies: [String: Any] = [:]
     @Published var proxyGroups: [ProxyGroup] = []
     @Published var proxyNodes: [String: ProxyNode] = [:]
+
     @Published var rules: [ClashRule] = []
+
+    // Topology Data
+    @Published var activeChains: [ConnectionChain] = []
 
     private var statusSubscription: AnyCancellable?
     private var refreshTimer: Timer?
@@ -450,32 +470,58 @@ class ClashController: ObservableObject {
         ClashViewModel.shared.addLog("[ClashController] Set log level to \(level)")
     }
 
-    /// Monitor active connections
+    /// Monitor active connections and update topology data
     func monitorConnections() async {
         do {
             guard let url = URL(string: "\(baseURL)/connections") else { return }
             let (data, _) = try await URLSession.shared.data(from: url)
-            guard let _ = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+
+            guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                  let connections = json["connections"] as? [[String: Any]] else {
                 return
             }
 
-            // if let connections = json["connections"] as? [[String: Any]] {
-                // let count = connections.count
-                // Silence noisy heartbeat logs, only print to console for developers
+            var newChains: [ConnectionChain] = []
 
-                /*
-                ClashViewModel.shared.addLog("[ClashController] 🔗 Active connections: \(count)")
-                // Log recent connections
-                for (index, conn) in connections.prefix(5).enumerated() {
-                    if let metadata = conn["metadata"] as? [String: Any],
-                       let host = metadata["host"] as? String,
-                       let chains = conn["chains"] as? [String] {
-                        let proxy = chains.first ?? "DIRECT"
-                        ClashViewModel.shared.addLog("[ClashController]   \(index + 1). \(host) → \(proxy)")
-                    }
+            for conn in connections {
+                guard let id = conn["id"] as? String,
+                      let metadata = conn["metadata"] as? [String: Any],
+                      let host = metadata["host"] as? String,
+                      let chains = conn["chains"] as? [String],
+                      let rule = conn["rule"] as? String,
+                      let upload = conn["upload"] as? Int64,
+                      let download = conn["download"] as? Int64 else {
+                    continue
                 }
-                */
-            // }
+
+                let process = metadata["processPath"] as? String ?? metadata["process"] as? String ?? "Unknown"
+                let cleanProcess = process.components(separatedBy: "/").last ?? process
+
+                let destinationIP = metadata["destinationIP"] as? String ?? "0.0.0.0"
+
+                // Filter out self-traffic from "Ares" (Robust check)
+                if cleanProcess.localizedCaseInsensitiveContains("Ares") || cleanProcess.localizedCaseInsensitiveContains("com.herastudio.ares") {
+                    continue
+                }
+
+                let chain = ConnectionChain(
+                    id: id,
+                    host: host,
+                    sourceProcess: cleanProcess,
+                    rule: rule,
+                    chains: chains,
+                    destinationIP: destinationIP,
+                    download: download,
+                    upload: upload
+                )
+                newChains.append(chain)
+            }
+
+            // Only update if changed to avoid UI flickering
+            if self.activeChains != newChains {
+                self.activeChains = newChains
+            }
+
         } catch {
             ClashViewModel.shared.addLog("[ClashController] ⚠️ Failed to get connections: \(error)")
         }
