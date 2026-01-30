@@ -18,45 +18,16 @@ struct RouteMapPageView: View {
     @State private var coordinateCache: [String: CLLocationCoordinate2D] = [:]
 
     var body: some View {
-        VStack(spacing: 0) {
-            Map(position: $position, bounds: MapCameraBounds(minimumDistance: 1000, maximumDistance: 400_000_000)) {
-                // 1. Draw Lines (Geodesic)
-                ForEach(uniqueConnections, id: \.id) { conn in
-                    MapPolyline(coordinates: [localLocation, conn.coordinate], contourStyle: .geodesic)
-                        .stroke(
-                            LinearGradient(
-                                colors: [conn.color.opacity(0.8), conn.color.opacity(0.3)], // Slightly reduced opacity for elegance
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            ),
-                            lineWidth: 1.5 // Refined: Slightly thicker lines (User Choice)
-                        )
-                }
+        ZStack {
+            // Background color that adapts to light/dark
+            Color(nsColor: .windowBackgroundColor)
+                .ignoresSafeArea()
 
-                // 2. Draw Target Nodes
-                ForEach(uniqueConnections, id: \.id) { conn in
-                    Annotation(conn.host, coordinate: conn.coordinate) {
-                        Circle()
-                            .fill(conn.color)
-                            .frame(width: 6, height: 6) // Smaller nodes
-                            .overlay(Circle().stroke(Color.primary.opacity(0.2), lineWidth: 0.5)) // Adaptive border
-                            .shadow(radius: 2)
-                    }
-                }
-
-                // 3. User Node
-                Annotation("My Mac", coordinate: localLocation) {
-                    Image(systemName: "macbook.and.iphone")
-                        .foregroundColor(.white) // White for contrast on Satellite
-                        .padding(6)
-                        .background(Circle().fill(.blue).shadow(radius: 2))
-                }
-            }
-            .mapStyle(.standard) // Reverted to 2D Standard per user request
-            .mapControlVisibility(.hidden) // Keep controls hidden for clean UI
-            .cornerRadius(12)
-            .shadow(radius: 2)
+            MutedWorldMapView(position: $position, connections: uniqueConnections, localLocation: localLocation)
+                .cornerRadius(12)
+                .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
         }
+        .padding(1) // Minor padding for shadow safety
         .padding()
         .background(Color(nsColor: .textBackgroundColor))
         .navigationTitle("Routing")
@@ -161,5 +132,114 @@ struct RouteMapPageView: View {
             .blue, .red, .green, .orange, .purple, .pink, .cyan, .mint, .indigo, .teal
         ]
         return colors[hash % colors.count]
+    }
+}
+
+// MARK: - MutedWorldMapView
+
+struct MutedWorldMapView: NSViewRepresentable {
+    @Binding var position: MapCameraPosition
+    let connections: [RouteMapPageView.MapConnection]
+    let localLocation: CLLocationCoordinate2D
+
+    func makeNSView(context: Context) -> MKMapView {
+        let mapView = MKMapView()
+        mapView.delegate = context.coordinator
+
+        // 1. Globe Mode Configuration
+        // HybridFlyover/Realistic enables the 3D globe which allows infinite zoom out
+        let config = MKHybridMapConfiguration(elevationStyle: .realistic)
+        config.pointOfInterestFilter = .excludingAll
+        config.showsTraffic = false
+        mapView.preferredConfiguration = config
+
+        // 2. Interaction Tweaks
+        mapView.isZoomEnabled = true
+        mapView.isScrollEnabled = true
+        mapView.isPitchEnabled = true // Required for globe feel
+        mapView.isRotateEnabled = true
+
+        // 3. Set Initial Global View
+        // Center on user location (Shanghai) in Globe mode
+        let camera = MKMapCamera(lookingAtCenter: CLLocationCoordinate2D(latitude: 31.23, longitude: 121.47),
+                                 fromDistance: 40_000_000, // 40,000 km altitude for full globe
+                                 pitch: 0,
+                                 heading: 0)
+        mapView.setCamera(camera, animated: false)
+
+        return mapView
+    }
+
+    func updateNSView(_ nsView: MKMapView, context: Context) {
+        updateOverlays(in: nsView)
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    private func updateOverlays(in mapView: MKMapView) {
+        mapView.removeOverlays(mapView.overlays)
+        mapView.removeAnnotations(mapView.annotations)
+
+        // Draw Geodesic Lines
+        for conn in connections {
+            let coords = [localLocation, conn.coordinate]
+            let polyline = MKGeodesicPolyline(coordinates: coords, count: 2)
+            mapView.addOverlay(polyline)
+
+            // Add Node Annotation
+            let annotation = MKPointAnnotation()
+            annotation.coordinate = conn.coordinate
+            annotation.title = conn.host
+            mapView.addAnnotation(annotation)
+        }
+
+        // Add Local User Annotation
+        let localAnn = MKPointAnnotation()
+        localAnn.coordinate = localLocation
+        localAnn.title = "Me"
+        mapView.addAnnotation(localAnn)
+    }
+
+    class Coordinator: NSObject, MKMapViewDelegate {
+        var parent: MutedWorldMapView
+
+        init(_ parent: MutedWorldMapView) {
+            self.parent = parent
+        }
+
+        func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            if let polyline = overlay as? MKPolyline {
+                let renderer = MKPolylineRenderer(polyline: polyline)
+                renderer.strokeColor = .systemBlue.withAlphaComponent(0.6)
+                renderer.lineWidth = 1.0
+                return renderer
+            }
+            return MKOverlayRenderer(overlay: overlay)
+        }
+
+        func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            let identifier = "NodeMarker"
+            var marker = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView
+
+            if marker == nil {
+                marker = MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+            }
+
+            if annotation.title == "Me" {
+                marker?.glyphImage = NSImage(systemSymbolName: "macbook.and.iphone", accessibilityDescription: nil)
+                marker?.markerTintColor = .systemBlue
+            } else {
+                marker?.glyphImage = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: nil)
+                marker?.markerTintColor = .systemGray
+            }
+
+            marker?.displayPriority = .required
+            marker?.subtitleVisibility = .hidden
+            marker?.titleVisibility = .hidden
+
+            return marker
+        }
     }
 }

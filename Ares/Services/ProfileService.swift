@@ -150,40 +150,11 @@ class ProfileService: ObservableObject {
 
         print("[ProfileService] Downloading profile from: \(url)")
 
-        // Download profile with Clash.Meta User-Agent (Simpler is better)
+        // Download profile with Clash.Meta User-Agent
         var request = URLRequest(url: url)
-        let userAgent = "Clash.Meta"
-        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-
-        // DEBUG: Log the User-Agent being used
-        print("[ProfileService] 🔍 DEBUG: Using User-Agent: \(userAgent)")
+        request.setValue("Clash.Meta", forHTTPHeaderField: "User-Agent")
 
         let (data, response) = try await URLSession.shared.data(for: request)
-
-        // DEBUG: Log response info and proxy count
-        if let content = String(data: data, encoding: .utf8) {
-            let proxyCount = content.components(separatedBy: "type:").count - 1
-            print("[ProfileService] 🔍 DEBUG: Response size: \(data.count) bytes, Proxy count (approx): \(proxyCount)")
-
-            // Log first 100 chars to see if it's Base64 or YAML
-            let prefix = String(content.prefix(100))
-            print("[ProfileService] 🔍 DEBUG: Content Prefix: \(prefix)")
-
-            // Check if HY nodes are present
-            let hasHysteria = content.contains("hysteria2") || content.contains("type: hysteria2")
-            print("[ProfileService] 🔍 DEBUG: Contains Hysteria2 nodes: \(hasHysteria)")
-
-            // Log to ClashViewModel for user visibility
-            Task { @MainActor in
-                ClashViewModel.shared.addLog("[ProfileService] 🔍 Response Size: \(data.count) bytes")
-                ClashViewModel.shared.addLog("[ProfileService] 🔍 Content Type: \(prefix.hasPrefix("proxies:") || prefix.hasPrefix("#") ? "YAML" : "Base64/Other")")
-                let hasHY = content.contains("hysteria2")
-                ClashViewModel.shared.addLog("[ProfileService] 🔍 Hysteria2 present: \(hasHY ? "YES ✅" : "NO ❌")")
-                if !hasHY {
-                    ClashViewModel.shared.addLog("[ProfileService] 🔍 Data Preview: \(prefix)...")
-                }
-            }
-        }
 
         // Parse subscription info from headers
         if let httpResponse = response as? HTTPURLResponse {
