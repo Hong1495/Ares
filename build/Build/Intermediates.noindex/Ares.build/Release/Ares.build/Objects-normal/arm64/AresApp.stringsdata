@@ -1,0 +1,16 @@
+{
+  "source": "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/AresApp.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "No Request Selected",
+        "location": {
+          "startingColumn": 21,
+          "startingLine": 113
+        }
+      }
+    ]
+  },
+  "version": 1
+}

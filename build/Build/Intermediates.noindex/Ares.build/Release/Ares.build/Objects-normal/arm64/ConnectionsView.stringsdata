@@ -1,0 +1,200 @@
+{
+  "source": "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/ConnectionsView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Activity",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 58
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 73
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld items",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 86
+        }
+      },
+      {
+        "comment": "",
+        "key": "Search...",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 108
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reset Usage Statistics",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 123
+        }
+      },
+      {
+        "comment": "",
+        "key": "Toggle Inspector",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 136
+        }
+      },
+      {
+        "comment": "",
+        "key": "Export Data",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 145
+        }
+      },
+      {
+        "comment": "",
+        "key": "Process / Host",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 155
+        }
+      },
+      {
+        "comment": "",
+        "key": "Download",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 195
+        }
+      },
+      {
+        "comment": "",
+        "key": "Upload",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 205
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld active",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 168
+        }
+      },
+      {
+        "comment": "",
+        "key": "Terminated",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 170
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld active",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 173
+        }
+      },
+      {
+        "comment": "",
+        "key": "Copy Summary",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 219
+        }
+      },
+      {
+        "comment": "",
+        "key": "Copy Host",
+        "location": {
+          "startingColumn": 33,
+          "startingLine": 230
+        }
+      },
+      {
+        "comment": "",
+        "key": "Copy Remote IP",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 236
+        }
+      },
+      {
+        "comment": "",
+        "key": "Copy Remote Address",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 241
+        }
+      },
+      {
+        "comment": "",
+        "key": "Copy Source Address",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 245
+        }
+      },
+      {
+        "comment": "",
+        "key": "Copy Rule",
+        "location": {
+          "startingColumn": 33,
+          "startingLine": 251
+        }
+      },
+      {
+        "comment": "",
+        "key": "Close Connection",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 258
+        }
+      },
+      {
+        "comment": "",
+        "key": "Copy Process Path",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 264
+        }
+      },
+      {
+        "comment": "",
+        "key": "Force Termination (Aggressive)",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 270
+        }
+      },
+      {
+        "comment": "",
+        "key": "—",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 336
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 331
+        }
+      }
+    ]
+  },
+  "version": 1
+}

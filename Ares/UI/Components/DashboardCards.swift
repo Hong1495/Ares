@@ -5,10 +5,10 @@ struct CurrentProxyCard: View {
     @EnvironmentObject var clashController: ClashController
     @EnvironmentObject var clashViewModel: ClashViewModel
     @EnvironmentObject var appState: AppState
-    
+
     // Auto-refresh latency
     @State private var latencies: [String: Int] = [:]
-    
+
     // Display groups based on mode
     var displayGroups: [ProxyGroup] {
         switch appState.currentMode {
@@ -19,23 +19,23 @@ struct CurrentProxyCard: View {
         case .rule:
             // Smart select the main proxy group
             let allGroups = clashController.proxyGroups
-            
+
             // 1. Try exact match for common standards
             if let exact = allGroups.first(where: { $0.name == "🚀 节点选择" }) { return [exact] }
             if let exact = allGroups.first(where: { $0.name == "Proxy" }) { return [exact] }
             if let exact = allGroups.first(where: { $0.name == "PROXY" }) { return [exact] }
-            
+
             // 2. Try partial match
             if let partial = allGroups.first(where: { $0.name.contains("节点") && $0.type == "Selector" }) { return [partial] }
             if let partial = allGroups.first(where: { $0.name.contains("Proxy") && $0.type == "Selector" }) { return [partial] }
-            
+
             // 3. Fallback: First non-GLOBAL selector
             if let fallback = allGroups.first(where: { $0.type == "Selector" && $0.name != "GLOBAL" }) { return [fallback] }
-            
+
             return []
         }
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -59,9 +59,9 @@ struct CurrentProxyCard: View {
                     .cornerRadius(6)
             }
             .frame(height: 24) // Align header height
-            
+
             Divider()
-            
+
             if appState.currentMode == .direct {
                 // Direct mode
                 VStack {
@@ -85,46 +85,45 @@ struct CurrentProxyCard: View {
                     Spacer()
                 }
             } else {
-                // Show groups
-                // Bottom align
+                // Show groups with latency on right
                 Spacer()
                 ForEach(displayGroups) { group in
-                    HStack {
-                        Image(systemName: groupIcon(for: group.type))
-                            .foregroundStyle(.blue)
-                        
-                        VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .center, spacing: 16) {
+                        // Left: Group names
+                        VStack(alignment: .leading, spacing: 4) {
                             Text(group.name)
                                 .font(.subheadline)
+                                .foregroundStyle(.secondary)
                                 .lineLimit(1)
                             if let current = group.now {
-                                HStack(spacing: 6) {
-                                    Text(current)
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
-                                        .foregroundStyle(.primary)
-                                        .lineLimit(1)
-                                    
-                                    // Latency Badge
-                                    if let ms = latencies[current] {
-                                        Text("\(ms)ms")
-                                            .font(.caption2)
-                                            .fontWeight(.bold)
-                                            .foregroundStyle(latencyColor(ms))
-                                            .padding(.horizontal, 4)
-                                            .padding(.vertical, 2)
-                                            .background(latencyColor(ms).opacity(0.1))
-                                            .cornerRadius(4)
-                                    } else {
-                                        Text("- ms")
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
+                                Text(current)
+                                    .font(.body)
+                                    .fontWeight(.medium)
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(1)
                             }
                         }
-                        
+
+
                         Spacer()
+
+                        // Right: Latency in large font
+                        if let current = group.now, let ms = latencies[current] {
+                            Text("\(ms)")
+                                .font(.system(size: 40, weight: .bold, design: .rounded))
+                                .monospacedDigit()
+                                .foregroundStyle(latencyColor(ms))
+                            + Text("ms")
+                                .font(.system(size: 14, weight: .medium, design: .rounded))
+                                .foregroundStyle(latencyColor(ms).opacity(0.8))
+                        } else {
+                            Text("--")
+                                .font(.system(size: 40, weight: .bold, design: .rounded))
+                                .foregroundStyle(.secondary)
+                            + Text("ms")
+                                .font(.system(size: 14, weight: .medium, design: .rounded))
+                                .foregroundStyle(.secondary.opacity(0.6))
+                        }
                     }
                 }
             }
@@ -142,7 +141,7 @@ struct CurrentProxyCard: View {
             // Additional wait for core stabilization
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             await updateLatencies()
-            
+
             // Periodic update
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 5_000_000_000) // 5s
@@ -152,7 +151,7 @@ struct CurrentProxyCard: View {
             }
         }
     }
-    
+
     private func updateLatencies() async {
         for group in displayGroups {
             if let current = group.now {
@@ -168,13 +167,13 @@ struct CurrentProxyCard: View {
             }
         }
     }
-    
+
     private func latencyColor(_ ms: Int) -> Color {
         if ms < 200 { return .green }
         if ms < 500 { return .orange }
         return .red
     }
-    
+
     private var modeColor: Color {
         switch appState.currentMode {
         case .rule: return .blue
@@ -182,7 +181,7 @@ struct CurrentProxyCard: View {
         case .direct: return .green
         }
     }
-    
+
     private func groupIcon(for type: String) -> String {
         switch type {
         case "Selector": return "checkmark.circle"
@@ -193,122 +192,184 @@ struct CurrentProxyCard: View {
     }
 }
 
-/// IP Info Card showing public IP information
-struct IpInfoCard: View {
+// Advanced Mode Card - Merged TUN and MITM Toggles
+struct AdvancedModeCard: View {
+    @EnvironmentObject var appState: AppState
     @EnvironmentObject var clashViewModel: ClashViewModel
-    @State private var ipInfo: IPInfo?
-    @State private var isLoading = false
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label {
-                Text("IP Address")
+                Text("Advanced Mode")
             } icon: {
-                Image(systemName: "globe.americas") // Simpler icon
+                Image(systemName: "bolt.shield")
                     .fontWeight(.light)
                     .frame(width: 20)
             }
             .font(.headline.weight(.medium))
             .frame(height: 24)
-            
+
             Divider()
-            
+
             Spacer()
-            
-            if let info = ipInfo {
-                VStack(alignment: .leading, spacing: 4) {
+
+            VStack(alignment: .leading, spacing: 12) {
+                // TUN Toggle
+                HStack {
+                    Text("Enable TUN")
+                        .font(.body)
+                    Spacer()
+                    Toggle("", isOn: Binding(
+                        get: { appState.tunEnabled },
+                        set: { _ in appState.toggleTUN() }
+                    ))
+                    .toggleStyle(SwitchToggleStyle(tint: .blue))
+                    .labelsHidden()
+                    .disabled(clashViewModel.isToggling)
+                }
+
+                // MITM Toggle
+                HStack {
+                    Text("Enable MITM")
+                        .font(.body)
+                    Spacer()
+                    Toggle("", isOn: Binding(
+                        get: { appState.mitmEnabled },
+                        set: { _ in appState.toggleMITM() }
+                    ))
+                    .toggleStyle(SwitchToggleStyle(tint: .orange))
+                    .labelsHidden()
+                }
+            }
+
+            Spacer()
+        }
+        .padding()
+        .frame(height: 150)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .cornerRadius(12)
+    }
+}
+
+// Merged IP Address Card showing both local and public IP
+struct IpAddressCard: View {
+    @EnvironmentObject var clashViewModel: ClashViewModel
+    @State private var publicIP: String = "Fetching..."
+    @State private var country: String?
+    @State private var localIP: String = "..."
+    @State private var networkType: String = "..."
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label {
+                Text("IP Address")
+            } icon: {
+                Image(systemName: "globe.americas")
+                    .fontWeight(.light)
+                    .frame(width: 20)
+            }
+            .font(.headline.weight(.medium))
+            .frame(height: 24)
+
+            Divider()
+
+            Spacer()
+
+            VStack(alignment: .leading, spacing: 8) {
+                // Public IP
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Public")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                     HStack(spacing: 6) {
-                        Image(systemName: "link")
-                            .font(.caption) // Smaller icon
-                            .foregroundStyle(.blue.opacity(0.8))
-                        Text(info.ip)
+                        Text(publicIP)
                             .font(.subheadline)
-                            .fontWeight(.medium)
+                            .fontWeight(.semibold)
                             .monospacedDigit()
-                    }
-                    
-                    if let country = info.country {
-                        HStack(spacing: 6) {
-                            Image(systemName: "mappin.and.ellipse")
-                                .font(.caption)
-                                .foregroundStyle(.green.opacity(0.8))
+                        if let country = country {
                             Text(country)
-                                .font(.caption)
+                                .font(.caption2)
                                 .foregroundStyle(.secondary)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(Color.gray.opacity(0.1))
+                                .cornerRadius(4)
                         }
                     }
                 }
-            } else {
-               HStack(spacing: 8) {
-                   ProgressView()
-                        .scaleEffect(0.5)
-                        .frame(width: 16, height: 16)
-                   Text(isLoading ? "Fetching..." : "Waiting for connection...")
-                        .font(.caption)
+
+                // Local IP
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Local (\(networkType))")
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
-               }
-               .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(localIP)
+                        .font(.subheadline)
+                        .monospacedDigit()
+                }
             }
+
+            Spacer()
         }
         .padding()
-        .frame(height: 150) // Match others
+        .frame(height: 150)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
         .task {
-            // Initial Wait
-            while !clashViewModel.isRunning {
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-            }
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
-            
-            // Persistent retry loop
-            while !Task.isCancelled {
-                if ipInfo == nil {
-                    isLoading = true
-                    let success = await fetchIPInfo()
-                    if success {
-                        isLoading = false
-                        // Refresh every 5 minutes if successful ? Or just once?
-                        // User said: "if failed... auto recovery". 
-                        // Once success, we can stop aggressively retrying.
-                        // But maybe refreshing periodically is good? Let's sleep long if success.
-                        try? await Task.sleep(nanoseconds: 300_000_000_000) // 5 min
-                    } else {
-                        // Retry backoff
-                        try? await Task.sleep(nanoseconds: 5_000_000_000) // 5s retry
-                    }
-                } else {
-                     try? await Task.sleep(nanoseconds: 300_000_000_000) // 5 min
-                }
-            }
+            updateLocalIP()
+            await fetchPublicIP()
         }
     }
-    
-    @MainActor
-    private func fetchIPInfo() async -> Bool {
-        if clashViewModel.isToggling { return false }
-        
+
+    private func updateLocalIP() {
+        let (ip, type) = fetchLocalIP()
+        self.localIP = ip
+        self.networkType = type
+    }
+
+    private func fetchLocalIP() -> (String, String) {
+        var address: String = "127.0.0.1"
+        var type: String = "Unknown"
+        var ifaddr: UnsafeMutablePointer<ifaddrs>?
+        if getifaddrs(&ifaddr) == 0 {
+            var ptr = ifaddr
+            while ptr != nil {
+                defer { ptr = ptr?.pointee.ifa_next }
+                guard let interface = ptr?.pointee else { continue }
+                let name = String(cString: interface.ifa_name)
+                let addrFamily = interface.ifa_addr.pointee.sa_family
+                if addrFamily == UInt8(AF_INET) {
+                    if name == "en0" || name == "en1" {
+                        type = "WiFi/Ethernet"
+                        var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                        getnameinfo(interface.ifa_addr, socklen_t(interface.ifa_addr.pointee.sa_len),
+                                    &hostname, socklen_t(hostname.count),
+                                    nil, socklen_t(0), NI_NUMERICHOST)
+                        address = String(cString: hostname)
+                    }
+                }
+            }
+            freeifaddrs(ifaddr)
+        }
+        return (address, type)
+    }
+
+    private func fetchPublicIP() async {
         do {
             let url = URL(string: "https://ipapi.co/json/")!
-            let config = URLSessionConfiguration.ephemeral
-            config.timeoutIntervalForRequest = 5.0
-            let session = URLSession(configuration: config)
-            
-            let (data, _) = try await session.data(from: url)
-            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-            
-            let ip = json?["ip"] as? String ?? "Unknown"
-            let country = json?["country_name"] as? String
-            let city = json?["city"] as? String
-            
-            self.ipInfo = IPInfo(ip: ip, country: country, city: city)
-            return true
+            let (data, _) = try await URLSession.shared.data(from: url)
+            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                publicIP = json["ip"] as? String ?? "Unknown"
+                country = json["country_code"] as? String
+            }
         } catch {
-            return false
+            publicIP = "Offline"
         }
     }
 }
+
 
 struct IPInfo {
     let ip: String
@@ -320,7 +381,7 @@ struct IPInfo {
 struct ClashInfoCard: View {
     @State private var version: String = "Loading..."
     @State private var memory: Int64 = 0
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label {
@@ -332,11 +393,11 @@ struct ClashInfoCard: View {
             }
             .font(.headline.weight(.medium))
             .frame(height: 24)
-            
+
             Divider()
-            
+
             Spacer()
-            
+
             VStack(alignment: .leading, spacing: 4) {
                  HStack {
                     Text("Version")
@@ -348,7 +409,7 @@ struct ClashInfoCard: View {
                         .fontWeight(.medium)
                         .monospacedDigit()
                 }
-                
+
                 HStack {
                     Text("Memory")
                         .font(.caption)
@@ -372,7 +433,7 @@ struct ClashInfoCard: View {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
             }
             try? await Task.sleep(nanoseconds: 500_000_000)
-            
+
             // Persistent retry loop
             while !Task.isCancelled {
                 // Determine if we need to fetch (if invalid or just periodic)
@@ -389,7 +450,7 @@ struct ClashInfoCard: View {
                      let success = await fetchClashInfo()
                      if !success {
                          // Don't immediately show offline on one failure, hold state?
-                         // But if failed, maybe it crashed. 
+                         // But if failed, maybe it crashed.
                          // Let's retry sooner if it failed.
                          try? await Task.sleep(nanoseconds: 3_000_000_000)
                      } else {
@@ -399,14 +460,14 @@ struct ClashInfoCard: View {
             }
         }
     }
-    
+
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var clashViewModel: ClashViewModel
 
     @MainActor
     private func fetchClashInfo() async -> Bool {
         if clashViewModel.isToggling { return false }
-        
+
         let port = appState.tunEnabled ? 19097 : 9097
         let url = URL(string: "http://127.0.0.1:\(port)/version")!
         // Quick timeout
@@ -427,7 +488,7 @@ struct ClashInfoCard: View {
             return false
         }
     }
-    
+
     private func formatMemory(_ bytes: Int64) -> String {
         let mb = Double(bytes) / 1024 / 1024
         return String(format: "%.1f MB", mb)
@@ -438,7 +499,7 @@ struct ClashInfoCard: View {
 struct SystemInfoCard: View {
     @State private var architecture: String = "Unknown"
     @State private var osVersion: String = "Unknown"
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label {
@@ -450,11 +511,11 @@ struct SystemInfoCard: View {
             }
             .font(.headline.weight(.medium))
             .frame(height: 24)
-            
+
             Divider()
-            
+
             Spacer()
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text("macOS")
@@ -466,7 +527,7 @@ struct SystemInfoCard: View {
                         .fontWeight(.medium)
                         .monospacedDigit()
                 }
-                
+
                 HStack {
                     Text("Arch") // Shortened to match space
                         .font(.caption)
@@ -488,7 +549,7 @@ struct SystemInfoCard: View {
             fetchSystemInfo()
         }
     }
-    
+
     private func fetchSystemInfo() {
         // Get architecture
         var sysinfo = utsname()
@@ -511,7 +572,7 @@ struct NodeAnalysisCard: View {
     @EnvironmentObject var clashController: ClashController
     @State private var avgDelay: Int = 0
     @State private var nodeCount: Int = 0
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label {
@@ -523,11 +584,11 @@ struct NodeAnalysisCard: View {
             }
             .font(.headline.weight(.medium))
             .frame(height: 24)
-            
+
             Divider()
-            
+
             Spacer()
-            
+
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text("Total Nodes")
@@ -539,7 +600,7 @@ struct NodeAnalysisCard: View {
                         .fontWeight(.semibold)
                         .monospacedDigit()
                 }
-                
+
                 HStack {
                     Text("Avg Latency")
                         .font(.caption)
@@ -561,7 +622,7 @@ struct NodeAnalysisCard: View {
         .onReceive(clashController.$proxyNodes) { nodes in
             // Calculate stats
             self.nodeCount = nodes.count
-            
+
             // Calc average of known delays
             let delays = nodes.values.compactMap { $0.delay }.filter { $0 > 0 }
             if !delays.isEmpty {
@@ -569,7 +630,7 @@ struct NodeAnalysisCard: View {
             }
         }
     }
-    
+
     func delayColor(_ ms: Int) -> Color {
         if ms == 0 { return .secondary }
         if ms < 300 { return .green }
@@ -583,7 +644,7 @@ struct ConnectionsCard: View {
     @EnvironmentObject var clashController: ClashController
     @EnvironmentObject var clashViewModel: ClashViewModel
     @State private var totalConnections: Int = 0
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label {
@@ -595,11 +656,11 @@ struct ConnectionsCard: View {
             }
             .font(.headline.weight(.medium))
             .frame(height: 24)
-            
+
             Divider()
-            
+
             Spacer()
-            
+
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text("Active")
@@ -611,7 +672,7 @@ struct ConnectionsCard: View {
                         .fontWeight(.bold)
                         .monospacedDigit()
                 }
-                
+
                 // Optional: Show current bandwidth as summary
                 HStack(spacing: 12) {
                     HStack(spacing: 4) {
@@ -645,7 +706,7 @@ struct ConnectionsCard: View {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
             }
             try? await Task.sleep(nanoseconds: 2_000_000_000)
-            
+
             // Poll connections count every few seconds
             while !Task.isCancelled {
                 if clashViewModel.isRunning && !clashViewModel.isToggling {
@@ -662,7 +723,7 @@ struct ConnectionsCard: View {
             }
         }
     }
-    
+
     func formatBytes(_ bytes: Int64) -> String {
         let formatter = ByteCountFormatter()
         formatter.allowedUnits = [.useAll]
@@ -674,14 +735,14 @@ struct ConnectionsCard: View {
 /// Error Log Card - Showing recent errors
 struct ErrorLogCard: View {
     @EnvironmentObject var clashViewModel: ClashViewModel
-    
+
     // Filtered logs
     var errorLogs: [String] {
         clashViewModel.logs.filter { $0.contains("⚠️") || $0.contains("❌") || $0.lowercased().contains("error") || $0.lowercased().contains("fail") }
             .suffix(2) // Last 2 only
             .reversed() // Newest first
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label {
@@ -694,11 +755,11 @@ struct ErrorLogCard: View {
             .font(.headline.weight(.medium))
             .frame(height: 24)
             .foregroundStyle(errorLogs.isEmpty ? Color.primary : Color.orange)
-            
+
             Divider()
-            
+
             Spacer()
-            
+
             if errorLogs.isEmpty {
                 HStack {
                     Image(systemName: "checkmark.circle")
@@ -726,7 +787,7 @@ struct ErrorLogCard: View {
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
     }
-    
+
     func cleanLog(_ log: String) -> String {
         return log
     }
@@ -735,7 +796,7 @@ struct ErrorLogCard: View {
 /// DNS Config Card - Shows DNS settings
 struct DNSConfigCard: View {
     @AppStorage("dnsServers") private var dnsServers: String = "223.5.5.5, 8.8.8.8"
-    
+
     var dnsArray: [String] {
         dnsServers.components(separatedBy: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
@@ -743,7 +804,7 @@ struct DNSConfigCard: View {
             .prefix(2)
             .map { String($0) }
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label {
@@ -755,11 +816,11 @@ struct DNSConfigCard: View {
             }
             .font(.headline.weight(.medium))
             .frame(height: 24)
-            
+
             Divider()
-            
+
             Spacer()
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(dnsArray, id: \.self) { dns in
                     HStack(spacing: 6) {
@@ -787,7 +848,7 @@ struct MITMConfigCard: View {
     @AppStorage("mitmPorts") private var mitmPorts: String = "80, 443, 8080, 8443, 8888"
     @AppStorage("mitmHosts") private var mitmHosts: String = ""
     @EnvironmentObject var appState: AppState
-    
+
     var portArray: [String] {
         mitmPorts.components(separatedBy: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
@@ -795,7 +856,7 @@ struct MITMConfigCard: View {
             .prefix(3)
             .map { String($0) }
     }
-    
+
     var hostArray: [String] {
         mitmHosts.components(separatedBy: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
@@ -803,7 +864,7 @@ struct MITMConfigCard: View {
             .prefix(2)
             .map { String($0) }
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label {
@@ -815,11 +876,11 @@ struct MITMConfigCard: View {
             }
             .font(.headline.weight(.medium))
             .frame(height: 24)
-            
+
             Divider()
-            
+
             Spacer()
-            
+
             VStack(alignment: .leading, spacing: 6) {
                 // Ports
                 HStack {
@@ -833,7 +894,7 @@ struct MITMConfigCard: View {
                         .monospacedDigit()
                         .lineLimit(1)
                 }
-                
+
                 // Whitelist
                 if !hostArray.isEmpty {
                     HStack {
@@ -859,7 +920,7 @@ struct MITMConfigCard: View {
 /// Bypass Settings Card - Shows bypass rules
 struct BypassSettingsCard: View {
     @AppStorage("bypassRules") private var bypassRules: String = "localhost, 127.*, 172.16.*, 172.31.*, 192.168.*"
-    
+
     var ruleArray: [String] {
         bypassRules.components(separatedBy: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
@@ -867,7 +928,7 @@ struct BypassSettingsCard: View {
             .prefix(3)
             .map { String($0) }
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label {
@@ -879,11 +940,11 @@ struct BypassSettingsCard: View {
             }
             .font(.headline.weight(.medium))
             .frame(height: 24)
-            
+
             Divider()
-            
+
             Spacer()
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(ruleArray, id: \.self) { rule in
                     HStack(spacing: 6) {
@@ -895,7 +956,7 @@ struct BypassSettingsCard: View {
                             .fontWeight(.medium)
                     }
                 }
-                
+
                 if ruleArray.count < bypassRules.components(separatedBy: ",").count {
                     Text("+\(bypassRules.components(separatedBy: ",").count - ruleArray.count) more")
                         .font(.caption2)

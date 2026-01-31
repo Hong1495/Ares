@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>colors</key>
+	<array/>
+	<key>images</key>
+	<array>
+		<dict>
+			<key>catalogPath</key>
+			<string>/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Assets.xcassets</string>
+			<key>objcSymbol</key>
+			<string>ACImageNameAresMenu00</string>
+			<key>relativePath</key>
+			<string>./Ares_Menu_00.imageset</string>
+			<key>swiftSymbol</key>
+			<string>aresMenu00</string>
+		</dict>
+		<dict>
+			<key>catalogPath</key>
+			<string>/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Assets.xcassets</string>
+			<key>objcSymbol</key>
+			<string>ACImageNameAresMenu01</string>
+			<key>relativePath</key>
+			<string>./Ares_Menu_01.imageset</string>
+			<key>swiftSymbol</key>
+			<string>aresMenu01</string>
+		</dict>
+		<dict>
+			<key>catalogPath</key>
+			<string>/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Assets.xcassets</string>
+			<key>objcSymbol</key>
+			<string>ACImageNameAresMenu10</string>
+			<key>relativePath</key>
+			<string>./Ares_Menu_10.imageset</string>
+			<key>swiftSymbol</key>
+			<string>aresMenu10</string>
+		</dict>
+		<dict>
+			<key>catalogPath</key>
+			<string>/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Assets.xcassets</string>
+			<key>objcSymbol</key>
+			<string>ACImageNameAresMenu11</string>
+			<key>relativePath</key>
+			<string>./Ares_Menu_11.imageset</string>
+			<key>swiftSymbol</key>
+			<string>aresMenu11</string>
+		</dict>
+	</array>
+	<key>symbols</key>
+	<array/>
+</dict>
+</plist>

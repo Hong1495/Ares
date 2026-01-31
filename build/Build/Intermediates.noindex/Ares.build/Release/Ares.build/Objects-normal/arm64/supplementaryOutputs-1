@@ -1,0 +1,12 @@
+{
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Models/ClashConfig.swift" : {
+    "abi-baseline-json" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/Ares.abi.json",
+    "const-values" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/Ares-primary.swiftconstvalues",
+    "dependencies" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/Ares-primary.d",
+    "diagnostics" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/Ares-primary.dia",
+    "objc-header" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/Ares-Swift.h",
+    "swiftdoc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/Ares.swiftdoc",
+    "swiftmodule" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/Ares.swiftmodule",
+    "swiftsourceinfo" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/Ares.swiftsourceinfo"
+  }
+}

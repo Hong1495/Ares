@@ -1,0 +1,276 @@
+{
+  "" : {
+    "const-values" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/Ares-primary.swiftconstvalues",
+    "dependencies" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/Ares-primary.d",
+    "diagnostics" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/Ares-primary.dia",
+    "emit-module-dependencies" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/Ares-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/Ares-primary-emit-module.dia",
+    "pch" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/Ares-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/Ares-primary.swiftdeps"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/AresApp.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/AresApp.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/AresApp.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/AresApp.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Models/ClashConfig.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/ClashConfig.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ClashConfig.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ClashConfig.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Models/Connection.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/Connection.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/Connection.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/Connection.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Models/MITMInterceptedData.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/MITMInterceptedData.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/MITMInterceptedData.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/MITMInterceptedData.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Models/Profile.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/Profile.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/Profile.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/Profile.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Models/ProxyModels.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/ProxyModels.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ProxyModels.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ProxyModels.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Services/AppState.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/AppState.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/AppState.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/AppState.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Services/BrowserAnalysisService.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/BrowserAnalysisService.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/BrowserAnalysisService.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/BrowserAnalysisService.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Services/CertificateManager.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/CertificateManager.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/CertificateManager.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/CertificateManager.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Services/ClashController.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/ClashController.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ClashController.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ClashController.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Services/ClashServiceActor.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/ClashServiceActor.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ClashServiceActor.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ClashServiceActor.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Services/ConfigService.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/ConfigService.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ConfigService.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ConfigService.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Services/LaunchService.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/LaunchService.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/LaunchService.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/LaunchService.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Services/MITMBackend.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/MITMBackend.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/MITMBackend.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/MITMBackend.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Services/NetworkMITMService.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/NetworkMITMService.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/NetworkMITMService.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/NetworkMITMService.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Services/PrivilegeService.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/PrivilegeService.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/PrivilegeService.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/PrivilegeService.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Services/ProfileService.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/ProfileService.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ProfileService.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ProfileService.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Services/ProxyDiagnostics.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/ProxyDiagnostics.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ProxyDiagnostics.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ProxyDiagnostics.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Services/SubscriptionConverter.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/SubscriptionConverter.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/SubscriptionConverter.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/SubscriptionConverter.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Services/SystemProxyManager.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/SystemProxyManager.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/SystemProxyManager.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/SystemProxyManager.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Services/ThemeService.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/ThemeService.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ThemeService.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ThemeService.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Services/TrafficAuditManager.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/TrafficAuditManager.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/TrafficAuditManager.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/TrafficAuditManager.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/AnalysisView.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/AnalysisView.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/AnalysisView.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/AnalysisView.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/Components/AnalysisInspector.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/AnalysisInspector.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/AnalysisInspector.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/AnalysisInspector.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/Components/ConnectivityTestView.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/ConnectivityTestView.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ConnectivityTestView.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ConnectivityTestView.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/Components/DashboardCards.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/DashboardCards.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/DashboardCards.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/DashboardCards.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/Components/EnhancedTrafficGraphView.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/EnhancedTrafficGraphView.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/EnhancedTrafficGraphView.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/EnhancedTrafficGraphView.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/Components/InspectorView.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/InspectorView.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/InspectorView.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/InspectorView.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/Components/JSONTreeView.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/JSONTreeView.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/JSONTreeView.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/JSONTreeView.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/Components/NetworkAnalysisComponents.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/NetworkAnalysisComponents.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/NetworkAnalysisComponents.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/NetworkAnalysisComponents.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/Components/SmoothGraphView.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/SmoothGraphView.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/SmoothGraphView.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/SmoothGraphView.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/Components/SparklineView.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/SparklineView.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/SparklineView.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/SparklineView.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/Components/SubscriptionCard.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/SubscriptionCard.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/SubscriptionCard.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/SubscriptionCard.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/Components/TestCard.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/TestCard.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/TestCard.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/TestCard.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/Components/TopologyView.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/TopologyView.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/TopologyView.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/TopologyView.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/ConnectionsView.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/ConnectionsView.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ConnectionsView.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ConnectionsView.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/DashboardView.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/DashboardView.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/DashboardView.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/DashboardView.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/LogsView.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/LogsView.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/LogsView.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/LogsView.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/MainView.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/MainView.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/MainView.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/MainView.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/MenuBarView.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/MenuBarView.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/MenuBarView.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/MenuBarView.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/NetworkInspectorView.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/NetworkInspectorView.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/NetworkInspectorView.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/NetworkInspectorView.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/PoliciesView.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/PoliciesView.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/PoliciesView.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/PoliciesView.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/ProfileEditorView.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/ProfileEditorView.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ProfileEditorView.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ProfileEditorView.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/ProfilesView.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/ProfilesView.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ProfilesView.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ProfilesView.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/ProxiesView.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/ProxiesView.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ProxiesView.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ProxiesView.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/RouteMapPageView.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/RouteMapPageView.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/RouteMapPageView.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/RouteMapPageView.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/RulesView.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/RulesView.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/RulesView.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/RulesView.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/SettingsView.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/SettingsView.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/SettingsView.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/SettingsView.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/TopologyPageView.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/TopologyPageView.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/TopologyPageView.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/TopologyPageView.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Utilities/AsyncFileManager.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/AsyncFileManager.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/AsyncFileManager.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/AsyncFileManager.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/Utilities/ProcessManager.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/ProcessManager.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ProcessManager.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ProcessManager.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/ViewModels/ClashView Model.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/ClashView Model.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ClashView Model.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/ClashView Model.o"
+  },
+  "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "index-unit-output-path" : "/Ares.build/Release/Ares.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/GeneratedAssetSymbols.bc",
+    "object" : "/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Intermediates.noindex/Ares.build/Release/Ares.build/Objects-normal/arm64/GeneratedAssetSymbols.o"
+  }
+}

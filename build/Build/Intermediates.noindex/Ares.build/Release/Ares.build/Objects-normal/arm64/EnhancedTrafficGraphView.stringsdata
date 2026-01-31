@@ -1,0 +1,32 @@
+{
+  "source": "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/Components/EnhancedTrafficGraphView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Network Traffic",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 12
+        }
+      },
+      {
+        "comment": "",
+        "key": "Upload",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 22
+        }
+      },
+      {
+        "comment": "",
+        "key": "Download",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 35
+        }
+      }
+    ]
+  },
+  "version": 1
+}

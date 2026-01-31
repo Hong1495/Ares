@@ -1,0 +1,56 @@
+{
+  "source": "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/Components/AnalysisInspector.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Traffic Analysis",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 43
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld checks",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 68
+        }
+      },
+      {
+        "comment": "",
+        "key": "Smart Diagnostics",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 65
+        }
+      },
+      {
+        "comment": "",
+        "key": "No obvious issues detected.",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 77
+        }
+      },
+      {
+        "comment": "",
+        "key": "Copied Command",
+        "location": {
+          "startingColumn": 47,
+          "startingLine": 105
+        }
+      },
+      {
+        "comment": "",
+        "key": "Copy as cURL",
+        "location": {
+          "startingColumn": 66,
+          "startingLine": 105
+        }
+      }
+    ]
+  },
+  "version": 1
+}

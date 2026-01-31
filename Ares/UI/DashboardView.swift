@@ -9,24 +9,20 @@ struct DashboardView: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: 16) {
-                StatusHeader()
-                MainGrid()
+                // Row 1: Proxy Service, Advanced mode, Proxy Mode
+                Row1Grid()
+
+                // Row 2: Current Proxy, IP Address, Connectivity
+                Row2Grid()
+
+                // Row 3: Network Traffic (Graph)
                 EnhancedTrafficGraphView()
 
-                // Subscription & Connectivity Row
-                HStack(alignment: .top, spacing: 16) {
-                    SubscriptionCard()
-                    ConnectivityTestView()
-                }
+                // Row 4: Subscription, DNS, Bypass Rules
+                Row4Grid()
 
-                // Core Info Row (Second to Last)
-                InfoGrid()
-
-                // Config Row (DNS, MITM, Bypass)
-                ConfigGrid()
-
-                // Analysis Row (Last)
-                AnalysisGrid()
+                // Row 5: MITM Config, Clash Core, System
+                Row5Grid()
             }
             .padding()
         }
@@ -35,97 +31,73 @@ struct DashboardView: View {
     }
 }
 
-private struct MainGrid: View {
+// Row 1: Proxy Service, Advanced mode, Proxy Mode
+private struct Row1Grid: View {
     private var columns: [GridItem] {
         [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
     }
 
     var body: some View {
         LazyVGrid(columns: columns, spacing: 16) {
-            NetworkTrafficCard()
-            TUNModeCard()
+            ProxyServiceCard()
+            AdvancedModeCard()
             ProxyModeCard()
+        }
+    }
+}
+
+// Row 2: Current Proxy, IP Address, Connectivity
+private struct Row2Grid: View {
+    private var columns: [GridItem] {
+        [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+    }
+
+    var body: some View {
+        LazyVGrid(columns: columns, spacing: 16) {
             CurrentProxyCard()
-            MITMModeCard()
+            IpAddressCard()
+            ConnectivityTestView()
         }
     }
 }
 
-private struct InfoGrid: View {
+// Row 4: Subscription, DNS, Bypass Rules
+private struct Row4Grid: View {
     private var columns: [GridItem] {
         [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
     }
 
     var body: some View {
         LazyVGrid(columns: columns, spacing: 16) {
-            ClashInfoCard()
-            IpInfoCard()
-            SystemInfoCard()
-        }
-    }
-}
-
-private struct AnalysisGrid: View {
-    private var columns: [GridItem] {
-        [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
-    }
-
-    var body: some View {
-        LazyVGrid(columns: columns, spacing: 16) {
-            NodeAnalysisCard()
-            ConnectionsCard()
-            ErrorLogCard()
-        }
-    }
-}
-
-private struct ConfigGrid: View {
-    private var columns: [GridItem] {
-        [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
-    }
-
-    var body: some View {
-        LazyVGrid(columns: columns, spacing: 16) {
+            SubscriptionCard()
             DNSConfigCard()
-            MITMConfigCard()
             BypassSettingsCard()
         }
     }
 }
 
-// MARK: - Subviews
-
-struct StatusHeader: View {
-    @EnvironmentObject var clashController: ClashController
-    @EnvironmentObject var clashViewModel: ClashViewModel
+// Row 5: MITM Config, Clash Core, System
+private struct Row5Grid: View {
+    private var columns: [GridItem] {
+        [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+    }
 
     var body: some View {
-        HStack {
-            Label {
-                Text(clashViewModel.isRunning ? "Clash Running" : "Clash Stopped")
-            } icon: {
-                Image(systemName: clashViewModel.isRunning ? "bolt.horizontal" : "bolt.horizontal")
-                    .fontWeight(.light)
-                    .frame(width: 16)
-            }
-            .font(.footnote.weight(.medium))
-                .foregroundStyle(clashViewModel.isRunning ? .green : .secondary)
-            Spacer()
-            Label {
-                Text("Port: 7890")
-            } icon: {
-                Image(systemName: "link")
-                    .fontWeight(.light)
-                    .frame(width: 16)
-            }
-            .font(.footnote.weight(.medium))
-                .foregroundStyle(.secondary)
+        LazyVGrid(columns: columns, spacing: 16) {
+            MITMConfigCard()
+            ClashInfoCard()
+            SystemInfoCard()
         }
-        .padding(.horizontal)
     }
 }
 
-struct NetworkTrafficCard: View {
+
+// MARK: - Subviews
+
+// MARK: - Subviews
+
+
+struct ProxyServiceCard: View {
     @EnvironmentObject var clashViewModel: ClashViewModel
     @EnvironmentObject var appState: AppState
 
@@ -146,30 +118,36 @@ struct NetworkTrafficCard: View {
             Spacer()
 
             // Combined Clash + System Proxy Toggle
-            Toggle("Enable Proxy", isOn: Binding(
-                get: { clashViewModel.isRunning && appState.systemProxyEnabled },
-                set: { enabled in
-                    Task {
-                        if enabled {
-                            // Start Clash first
-                            await clashViewModel.start()
-                            // Wait a bit for Clash to be ready
-                            try? await Task.sleep(nanoseconds: 500_000_000)
-                            // Then enable system proxy
-                            await appState.toggleSystemProxy()
-                        } else {
-                            // Disable system proxy first
-                            if appState.systemProxyEnabled {
+            HStack {
+                Text("Enable Proxy")
+                    .font(.body)
+                Spacer()
+                Toggle("", isOn: Binding(
+                    get: { clashViewModel.isRunning && appState.systemProxyEnabled },
+                    set: { enabled in
+                        Task {
+                            if enabled {
+                                // Start Clash first
+                                await clashViewModel.start()
+                                // Wait a bit for Clash to be ready
+                                try? await Task.sleep(nanoseconds: 500_000_000)
+                                // Then enable system proxy
                                 await appState.toggleSystemProxy()
+                            } else {
+                                // Disable system proxy first
+                                if appState.systemProxyEnabled {
+                                    await appState.toggleSystemProxy()
+                                }
+                                // Then stop Clash
+                                await clashViewModel.stop()
                             }
-                            // Then stop Clash
-                            await clashViewModel.stop()
                         }
                     }
-                }
-            ))
-            .toggleStyle(SwitchToggleStyle(tint: .blue))
-            .disabled(clashViewModel.isToggling)
+                ))
+                .toggleStyle(SwitchToggleStyle(tint: .green))
+                .labelsHidden()
+                .disabled(clashViewModel.isToggling)
+            }
 
             let statusText = clashViewModel.isRunning ?
                 (appState.systemProxyEnabled ? "Proxy enabled (port 7890)" : "Clash running (Proxy OFF)") :
@@ -189,6 +167,7 @@ struct NetworkTrafficCard: View {
         .cornerRadius(12)
     }
 }
+
 
 struct ProxyModeCard: View {
     @EnvironmentObject var appState: AppState
@@ -260,166 +239,5 @@ struct ProxyModeCard: View {
     }
 }
 
-// TUN Mode Card
-struct TUNModeCard: View {
-    @EnvironmentObject var appState: AppState
-    @EnvironmentObject var clashViewModel: ClashViewModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-                Label {
-                    Text("TUN Mode")
-                } icon: {
-                    Image(systemName: "bolt.shield")
-                        .fontWeight(.light)
-                        .frame(width: 20)
-                }
-                .font(.headline.weight(.medium))
-                .frame(height: 24) // Align Header
-
-            Divider()
-
-            Spacer()
-
-            Toggle("Enable TUN", isOn: Binding(
-                get: { appState.tunEnabled },
-                set: { _ in
-                    appState.toggleTUN()
-                }
-            ))
-            .toggleStyle(SwitchToggleStyle(tint: .blue))
-            .disabled(clashViewModel.isToggling)
-
-            Text(appState.tunEnabled ? "TUN Mode is Active" : "TUN Mode is Inactive")
-                .font(.footnote)
-                .fontWeight(.medium)
-                .foregroundStyle(.secondary)
-
-            // Spacer() removed for bottom alignment
-        }
-        .padding()
-        .frame(height: 150)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(12)
-    }
-}
-
-struct ModeButton: View {
-    let mode: String
-    let isSelected: Bool
-
-    var body: some View {
-        Button(action: {}) {
-            Text(mode)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-                .background(isSelected ? Color.blue : Color(nsColor: .windowBackgroundColor))
-                .foregroundStyle(isSelected ? .white : .primary)
-                .cornerRadius(8)
-        }
-        .buttonStyle(.plain)
-    }
-}
 
 
-
-// MITM Mode Card
-struct MITMModeCard: View {
-    @EnvironmentObject var appState: AppState
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label {
-                Text("MITM Mode")
-            } icon: {
-                // "Simple line icon" replacement: eyeglasses (implies inspection/viewing)
-                Image(systemName: "eyeglasses")
-                    .fontWeight(.light)
-                    .frame(width: 20)
-            }
-            .font(.headline.weight(.medium))
-            .frame(height: 24) // Align Header
-
-            Divider()
-
-            Spacer()
-
-            Toggle("Enable MITM", isOn: Binding(
-                get: { appState.mitmEnabled },
-                set: { _ in
-                    appState.toggleMITM()
-                }
-            ))
-            .toggleStyle(SwitchToggleStyle(tint: .purple))
-
-            HStack {
-                // Port Display
-                let portText = appState.mitmEnabled ? "Active (Port \(NetworkMITMService.shared.currentPort))" : "Inactive"
-                Text("MITM \(portText)")
-                    .font(.footnote)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.secondary)
-
-                Spacer()
-
-                Button(action: {
-                    Task {
-                        do {
-                            try await CertificateManager.shared.installToKeychain()
-                            // Show success with instructions
-                            await MainActor.run {
-                                let alert = NSAlert()
-                                alert.messageText = "Certificate Added to Keychain"
-                                alert.informativeText = """
-                                The Ares MITM certificate has been added to your keychain.
-
-                                ⚠️ Important: You must now trust it manually:
-
-                                1. Open "Keychain Access" app (press OK to open)
-                                2. Find "Ares MITM Proxy CA" in your login keychain
-                                3. Double-click the certificate
-                                4. Expand "Trust" section
-                                5. Set "When using this certificate" to "Always Trust"
-                                6. Close the window and enter your password
-                                """
-                                alert.alertStyle = .informational
-                                alert.addButton(withTitle: "Open Keychain Access")
-                                alert.addButton(withTitle: "OK")
-
-                                let response = alert.runModal()
-                                if response == .alertFirstButtonReturn {
-                                    // Open Keychain Access
-                                    NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Keychain Access.app"))
-                                }
-                            }
-                        } catch {
-                            // Show error alert
-                            await MainActor.run {
-                                let alert = NSAlert()
-                                alert.messageText = "Installation Failed"
-                                alert.informativeText = "Failed to install CA certificate: \(error.localizedDescription)"
-                                alert.alertStyle = .warning
-                                alert.addButton(withTitle: "OK")
-                                alert.runModal()
-                            }
-                        }
-                    }
-                }) {
-                    Text("Install CA")
-                        .font(.caption)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.mini)
-                .help("Export Root CA to Downloads for installation")
-            }
-
-            // Spacer() removed for bottom alignment
-        }
-        .padding()
-        .frame(height: 150)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(12)
-    }
-}

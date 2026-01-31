@@ -1,0 +1,24 @@
+{
+  "source": "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/Components/InspectorView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Inspector",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 25
+        }
+      },
+      {
+        "comment": "",
+        "key": "Select an item to inspect",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 90
+        }
+      }
+    ]
+  },
+  "version": 1
+}

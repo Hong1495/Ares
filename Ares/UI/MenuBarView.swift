@@ -65,6 +65,7 @@ struct MenuBarView: View {
                 ToggleRow(
                     title: "System Proxy",
                     icon: "globe",
+                    tint: .green,
                     isOn: Binding(
                         get: { appState.systemProxyEnabled },
                         set: { _ in Task { await appState.toggleSystemProxy() } }
@@ -74,6 +75,7 @@ struct MenuBarView: View {
                 ToggleRow(
                     title: "Enhanced Mode (TUN)",
                     icon: "bolt.shield",
+                    tint: .blue,
                     isOn: Binding(
                         get: { appState.tunEnabled },
                         set: { _ in appState.toggleTUN() }
@@ -138,6 +140,7 @@ struct SpeedStat: View {
 struct ToggleRow: View {
     let title: String
     let icon: String
+    var tint: Color = .blue
     @Binding var isOn: Bool
 
     var body: some View {
@@ -149,7 +152,7 @@ struct ToggleRow: View {
                 .font(.system(size: 13))
             Spacer()
             Toggle("", isOn: $isOn)
-                .toggleStyle(.switch)
+                .toggleStyle(SwitchToggleStyle(tint: tint))
                 .controlSize(.small)
                 .labelsHidden()
         }

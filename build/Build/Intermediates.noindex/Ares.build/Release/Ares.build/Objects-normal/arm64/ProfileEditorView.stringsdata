@@ -1,0 +1,80 @@
+{
+  "source": "/Volumes/HAS2T/Project/HeraStudio/Ares/Ares/UI/ProfileEditorView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Editor: %@",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 20
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 36
+        }
+      },
+      {
+        "comment": "",
+        "key": "Editor",
+        "location": {
+          "startingColumn": 45,
+          "startingLine": 31
+        }
+      },
+      {
+        "comment": "",
+        "key": "Diff",
+        "location": {
+          "startingColumn": 56,
+          "startingLine": 31
+        }
+      },
+      {
+        "comment": "",
+        "key": "Save & Apply",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 50
+        }
+      },
+      {
+        "comment": "",
+        "key": "Loading configuration...",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 66
+        }
+      },
+      {
+        "comment": "",
+        "key": "+",
+        "location": {
+          "startingColumn": 52,
+          "startingLine": 187
+        }
+      },
+      {
+        "comment": "",
+        "key": "-",
+        "location": {
+          "startingColumn": 83,
+          "startingLine": 187
+        }
+      },
+      {
+        "comment": "",
+        "key": " ",
+        "location": {
+          "startingColumn": 89,
+          "startingLine": 187
+        }
+      }
+    ]
+  },
+  "version": 1
+}
