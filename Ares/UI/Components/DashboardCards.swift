@@ -254,8 +254,6 @@ struct IpAddressCard: View {
     @EnvironmentObject var clashViewModel: ClashViewModel
     @EnvironmentObject var clashController: ClashController
 
-    @State private var publicIP: String = "Fetching..."
-    @State private var country: String?
     @State private var localIP: String = "..."
     @State private var networkType: String = "..."
 
@@ -308,17 +306,17 @@ struct IpAddressCard: View {
                                 .padding(.vertical, 1)
                                 .background(Color.blue.opacity(0.1))
                                 .foregroundStyle(.blue)
-                                .cornerRadius(3)
+                                    .cornerRadius(3)
                         }
                     }
 
                     HStack(spacing: 6) {
-                        Text(publicIP)
+                        Text(appState.publicIP)
                             .font(.subheadline)
                             .fontWeight(.semibold)
                             .monospacedDigit()
 
-                        if let country = country {
+                        if let country = appState.countryCode {
                             Text(country)
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
@@ -385,7 +383,7 @@ struct IpAddressCard: View {
 
     private func refreshAll() async {
         await MainActor.run {
-            self.publicIP = "Fetching..."
+            appState.publicIP = "Fetching..."
         }
         updateLocalIP()
         self.lastMode = appState.currentMode
@@ -472,8 +470,7 @@ struct IpAddressCard: View {
 
                         if let finalIp = ip {
                             await MainActor.run {
-                                self.publicIP = finalIp
-                                self.country = code
+                                appState.updateIPInfo(ip: finalIp, country: code)
                             }
                             return
                         }
@@ -483,7 +480,7 @@ struct IpAddressCard: View {
                 }
             }
         } catch {
-            await MainActor.run { self.publicIP = "Offline" }
+            await MainActor.run { appState.updateIPInfo(ip: "Offline", country: nil) }
         }
     }
 }

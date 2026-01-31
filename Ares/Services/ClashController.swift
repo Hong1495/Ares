@@ -58,6 +58,28 @@ class ClashController: ObservableObject {
     // Topology Data
     @Published var activeChains: [ConnectionChain] = []
 
+    /// Current primary latency for display
+    var primaryLatency: Int? {
+        let allGroups = proxyGroups
+        var activeGroupName: String? = nil
+
+        if AppState.shared.currentMode == .global {
+            activeGroupName = "GLOBAL"
+        } else {
+            if allGroups.contains(where: { $0.name == "🚀 节点选择" }) { activeGroupName = "🚀 节点选择" }
+            else if allGroups.contains(where: { $0.name == "Proxy" }) { activeGroupName = "Proxy" }
+            else if let fallback = allGroups.first(where: { $0.type == "Selector" && $0.name != "GLOBAL" }) { activeGroupName = fallback.name }
+        }
+
+        guard let gName = activeGroupName,
+              let group = allGroups.first(where: { $0.name == gName }),
+              let finalNode = group.resolveCurrentPath(groups: allGroups).last else {
+            return nil
+        }
+
+        return proxyNodes[finalNode]?.delay
+    }
+
     private var statusSubscription: AnyCancellable?
     private var refreshTimer: Timer?
 

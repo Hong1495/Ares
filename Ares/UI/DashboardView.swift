@@ -27,7 +27,7 @@ struct DashboardView: View {
             .padding()
         }
         .background(Color(nsColor: .windowBackgroundColor))
-        .navigationTitle("Overview")
+        .navigationTitle("Dashboard")
     }
 }
 

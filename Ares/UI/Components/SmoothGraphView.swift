@@ -167,7 +167,6 @@ struct DualSmoothGraphView: View {
                 drawLine(data: downloadData, color: .green)
             }
         }
-        .background(Color(nsColor: .controlBackgroundColor))
         .drawingGroup() // Metal accel
     }
 }

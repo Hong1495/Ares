@@ -5,44 +5,47 @@ import Combine
 /// Enhanced Real-time Traffic Graph using SwiftUI Charts
 struct EnhancedTrafficGraphView: View {
     @StateObject private var viewModel = TrafficGraphViewModel()
+    var showHeader: Bool = true
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label("Network Traffic", systemImage: "chart.xyaxis.line")
-                    .font(.headline)
-                Spacer()
+        VStack(alignment: .leading, spacing: showHeader ? 12 : 0) {
+            if showHeader {
+                HStack {
+                    Label("Network Traffic", systemImage: "chart.xyaxis.line")
+                        .font(.headline)
+                    Spacer()
 
-                // Legend with traffic rates
-                HStack(spacing: 16) {
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(.cyan)
-                            .frame(width: 8, height: 8)
-                        Text("Upload")
-                            .font(.footnote)
-                            .fontWeight(.medium)
-                        Text(formatSpeed(viewModel.currentUpload))
-                            .font(.footnote)
-                            .fontWeight(.semibold)
-                            .monospacedDigit()
-                            .foregroundStyle(.cyan)
+                    // Legend with traffic rates
+                    HStack(spacing: 16) {
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(.cyan)
+                                .frame(width: 8, height: 8)
+                            Text("Upload")
+                                .font(.footnote)
+                                .fontWeight(.medium)
+                            Text(formatSpeed(viewModel.currentUpload))
+                                .font(.footnote)
+                                .fontWeight(.semibold)
+                                .monospacedDigit()
+                                .foregroundStyle(.cyan)
+                        }
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(.green)
+                                .frame(width: 8, height: 8)
+                            Text("Download")
+                                .font(.footnote)
+                                .fontWeight(.medium)
+                            Text(formatSpeed(viewModel.currentDownload))
+                                .font(.footnote)
+                                .fontWeight(.semibold)
+                                .monospacedDigit()
+                                .foregroundStyle(.green)
+                        }
                     }
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(.green)
-                            .frame(width: 8, height: 8)
-                        Text("Download")
-                            .font(.footnote)
-                            .fontWeight(.medium)
-                        Text(formatSpeed(viewModel.currentDownload))
-                            .font(.footnote)
-                            .fontWeight(.semibold)
-                            .monospacedDigit()
-                            .foregroundStyle(.green)
-                    }
+                    .foregroundStyle(.secondary)
                 }
-                .foregroundStyle(.secondary)
             }
 
             // Speed Chart using SmoothGraphView for 60fps scrolling
@@ -54,13 +57,13 @@ struct EnhancedTrafficGraphView: View {
                 downloadData: downloadData,
                 visibleDuration: 60
             )
-            .frame(height: 180)
-            .padding(.vertical, 12)
-            .padding(.horizontal)
+            .frame(height: showHeader ? 180 : 80)
+            .padding(.vertical, showHeader ? 12 : 4)
+            .padding(.horizontal, showHeader ? 16 : 8)
         }
-        .padding()
-        .background(Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(12)
+        .padding(showHeader ? 16 : 4)
+        .background(showHeader ? Color(nsColor: .controlBackgroundColor) : Color.clear)
+        .cornerRadius(showHeader ? 12 : 0)
         .task {
             await Task.yield()
             viewModel.startMonitoring()

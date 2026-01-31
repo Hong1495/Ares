@@ -39,6 +39,10 @@ class AppState: ObservableObject {
     @Published var systemProxyEnabled = false
     @Published var tunEnabled = false
 
+    // IP Information (Shared across components)
+    @Published var publicIP: String = "Fetching..."
+    @Published var countryCode: String?
+
     // Toggle state guards to prevent race conditions during fast switching
     private var isMITMToggling = false
     private var isTUNToggling = false
@@ -493,5 +497,11 @@ class AppState: ObservableObject {
 
         // Default: System proxy points to Clash
         return (clashHttpPort, clashSocksPort)
+    }
+
+    /// Update shared IP info
+    func updateIPInfo(ip: String, country: String?) {
+        self.publicIP = ip
+        self.countryCode = country
     }
 }
