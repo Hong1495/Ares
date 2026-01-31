@@ -80,8 +80,7 @@ struct ConnectivityTestView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(height: 150)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(12)
+        .cardStyle()
         .task {
             startMonitoring()
         }

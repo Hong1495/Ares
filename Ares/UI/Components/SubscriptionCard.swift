@@ -111,8 +111,7 @@ struct SubscriptionCard: View {
             }
         }
         .frame(height: 150)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(12)
+        .cardStyle()
     }
 
     private func formatBytes(_ bytes: Int64) -> String {

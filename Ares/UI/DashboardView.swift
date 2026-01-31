@@ -168,8 +168,7 @@ struct ProxyServiceCard: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
         .frame(height: 150)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(12)
+        .cardStyle()
     }
 }
 
@@ -234,8 +233,7 @@ struct ProxyModeCard: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(height: 150)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(12)
+        .cardStyle()
     }
 
     private func modeIcon(_ mode: ClashConfig.Mode) -> String {

@@ -126,8 +126,7 @@ struct CurrentProxyCard: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(height: 150)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(12)
+        .cardStyle()
         .task {
             // Wait for Clash to be fully ready before testing
             while !clashViewModel.isRunning || clashViewModel.isToggling {
@@ -245,8 +244,7 @@ struct AdvancedModeCard: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(height: 150)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(12)
+        .cardStyle()
     }
 }
 
@@ -316,10 +314,7 @@ struct IpAddressCard: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
         .frame(height: 150)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(12)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(12)
+        .cardStyle()
         .task {
             updateLocalIP()
             await fetchPublicIP()
@@ -433,10 +428,7 @@ struct ClashInfoCard: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(height: 150)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(12)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(12)
+        .cardStyle()
         .task {
             // Initial Wait
             while !clashViewModel.isRunning {
@@ -557,8 +549,7 @@ struct SystemInfoCard: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(height: 150)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(12)
+        .cardStyle()
         .task {
             await Task.yield()
             fetchSystemInfo()
@@ -637,8 +628,7 @@ struct NodeAnalysisCard: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(height: 150)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(12)
+        .cardStyle()
         .onReceive(clashController.$proxyNodes) { nodes in
             // Calculate stats
             self.nodeCount = nodes.count
@@ -723,8 +713,7 @@ struct ConnectionsCard: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(height: 150)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(12)
+        .cardStyle()
         .task {
             // Wait for Clash to be fully ready
             while !clashViewModel.isRunning || clashViewModel.isToggling {
@@ -815,8 +804,7 @@ struct ErrorLogCard: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
         .frame(height: 150)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(12)
+        .cardStyle()
     }
 
     func cleanLog(_ log: String) -> String {
@@ -874,8 +862,7 @@ struct DNSConfigCard: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
         .frame(height: 150)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(12)
+        .cardStyle()
     }
 }
 
@@ -953,8 +940,7 @@ struct MITMConfigCard: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
         .frame(height: 150)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(12)
+        .cardStyle()
     }
 }
 
@@ -1013,7 +999,6 @@ struct BypassSettingsCard: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
         .frame(height: 150)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(12)
+        .cardStyle()
     }
 }
