@@ -215,7 +215,7 @@ struct AdvancedModeCard: View {
             VStack(alignment: .leading, spacing: 12) {
                 // TUN Toggle
                 HStack {
-                    Text("Enable TUN")
+                    Text("TUN Mode")
                         .font(.body)
                     Spacer()
                     Toggle("", isOn: Binding(
@@ -229,14 +229,14 @@ struct AdvancedModeCard: View {
 
                 // MITM Toggle
                 HStack {
-                    Text("Enable MITM")
+                    Text("MITM Shield")
                         .font(.body)
                     Spacer()
                     Toggle("", isOn: Binding(
                         get: { appState.mitmEnabled },
                         set: { _ in appState.toggleMITM() }
                     ))
-                    .toggleStyle(SwitchToggleStyle(tint: .orange))
+                    .toggleStyle(SwitchToggleStyle(tint: .purple))
                     .labelsHidden()
                 }
             }
@@ -354,8 +354,8 @@ struct IpAddressCard: View {
                 let nodeSelection = getActiveNodeName()
 
                 if currentMode != lastMode || nodeSelection != lastNode {
-                    // Wait a moment for Clash to establish the new connection
-                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    // Optimized stabilization delay: 0.8s
+                    try? await Task.sleep(nanoseconds: 800_000_000)
                     await refreshAll()
                 }
             }
@@ -367,17 +367,13 @@ struct IpAddressCard: View {
     }
 
     private func getActiveNodeName() -> String? {
-        // Look for the main selector node name
         if appState.currentMode == .global {
             return clashController.proxyGroups.first(where: { $0.name == "GLOBAL" })?.now
         }
-
-        // In Rule mode, try to find 🚀 节点选择 or Proxy or simply the first selector
         let allGroups = clashController.proxyGroups
         if let exact = allGroups.first(where: { $0.name == "🚀 节点选择" }) { return exact.now }
         if let exact = allGroups.first(where: { $0.name == "Proxy" }) { return exact.now }
         if let fallback = allGroups.first(where: { $0.type == "Selector" && $0.name != "GLOBAL" }) { return fallback.now }
-
         return nil
     }
 
@@ -426,61 +422,70 @@ struct IpAddressCard: View {
 
     private func fetchPublicIP() async {
         let isProxy = isProxyActive
-
-        // Use a session configuration that supports proxy if needed
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 5.0
+        config.timeoutIntervalForRequest = 3.0 // Fast timeout
 
         if isProxy {
-            // Configure PROXY settings based on AppState logic
             let defaults = UserDefaults.standard
             let basePort = Int(defaults.string(forKey: "mixedPort") ?? "7890") ?? 7890
             let proxyPort = appState.tunEnabled ? 17890 : basePort
 
-            let proxyDict: [AnyHashable: Any] = [
+            config.connectionProxyDictionary = [
                 kCFNetworkProxiesHTTPEnable: 1,
                 kCFNetworkProxiesHTTPProxy: "127.0.0.1",
                 kCFNetworkProxiesHTTPPort: proxyPort,
                 kCFNetworkProxiesHTTPSEnable: 1,
                 kCFNetworkProxiesHTTPSProxy: "127.0.0.1",
                 kCFNetworkProxiesHTTPSPort: proxyPort,
-                // Add SOCKS support for better reliability with Clash
                 kCFStreamPropertySOCKSProxyHost: "127.0.0.1",
                 kCFStreamPropertySOCKSProxyPort: proxyPort
             ]
-            config.connectionProxyDictionary = proxyDict
         }
 
         let session = URLSession(configuration: config)
+        let endpoints = [
+            "https://api.ipify.org?format=json",
+            "https://ifconfig.co/json",
+            "https://api.ip.sb/geoip",
+            "https://ipapi.co/json/"
+        ]
 
-        do {
-            // Use multiple fallback services for robustness
-            let services = [
-                "https://ipapi.co/json/",
-                "https://api.ip.sb/geoip"
-            ]
-
-            for serviceUrl in services {
-                guard let url = URL(string: serviceUrl) else { continue }
-                do {
-                    let (data, _) = try await session.data(from: url)
-                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                        let ip = json["ip"] as? String ?? json["address"] as? String
-                        let code = json["country_code"] as? String ?? json["country"] as? String
-
-                        if let finalIp = ip {
-                            await MainActor.run {
-                                appState.updateIPInfo(ip: finalIp, country: code)
-                            }
-                            return
+        await withTaskGroup(of: (String, String?)?.self) { group in
+            for endpoint in endpoints {
+                group.addTask {
+                    guard let url = URL(string: endpoint) else { return nil }
+                    do {
+                        let (data, _) = try await session.data(from: url)
+                        if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                            let ip = json["ip"] as? String ?? json["address"] as? String
+                            let country = json["country_code"] as? String ?? json["country"] as? String
+                            if let ip = ip { return (ip, country) }
                         }
-                    }
-                } catch {
-                    continue // Try next service
+                    } catch {}
+                    return nil
                 }
             }
-        } catch {
-            await MainActor.run { appState.updateIPInfo(ip: "Offline", country: nil) }
+
+            // 2-Stage Update: Get IP fast, then wait for Geo info
+            var hasIP = false
+            var hasGeo = false
+
+            for await result in group {
+                if let (ip, country) = result {
+                    await MainActor.run {
+                        appState.updateIPInfo(ip: ip, country: country)
+                    }
+
+                    if !hasIP { hasIP = true }
+                    if country != nil { hasGeo = true }
+
+                    // Stop if we have both, or after we've processed a few results
+                    if hasIP && hasGeo {
+                        group.cancelAll()
+                        return
+                    }
+                }
+            }
         }
     }
 }

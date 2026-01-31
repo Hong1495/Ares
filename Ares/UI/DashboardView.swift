@@ -105,7 +105,7 @@ struct ProxyServiceCard: View {
         VStack(spacing: 0) {
             // 1. Header Zone
             HStack(spacing: 12) {
-                Image(systemName: "bolt.horizontal")
+                Image(systemName: "globe")
                     .font(.system(size: 18, weight: .light))
                     .frame(width: 24, height: 24, alignment: .center)
                     .foregroundStyle(.primary)
@@ -125,7 +125,7 @@ struct ProxyServiceCard: View {
             VStack(alignment: .leading, spacing: 12) {
                  // Combined Clash + System Proxy Toggle
                 HStack {
-                    Text("Enable Proxy")
+                    Text("System Proxy")
                         .font(.body)
                     Spacer()
                     Toggle("", isOn: Binding(

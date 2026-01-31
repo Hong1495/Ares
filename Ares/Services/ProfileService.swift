@@ -148,11 +148,13 @@ class ProfileService: ObservableObject {
             throw NSError(domain: "ProfileService", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not a remote profile"])
         }
 
-        print("[ProfileService] Downloading profile from: \(url)")
+        let finalUrl = appendCompatibilityFlags(to: url)
+        print("[ProfileService] Downloading profile from: \(finalUrl)")
 
-        // Download profile with Clash.Meta User-Agent
-        var request = URLRequest(url: url)
-        request.setValue("Clash.Meta", forHTTPHeaderField: "User-Agent")
+        // Unified User-Agent for maximum compatibility
+        let userAgent = "ClashMeta/1.31.0 Enforce (Ares; macOS)"
+        var request = URLRequest(url: finalUrl)
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -209,13 +211,15 @@ class ProfileService: ObservableObject {
         let profileName = profiles[index].name
         let isActive = activeProfileID == id
 
+        let finalUrl = appendCompatibilityFlags(to: url)
         await MainActor.run {
             ClashViewModel.shared.addLog("[ProfileService] 🔄 Updating profile: \(profileName)")
         }
 
-        // Download updated content with Clash User-Agent
-        var request = URLRequest(url: url)
-        request.setValue("Clash.Meta/1.16.0 Enforce (Ares; macOS)", forHTTPHeaderField: "User-Agent")
+        // Unified User-Agent for maximum compatibility
+        let userAgent = "ClashMeta/1.31.0 Enforce (Ares; macOS)"
+        var request = URLRequest(url: finalUrl)
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -545,5 +549,26 @@ class ProfileService: ObservableObject {
 
         if upload == 0 && download == 0 && total == 0 { return nil }
         return SubscriptionInfo(upload: upload, download: download, total: total, expire: expire)
+    }
+
+    /// Automatically append compatibility flags for common panels
+    private func appendCompatibilityFlags(to url: URL) -> URL {
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: true)
+        var queryItems = components?.queryItems ?? []
+
+        // If it's a subscription URL and doesn't have a flag, add flag=clashmeta
+        // This forces panels like V2Board to return YAML with full protocol support
+        if url.path.contains("subscribe") || url.absoluteString.contains("/api/v1/client/subscribe") {
+            if !queryItems.contains(where: { $0.name == "flag" }) {
+                queryItems.append(URLQueryItem(name: "flag", value: "clashmeta"))
+                components?.queryItems = queryItems
+                if let newUrl = components?.url {
+                    print("[ProfileService] 🛠 Auto-appended flag=clashmeta to URL")
+                    return newUrl
+                }
+            }
+        }
+
+        return url
     }
 }

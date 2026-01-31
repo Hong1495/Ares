@@ -502,6 +502,11 @@ class AppState: ObservableObject {
     /// Update shared IP info
     func updateIPInfo(ip: String, country: String?) {
         self.publicIP = ip
-        self.countryCode = country
+        // Only update country if it's not nil, or if we are explicitly clearing it (e.g. "Offline")
+        if let newCountry = country {
+            self.countryCode = newCountry
+        } else if ip == "Offline" {
+            self.countryCode = nil
+        }
     }
 }
