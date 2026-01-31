@@ -250,11 +250,18 @@ struct AdvancedModeCard: View {
 
 // Merged IP Address Card showing both local and public IP
 struct IpAddressCard: View {
+    @EnvironmentObject var appState: AppState
     @EnvironmentObject var clashViewModel: ClashViewModel
+    @EnvironmentObject var clashController: ClashController
+
     @State private var publicIP: String = "Fetching..."
     @State private var country: String?
     @State private var localIP: String = "..."
     @State private var networkType: String = "..."
+
+    // Track current node/mode to detect changes
+    @State private var lastNode: String? = nil
+    @State private var lastMode: ClashConfig.Mode? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -269,6 +276,15 @@ struct IpAddressCard: View {
                     .font(.headline.weight(.medium))
 
                 Spacer()
+
+                // Refresh Button
+                Button(action: {
+                    Task { await refreshAll() }
+                }) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.caption)
+                }
+                .buttonStyle(.plain)
             }
             .frame(height: 24)
             .padding(16)
@@ -280,14 +296,28 @@ struct IpAddressCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 // Public IP
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Public")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    HStack {
+                        Text("Public / Exit")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+
+                        if isProxyActive {
+                            Text("PROXY")
+                                .font(.system(size: 8, weight: .bold))
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(Color.blue.opacity(0.1))
+                                .foregroundStyle(.blue)
+                                .cornerRadius(3)
+                        }
+                    }
+
                     HStack(spacing: 6) {
                         Text(publicIP)
                             .font(.subheadline)
                             .fontWeight(.semibold)
                             .monospacedDigit()
+
                         if let country = country {
                             Text(country)
                                 .font(.caption2)
@@ -316,9 +346,51 @@ struct IpAddressCard: View {
         .frame(height: 150)
         .cardStyle()
         .task {
-            updateLocalIP()
-            await fetchPublicIP()
+            await refreshAll()
+
+            // Watch for changes
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+
+                let currentMode = appState.currentMode
+                let nodeSelection = getActiveNodeName()
+
+                if currentMode != lastMode || nodeSelection != lastNode {
+                    // Wait a moment for Clash to establish the new connection
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    await refreshAll()
+                }
+            }
         }
+    }
+
+    private var isProxyActive: Bool {
+        clashViewModel.isRunning && appState.currentMode != .direct
+    }
+
+    private func getActiveNodeName() -> String? {
+        // Look for the main selector node name
+        if appState.currentMode == .global {
+            return clashController.proxyGroups.first(where: { $0.name == "GLOBAL" })?.now
+        }
+
+        // In Rule mode, try to find 🚀 节点选择 or Proxy or simply the first selector
+        let allGroups = clashController.proxyGroups
+        if let exact = allGroups.first(where: { $0.name == "🚀 节点选择" }) { return exact.now }
+        if let exact = allGroups.first(where: { $0.name == "Proxy" }) { return exact.now }
+        if let fallback = allGroups.first(where: { $0.type == "Selector" && $0.name != "GLOBAL" }) { return fallback.now }
+
+        return nil
+    }
+
+    private func refreshAll() async {
+        await MainActor.run {
+            self.publicIP = "Fetching..."
+        }
+        updateLocalIP()
+        self.lastMode = appState.currentMode
+        self.lastNode = getActiveNodeName()
+        await fetchPublicIP()
     }
 
     private func updateLocalIP() {
@@ -355,24 +427,65 @@ struct IpAddressCard: View {
     }
 
     private func fetchPublicIP() async {
+        let isProxy = isProxyActive
+
+        // Use a session configuration that supports proxy if needed
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 5.0
+
+        if isProxy {
+            // Configure PROXY settings based on AppState logic
+            let defaults = UserDefaults.standard
+            let basePort = Int(defaults.string(forKey: "mixedPort") ?? "7890") ?? 7890
+            let proxyPort = appState.tunEnabled ? 17890 : basePort
+
+            let proxyDict: [AnyHashable: Any] = [
+                kCFNetworkProxiesHTTPEnable: 1,
+                kCFNetworkProxiesHTTPProxy: "127.0.0.1",
+                kCFNetworkProxiesHTTPPort: proxyPort,
+                kCFNetworkProxiesHTTPSEnable: 1,
+                kCFNetworkProxiesHTTPSProxy: "127.0.0.1",
+                kCFNetworkProxiesHTTPSPort: proxyPort,
+                // Add SOCKS support for better reliability with Clash
+                kCFStreamPropertySOCKSProxyHost: "127.0.0.1",
+                kCFStreamPropertySOCKSProxyPort: proxyPort
+            ]
+            config.connectionProxyDictionary = proxyDict
+        }
+
+        let session = URLSession(configuration: config)
+
         do {
-            let url = URL(string: "https://ipapi.co/json/")!
-            let (data, _) = try await URLSession.shared.data(from: url)
-            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                publicIP = json["ip"] as? String ?? "Unknown"
-                country = json["country_code"] as? String
+            // Use multiple fallback services for robustness
+            let services = [
+                "https://ipapi.co/json/",
+                "https://api.ip.sb/geoip"
+            ]
+
+            for serviceUrl in services {
+                guard let url = URL(string: serviceUrl) else { continue }
+                do {
+                    let (data, _) = try await session.data(from: url)
+                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        let ip = json["ip"] as? String ?? json["address"] as? String
+                        let code = json["country_code"] as? String ?? json["country"] as? String
+
+                        if let finalIp = ip {
+                            await MainActor.run {
+                                self.publicIP = finalIp
+                                self.country = code
+                            }
+                            return
+                        }
+                    }
+                } catch {
+                    continue // Try next service
+                }
             }
         } catch {
-            publicIP = "Offline"
+            await MainActor.run { self.publicIP = "Offline" }
         }
     }
-}
-
-
-struct IPInfo {
-    let ip: String
-    let country: String?
-    let city: String?
 }
 
 /// Clash Info Card showing core information
