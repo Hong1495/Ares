@@ -2,38 +2,36 @@ import SwiftUI
 
 struct ConnectivityTestView: View {
     // Value: nil = not tested/loading, -1 = error/timeout, >0 = ms
-    @State private var latencies: [String: Int] = [:] 
+    @State private var latencies: [String: Int] = [:]
     @State private var loadingStates: [String: Bool] = [:]
-    
+
     let sites = [
         ("Google", "https://www.google.com", "globe"),
         ("Github", "https://github.com", "chevron.left.forwardslash.chevron.right"),
         ("Gemini", "https://gemini.google.com", "sparkles")
     ]
-    
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Header
-            HStack {
-                Label {
-                    Text("Connectivity")
-                } icon: {
-                    Image(systemName: "antenna.radiowaves.left.and.right")
-                        .fontWeight(.light)
-                        .frame(width: 20)
-                }
-                .font(.headline.weight(.medium))
-                
+        VStack(spacing: 0) {
+            // 1. Header Zone
+            HStack(spacing: 12) {
+                Image(systemName: "antenna.radiowaves.left.and.right")
+                    .font(.system(size: 18, weight: .light))
+                    .frame(width: 24, height: 24, alignment: .center)
+                    .foregroundStyle(.primary)
+
+                Text("Connectivity")
+                    .font(.headline.weight(.medium))
+
                 Spacer()
-                
-                // Auto-refresh only
             }
-            .frame(height: 24) // Standard Header Height
-            
+            .frame(height: 24)
+            .padding(16)
+
             Divider()
-            
-            Spacer()
-            
+                .padding(.horizontal, 16)
+
+            // 2. Content Zone
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                 ForEach(sites, id: \.0) { site in
                     VStack(spacing: 4) {
@@ -41,13 +39,13 @@ struct ConnectivityTestView: View {
                             .font(.title3) // Slightly smaller icon
                             .foregroundStyle(.primary)
                             .frame(height: 24)
-                        
+
                         Text(site.0)
                             .font(.caption2)
                             .fontWeight(.medium)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
-                        
+
                         if loadingStates[site.0] == true {
                             ProgressView().scaleEffect(0.5)
                                 .frame(height: 16)
@@ -76,40 +74,39 @@ struct ConnectivityTestView: View {
                     .background(Color(nsColor: .windowBackgroundColor))
                     .cornerRadius(8)
                     .contentShape(Rectangle())
-                    // Manual retry removed as requested
                 }
             }
+            .padding(16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding()
         .frame(height: 150)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
         .task {
             startMonitoring()
         }
     }
-    
+
     @State private var retryTask: Task<Void, Never>?
-    
+
     // ... (keep body until .task) ...
-    // NOTE: Due to length limits, I need to be precise. 
+    // NOTE: Due to length limits, I need to be precise.
     // The previous body code ends at .task.
-    // I will replace `testAll` and `testSite` with a robust continuous loop mechanism, 
+    // I will replace `testAll` and `testSite` with a robust continuous loop mechanism,
     // and trigger it from .task.
-    
+
     // Actually the user wants "Connectivity... auto recovery".
     // This implies if a site fails, it should retry.
     // If all pass, should it keep testing? Probably periodically (e.g. every 30s) to keep status fresh?
     // "Regularly fetch" (定期获取) was requested.
-        
+
     @MainActor
     func startMonitoring() {
         retryTask?.cancel()
         retryTask = Task {
             // Initial delay
             try? await Task.sleep(nanoseconds: 1_000_000_000)
-            
+
             while !Task.isCancelled {
                 // Check if Clash is running
                 if !ClashViewModel.shared.isRunning {
@@ -118,7 +115,7 @@ struct ConnectivityTestView: View {
                 }
 
                 await testAll()
-                
+
                 // Wait for next cycle (e.g. 15 seconds)
                 try? await Task.sleep(nanoseconds: 15_000_000_000)
             }
@@ -135,30 +132,30 @@ struct ConnectivityTestView: View {
             }
         }
     }
-    
+
     @MainActor
     func testSite(name: String, url: String) async {
         // If already loading, skip? No, force refresh.
         loadingStates[name] = true
         // latencies[name] = nil // Don't clear old value during refresh, looks cleaner
-        
+
         var finalLatency: Int? = nil
         // 2 attempts
-        for _ in 1...2 { 
+        for _ in 1...2 {
             if let latency = await measureLatency(url: url) {
                 finalLatency = latency
                 break
             }
             try? await Task.sleep(nanoseconds: 1_000_000_000)
         }
-        
+
         let result = finalLatency ?? -1
         self.loadingStates[name] = false
         withAnimation {
             self.latencies[name] = result
         }
     }
-    
+
     private func measureLatency(url: String) async -> Int? {
         let isRunning = await MainActor.run { ClashViewModel.shared.isRunning }
         guard isRunning else { return nil }
@@ -168,21 +165,21 @@ struct ConnectivityTestView: View {
         if !urlString.hasPrefix("http") {
              urlString = "https://\(urlString)"
         }
-        
+
         guard let targetURL = URL(string: urlString) else { return nil }
-        
+
         var request = URLRequest(url: targetURL)
         request.httpMethod = "HEAD"
         request.timeoutInterval = 3.0 // Snappy timeout
         request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-        
+
         let start = Date()
-        
+
         do {
             let config = URLSessionConfiguration.ephemeral
             config.timeoutIntervalForRequest = 3.0
             let session = URLSession(configuration: config)
-            
+
             let (_, response) = try await session.data(for: request)
             if let httpResponse = response as? HTTPURLResponse, (200...499).contains(httpResponse.statusCode) {
                 let elapsed = Date().timeIntervalSince(start)
@@ -200,16 +197,16 @@ class ConnectivityDelegate: NSObject, URLSessionDelegate {
     func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
         if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
            let serverTrust = challenge.protectionSpace.serverTrust {
-            
+
             // Allow if it's our own MITM CA
             let caPath = CertificateManager.shared.rootCAPath.path
             if let caData = try? Data(contentsOf: URL(fileURLWithPath: caPath)),
                let caCert = SecCertificateCreateWithData(nil, caData as CFData) {
-                
+
                 // Set our CA as the anchor
                 SecTrustSetAnchorCertificates(serverTrust, [caCert] as CFArray)
                 SecTrustSetAnchorCertificatesOnly(serverTrust, false) // Allow system roots too
-                
+
                 var error: CFError?
                 if SecTrustEvaluateWithError(serverTrust, &error) {
                     print("[Connectivity] ✅ Trust evaluation succeeded for internal CA")
@@ -221,7 +218,7 @@ class ConnectivityDelegate: NSObject, URLSessionDelegate {
             }
         }
 
-        
+
         // Fallback to default handling
         completionHandler(.performDefaultHandling, nil)
     }

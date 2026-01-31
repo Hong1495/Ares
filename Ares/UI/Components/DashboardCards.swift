@@ -37,16 +37,17 @@ struct CurrentProxyCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label {
-                    Text("Current Proxy")
-                } icon: {
-                    Image(systemName: "server.rack")
-                        .fontWeight(.light)
-                        .frame(width: 20)
-                }
-                .font(.headline)
+        VStack(spacing: 0) {
+            // 1. Header Zone
+            HStack(spacing: 12) {
+                Image(systemName: "server.rack")
+                    .font(.system(size: 18, weight: .light))
+                    .frame(width: 24, height: 24, alignment: .center)
+                    .foregroundStyle(.primary)
+
+                Text("Current Proxy")
+                    .font(.headline.weight(.medium))
+
                 Spacer()
                 // Mode indicator
                 Text(appState.currentMode.rawValue.capitalized)
@@ -58,79 +59,73 @@ struct CurrentProxyCard: View {
                     .foregroundStyle(modeColor)
                     .cornerRadius(6)
             }
-            .frame(height: 24) // Align header height
+            .frame(height: 24)
+            .padding(16)
 
             Divider()
+                .padding(.horizontal, 16)
 
-            if appState.currentMode == .direct {
-                // Direct mode
-                VStack {
-                    Spacer()
+            // 2. Content Zone
+            VStack {
+                if appState.currentMode == .direct {
+                    // Direct mode
                     HStack {
                         Image(systemName: "arrow.forward.circle")
                             .foregroundStyle(.green)
                         Text("Direct Connection")
                             .font(.subheadline)
-                        Spacer()
                     }
-                    Spacer()
-                }
-            } else if displayGroups.isEmpty {
-                 VStack {
-                    Spacer()
-                    Text("No proxy configured")
+                } else if displayGroups.isEmpty {
+                     Text("No proxy configured")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    Spacer()
-                }
-            } else {
-                // Show groups with latency on right
-                Spacer()
-                ForEach(displayGroups) { group in
-                    HStack(alignment: .center, spacing: 16) {
-                        // Left: Group names
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(group.name)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                            if let current = group.now {
-                                Text(current)
-                                    .font(.body)
-                                    .fontWeight(.medium)
-                                    .foregroundStyle(.primary)
+                } else {
+                    // Show groups with latency on right
+                    ForEach(displayGroups) { group in
+                        HStack(alignment: .center, spacing: 16) {
+                            // Left: Group names
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(group.name)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
                                     .lineLimit(1)
+                                if let current = group.now {
+                                    Text(current)
+                                        .font(.body)
+                                        .fontWeight(.medium)
+                                        .foregroundStyle(.primary)
+                                        .lineLimit(1)
+                                }
                             }
-                        }
 
+                            Spacer()
 
-                        Spacer()
-
-                        // Right: Latency in large font
-                        if let current = group.now, let ms = latencies[current] {
-                            Text("\(ms)")
-                                .font(.system(size: 40, weight: .bold, design: .rounded))
-                                .monospacedDigit()
-                                .foregroundStyle(latencyColor(ms))
-                            + Text("ms")
-                                .font(.system(size: 14, weight: .medium, design: .rounded))
-                                .foregroundStyle(latencyColor(ms).opacity(0.8))
-                        } else {
-                            Text("--")
-                                .font(.system(size: 40, weight: .bold, design: .rounded))
-                                .foregroundStyle(.secondary)
-                            + Text("ms")
-                                .font(.system(size: 14, weight: .medium, design: .rounded))
-                                .foregroundStyle(.secondary.opacity(0.6))
+                            // Right: Latency in large font
+                            if let current = group.now, let ms = latencies[current] {
+                                Text("\(ms)")
+                                    .font(.system(size: 40, weight: .bold, design: .rounded))
+                                    .monospacedDigit()
+                                    .foregroundStyle(latencyColor(ms))
+                                + Text("ms")
+                                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                                    .foregroundStyle(latencyColor(ms).opacity(0.8))
+                            } else {
+                                Text("--")
+                                    .font(.system(size: 40, weight: .bold, design: .rounded))
+                                    .foregroundStyle(.secondary)
+                                + Text("ms")
+                                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                                    .foregroundStyle(.secondary.opacity(0.6))
+                            }
                         }
                     }
                 }
             }
+            .padding(16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding()
         .frame(height: 150)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
         .task {
@@ -198,21 +193,26 @@ struct AdvancedModeCard: View {
     @EnvironmentObject var clashViewModel: ClashViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label {
-                Text("Advanced Mode")
-            } icon: {
+        VStack(spacing: 0) {
+            // 1. Header Zone
+            HStack(spacing: 12) {
                 Image(systemName: "bolt.shield")
-                    .fontWeight(.light)
-                    .frame(width: 20)
+                    .font(.system(size: 18, weight: .light))
+                    .frame(width: 24, height: 24, alignment: .center)
+                    .foregroundStyle(.primary)
+
+                Text("Advanced Mode")
+                    .font(.headline.weight(.medium))
+
+                Spacer()
             }
-            .font(.headline.weight(.medium))
             .frame(height: 24)
+            .padding(16)
 
             Divider()
+                .padding(.horizontal, 16)
 
-            Spacer()
-
+            // 2. Content Zone
             VStack(alignment: .leading, spacing: 12) {
                 // TUN Toggle
                 HStack {
@@ -241,12 +241,10 @@ struct AdvancedModeCard: View {
                     .labelsHidden()
                 }
             }
-
-            Spacer()
+            .padding(16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding()
         .frame(height: 150)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
     }
@@ -261,21 +259,26 @@ struct IpAddressCard: View {
     @State private var networkType: String = "..."
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label {
-                Text("IP Address")
-            } icon: {
+        VStack(spacing: 0) {
+            // 1. Header Zone
+            HStack(spacing: 12) {
                 Image(systemName: "globe.americas")
-                    .fontWeight(.light)
-                    .frame(width: 20)
+                    .font(.system(size: 18, weight: .light))
+                    .frame(width: 24, height: 24, alignment: .center)
+                    .foregroundStyle(.primary)
+
+                Text("IP Address")
+                    .font(.headline.weight(.medium))
+
+                Spacer()
             }
-            .font(.headline.weight(.medium))
             .frame(height: 24)
+            .padding(16)
 
             Divider()
+                .padding(.horizontal, 16)
 
-            Spacer()
-
+            // 2. Content Zone
             VStack(alignment: .leading, spacing: 8) {
                 // Public IP
                 VStack(alignment: .leading, spacing: 2) {
@@ -309,12 +312,12 @@ struct IpAddressCard: View {
                         .monospacedDigit()
                 }
             }
-
-            Spacer()
+            .padding(16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
-        .padding()
         .frame(height: 150)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .cornerRadius(12)
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
         .task {
@@ -383,21 +386,26 @@ struct ClashInfoCard: View {
     @State private var memory: Int64 = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label {
+        VStack(spacing: 0) {
+            // 1. Header Zone
+            HStack(spacing: 12) {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 18, weight: .light))
+                    .frame(width: 24, height: 24, alignment: .center)
+                    .foregroundStyle(.primary)
+
                 Text("Clash Core")
-            } icon: {
-                Image(systemName: "gearshape") // Simpler icon
-                    .fontWeight(.light)
-                    .frame(width: 20)
+                    .font(.headline.weight(.medium))
+
+                Spacer()
             }
-            .font(.headline.weight(.medium))
             .frame(height: 24)
+            .padding(16)
 
             Divider()
+                .padding(.horizontal, 16)
 
-            Spacer()
-
+            // 2. Content Zone
             VStack(alignment: .leading, spacing: 4) {
                  HStack {
                     Text("Version")
@@ -421,10 +429,12 @@ struct ClashInfoCard: View {
                         .monospacedDigit()
                 }
             }
+            .padding(16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding()
         .frame(height: 150)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .cornerRadius(12)
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
         .task {
@@ -501,21 +511,26 @@ struct SystemInfoCard: View {
     @State private var osVersion: String = "Unknown"
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label {
+        VStack(spacing: 0) {
+            // 1. Header Zone
+            HStack(spacing: 12) {
+                Image(systemName: "cpu")
+                    .font(.system(size: 18, weight: .light))
+                    .frame(width: 24, height: 24, alignment: .center)
+                    .foregroundStyle(.primary)
+
                 Text("System")
-            } icon: {
-                Image(systemName: "cpu") // Simple icon
-                    .fontWeight(.light)
-                    .frame(width: 20)
+                    .font(.headline.weight(.medium))
+
+                Spacer()
             }
-            .font(.headline.weight(.medium))
             .frame(height: 24)
+            .padding(16)
 
             Divider()
+                .padding(.horizontal, 16)
 
-            Spacer()
-
+            // 2. Content Zone
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text("macOS")
@@ -538,10 +553,10 @@ struct SystemInfoCard: View {
                         .fontWeight(.medium)
                 }
             }
+            .padding(16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding()
         .frame(height: 150)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
         .task {
@@ -574,21 +589,26 @@ struct NodeAnalysisCard: View {
     @State private var nodeCount: Int = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label {
-                Text("Node Analysis")
-            } icon: {
+        VStack(spacing: 0) {
+            // 1. Header Zone
+            HStack(spacing: 12) {
                 Image(systemName: "chart.bar.doc.horizontal")
-                    .fontWeight(.light)
-                    .frame(width: 20)
+                    .font(.system(size: 18, weight: .light))
+                    .frame(width: 24, height: 24, alignment: .center)
+                    .foregroundStyle(.primary)
+
+                Text("Node Analysis")
+                    .font(.headline.weight(.medium))
+
+                Spacer()
             }
-            .font(.headline.weight(.medium))
             .frame(height: 24)
+            .padding(16)
 
             Divider()
+                .padding(.horizontal, 16)
 
-            Spacer()
-
+            // 2. Content Zone
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text("Total Nodes")
@@ -613,10 +633,10 @@ struct NodeAnalysisCard: View {
                         .foregroundStyle(delayColor(avgDelay))
                 }
             }
+            .padding(16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding()
         .frame(height: 150)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
         .onReceive(clashController.$proxyNodes) { nodes in
@@ -646,21 +666,26 @@ struct ConnectionsCard: View {
     @State private var totalConnections: Int = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label {
-                Text("Connections")
-            } icon: {
+        VStack(spacing: 0) {
+            // 1. Header Zone
+            HStack(spacing: 12) {
                 Image(systemName: "network")
-                    .fontWeight(.light)
-                    .frame(width: 20)
+                    .font(.system(size: 18, weight: .light))
+                    .frame(width: 24, height: 24, alignment: .center)
+                    .foregroundStyle(.primary)
+
+                Text("Connections")
+                    .font(.headline.weight(.medium))
+
+                Spacer()
             }
-            .font(.headline.weight(.medium))
             .frame(height: 24)
+            .padding(16)
 
             Divider()
+                .padding(.horizontal, 16)
 
-            Spacer()
-
+            // 2. Content Zone
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text("Active")
@@ -694,10 +719,10 @@ struct ConnectionsCard: View {
                     }
                 }
             }
+            .padding(16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding()
         .frame(height: 150)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
         .task {
@@ -744,46 +769,52 @@ struct ErrorLogCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label {
-                Text("Error Logs")
-            } icon: {
+        VStack(spacing: 0) {
+            // 1. Header Zone
+            HStack(spacing: 12) {
                 Image(systemName: "exclamationmark.triangle")
-                    .fontWeight(.light)
-                    .frame(width: 20)
+                    .font(.system(size: 18, weight: .light))
+                    .frame(width: 24, height: 24, alignment: .center)
+
+                Text("Error Logs")
+                    .font(.headline.weight(.medium))
+
+                Spacer()
             }
-            .font(.headline.weight(.medium))
             .frame(height: 24)
             .foregroundStyle(errorLogs.isEmpty ? Color.primary : Color.orange)
+            .padding(16)
 
             Divider()
+                .padding(.horizontal, 16)
 
-            Spacer()
-
-            if errorLogs.isEmpty {
-                HStack {
-                    Image(systemName: "checkmark.circle")
-                        .foregroundStyle(.green)
-                    Text("No active errors")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            } else {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(errorLogs, id: \.self) { log in
-                        Text(cleanLog(log))
-                            .font(.caption2) // Tiny text for logs
+            // 2. Content Zone
+            VStack(alignment: .leading, spacing: 4) {
+                 if errorLogs.isEmpty {
+                    HStack {
+                        Image(systemName: "checkmark.circle")
+                            .foregroundStyle(.green)
+                        Text("No active errors")
+                            .font(.caption)
                             .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(errorLogs, id: \.self) { log in
+                            Text(cleanLog(log))
+                                .font(.caption2) // Tiny text for logs
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
             }
+            .padding(16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
-        .padding()
         .frame(height: 150)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
     }
@@ -806,21 +837,26 @@ struct DNSConfigCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label {
-                Text("DNS")
-            } icon: {
+        VStack(spacing: 0) {
+            // 1. Header Zone
+            HStack(spacing: 12) {
                 Image(systemName: "network.badge.shield.half.filled")
-                    .fontWeight(.light)
-                    .frame(width: 20)
+                    .font(.system(size: 18, weight: .light))
+                    .frame(width: 24, height: 24, alignment: .center)
+                    .foregroundStyle(.primary)
+
+                Text("DNS")
+                    .font(.headline.weight(.medium))
+
+                Spacer()
             }
-            .font(.headline.weight(.medium))
             .frame(height: 24)
+            .padding(16)
 
             Divider()
+                .padding(.horizontal, 16)
 
-            Spacer()
-
+            // 2. Content Zone
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(dnsArray, id: \.self) { dns in
                     HStack(spacing: 6) {
@@ -834,10 +870,10 @@ struct DNSConfigCard: View {
                     }
                 }
             }
+            .padding(16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
-        .padding()
         .frame(height: 150)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
     }
@@ -866,21 +902,26 @@ struct MITMConfigCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label {
-                Text("MITM Config")
-            } icon: {
+        VStack(spacing: 0) {
+            // 1. Header Zone
+            HStack(spacing: 12) {
                 Image(systemName: "eyeglasses")
-                    .fontWeight(.light)
-                    .frame(width: 20)
+                    .font(.system(size: 18, weight: .light))
+                    .frame(width: 24, height: 24, alignment: .center)
+                    .foregroundStyle(.primary)
+
+                Text("MITM Config")
+                    .font(.headline.weight(.medium))
+
+                Spacer()
             }
-            .font(.headline.weight(.medium))
             .frame(height: 24)
+            .padding(16)
 
             Divider()
+                .padding(.horizontal, 16)
 
-            Spacer()
-
+            // 2. Content Zone
             VStack(alignment: .leading, spacing: 6) {
                 // Ports
                 HStack {
@@ -908,10 +949,10 @@ struct MITMConfigCard: View {
                     }
                 }
             }
+            .padding(16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
-        .padding()
         .frame(height: 150)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
     }
@@ -930,21 +971,26 @@ struct BypassSettingsCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label {
-                Text("Bypass Rules")
-            } icon: {
+        VStack(spacing: 0) {
+            // 1. Header Zone
+            HStack(spacing: 12) {
                 Image(systemName: "arrow.triangle.turn.up.right.diamond")
-                    .fontWeight(.light)
-                    .frame(width: 20)
+                    .font(.system(size: 18, weight: .light))
+                    .frame(width: 24, height: 24, alignment: .center)
+                    .foregroundStyle(.primary)
+
+                Text("Bypass Rules")
+                    .font(.headline.weight(.medium))
+
+                Spacer()
             }
-            .font(.headline.weight(.medium))
             .frame(height: 24)
+            .padding(16)
 
             Divider()
+                .padding(.horizontal, 16)
 
-            Spacer()
-
+            // 2. Content Zone
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(ruleArray, id: \.self) { rule in
                     HStack(spacing: 6) {
@@ -963,10 +1009,10 @@ struct BypassSettingsCard: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .padding(16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
-        .padding()
         .frame(height: 150)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
     }

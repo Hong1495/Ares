@@ -2,22 +2,21 @@ import SwiftUI
 
 struct SubscriptionCard: View {
     @EnvironmentObject var profileService: ProfileService
-    
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Header
-            HStack {
-                Label {
-                    Text("Subscription")
-                } icon: {
-                    Image(systemName: "creditcard") // Simple line icon
-                        .fontWeight(.light)
-                        .frame(width: 20)
-                }
-                .font(.headline.weight(.medium))
-                
+        VStack(spacing: 0) {
+            // 1. Header Zone
+            HStack(spacing: 12) {
+                Image(systemName: "creditcard")
+                    .font(.system(size: 18, weight: .light))
+                    .frame(width: 24, height: 24, alignment: .center)
+                    .foregroundStyle(.primary)
+
+                Text("Subscription")
+                    .font(.headline.weight(.medium))
+
                 Spacer()
-                
+
                 if let profile = profileService.activeProfile {
                     Text(profile.name)
                         .font(.caption)
@@ -27,7 +26,7 @@ struct SubscriptionCard: View {
                         .background(Color.gray.opacity(0.1))
                         .cornerRadius(4)
                 }
-                
+
                 Button(action: {
                     Task {
                         // Refresh logic if needed, or just reload profiles
@@ -43,15 +42,16 @@ struct SubscriptionCard: View {
                 .buttonStyle(.plain)
                 .help("Refresh Subscription")
             }
-            .frame(height: 24) // Standard Header Height
-            
+            .frame(height: 24)
+            .padding(16)
+
             Divider()
-            
-            Spacer()
-            
+                .padding(.horizontal, 16)
+
+            // 2. Content Zone
             if let profile = profileService.activeProfile, let sub = profile.subscriptionInfo {
                 VStack(alignment: .leading, spacing: 8) {
-                    
+
                     // Usage Stats
                     HStack {
                         Text("Used")
@@ -62,13 +62,13 @@ struct SubscriptionCard: View {
                             .font(.caption)
                             .fontWeight(.medium)
                     }
-                    
+
                     // Progress Bar
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
                             RoundedRectangle(cornerRadius: 3)
                                 .fill(Color.gray.opacity(0.15))
-                            
+
                             let fraction = Double(sub.upload + sub.download) / Double(max(sub.total, 1))
                             RoundedRectangle(cornerRadius: 3)
                                 .fill(fraction > 0.9 ? Color.red : (fraction > 0.7 ? Color.orange : Color.blue))
@@ -76,13 +76,13 @@ struct SubscriptionCard: View {
                         }
                     }
                     .frame(height: 6)
-                    
+
                     // Expiry
                     if let expire = sub.expire {
                         HStack(spacing: 4) {
                             Image(systemName: "calendar")
                             Text("Expires: \(formatDate(expire))")
-                            
+
                             // Days remaining calculation
                             let days = Calendar.current.dateComponents([.day], from: Date(), to: expire).day ?? 0
                             if days < 7 {
@@ -95,6 +95,8 @@ struct SubscriptionCard: View {
                         .padding(.top, 2)
                     }
                 }
+                .padding(16)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 VStack(spacing: 8) {
                     Image(systemName: "nosign")
@@ -104,29 +106,22 @@ struct SubscriptionCard: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                .frame(maxWidth: .infinity)
+                .padding(16)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            
-            // Bottom Align
-            // Spacer() // Spacer already exists above content to push it down? 
-            // Actually standard pattern is Spacer above content pushes content down? 
-            // No, standard pattern in other cards: Header -> Divider -> Spacer -> Content.
-            // This pushes content to Bottom.
         }
-        .padding()
         .frame(height: 150)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
     }
-    
+
     private func formatBytes(_ bytes: Int64) -> String {
         let formatter = ByteCountFormatter()
         formatter.allowedUnits = [.useGB, .useMB]
         formatter.countStyle = .file
         return formatter.string(fromByteCount: bytes)
     }
-    
+
     private func formatDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium

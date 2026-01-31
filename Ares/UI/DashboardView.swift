@@ -102,67 +102,72 @@ struct ProxyServiceCard: View {
     @EnvironmentObject var appState: AppState
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-                Label {
-                    Text("Proxy Service")
-                } icon: {
-                    Image(systemName: "bolt.horizontal")
-                        .fontWeight(.light)
-                        .frame(width: 20)
-                }
-                .font(.headline.weight(.medium))
-                .frame(height: 24) // Align Header
+        VStack(spacing: 0) {
+            // 1. Header Zone
+            HStack(spacing: 12) {
+                Image(systemName: "bolt.horizontal")
+                    .font(.system(size: 18, weight: .light))
+                    .frame(width: 24, height: 24, alignment: .center)
+                    .foregroundStyle(.primary)
+
+                Text("Proxy Service")
+                    .font(.headline.weight(.medium))
+
+                Spacer()
+            }
+            .frame(height: 24)
+            .padding(16)
 
             Divider()
+                .padding(.horizontal, 16)
 
-            Spacer()
-
-            // Combined Clash + System Proxy Toggle
-            HStack {
-                Text("Enable Proxy")
-                    .font(.body)
-                Spacer()
-                Toggle("", isOn: Binding(
-                    get: { clashViewModel.isRunning && appState.systemProxyEnabled },
-                    set: { enabled in
-                        Task {
-                            if enabled {
-                                // Start Clash first
-                                await clashViewModel.start()
-                                // Wait a bit for Clash to be ready
-                                try? await Task.sleep(nanoseconds: 500_000_000)
-                                // Then enable system proxy
-                                await appState.toggleSystemProxy()
-                            } else {
-                                // Disable system proxy first
-                                if appState.systemProxyEnabled {
+            // 2. Content Zone
+            VStack(alignment: .leading, spacing: 12) {
+                 // Combined Clash + System Proxy Toggle
+                HStack {
+                    Text("Enable Proxy")
+                        .font(.body)
+                    Spacer()
+                    Toggle("", isOn: Binding(
+                        get: { clashViewModel.isRunning && appState.systemProxyEnabled },
+                        set: { enabled in
+                            Task {
+                                if enabled {
+                                    // Start Clash first
+                                    await clashViewModel.start()
+                                    // Wait a bit for Clash to be ready
+                                    try? await Task.sleep(nanoseconds: 500_000_000)
+                                    // Then enable system proxy
                                     await appState.toggleSystemProxy()
+                                } else {
+                                    // Disable system proxy first
+                                    if appState.systemProxyEnabled {
+                                        await appState.toggleSystemProxy()
+                                    }
+                                    // Then stop Clash
+                                    await clashViewModel.stop()
                                 }
-                                // Then stop Clash
-                                await clashViewModel.stop()
                             }
                         }
-                    }
-                ))
-                .toggleStyle(SwitchToggleStyle(tint: .green))
-                .labelsHidden()
-                .disabled(clashViewModel.isToggling)
+                    ))
+                    .toggleStyle(SwitchToggleStyle(tint: .green))
+                    .labelsHidden()
+                    .disabled(clashViewModel.isToggling)
+                }
+
+                let statusText = clashViewModel.isRunning ?
+                    (appState.systemProxyEnabled ? "Proxy enabled (port 7890)" : "Clash running (Proxy OFF)") :
+                    "Proxy disabled"
+
+                Text(statusText)
+                    .font(.footnote)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
             }
-
-            let statusText = clashViewModel.isRunning ?
-                (appState.systemProxyEnabled ? "Proxy enabled (port 7890)" : "Clash running (Proxy OFF)") :
-                "Proxy disabled"
-
-            Text(statusText)
-                .font(.footnote)
-                .fontWeight(.medium)
-                .foregroundStyle(.secondary)
-
-            // Spacer() removed for bottom alignment
+            .padding(16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
-        .padding()
         .frame(height: 150)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
     }
@@ -173,21 +178,26 @@ struct ProxyModeCard: View {
     @EnvironmentObject var appState: AppState
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label {
-                Text("Proxy Mode")
-            } icon: {
+        VStack(spacing: 0) {
+            // 1. Header Zone
+            HStack(spacing: 12) {
                 Image(systemName: "arrow.triangle.branch")
-                    .fontWeight(.light)
-                    .frame(width: 20)
+                    .font(.system(size: 18, weight: .light))
+                    .frame(width: 24, height: 24, alignment: .center)
+                    .foregroundStyle(.primary)
+
+                Text("Proxy Mode")
+                    .font(.headline.weight(.medium))
+
+                Spacer()
             }
-            .font(.headline.weight(.medium))
-            .frame(height: 24) // Align Header
+            .frame(height: 24)
+            .padding(16)
 
             Divider()
+                .padding(.horizontal, 16)
 
-            Spacer()
-
+            // 2. Content Zone
             HStack(spacing: 12) {
                 ForEach([ClashConfig.Mode.rule, .global, .direct], id: \.self) { mode in
                     Button {
@@ -220,11 +230,9 @@ struct ProxyModeCard: View {
                     .buttonStyle(.plain)
                 }
             }
-
-            // Spacer() removed for bottom alignment
-            // Removed mode description to save space/align
+            .padding(16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding()
         .frame(height: 150)
         .background(Color(nsColor: .controlBackgroundColor))
         .cornerRadius(12)
