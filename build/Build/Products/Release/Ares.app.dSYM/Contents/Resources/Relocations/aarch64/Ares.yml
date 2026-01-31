@@ -1,5 +1,0 @@
----
-triple:          'arm64-apple-darwin'
-binary-path:     '/Volumes/HAS2T/Project/HeraStudio/Ares/build/Build/Products/Release/Ares.app/Contents/MacOS/Ares'
-relocations:     []
-...
