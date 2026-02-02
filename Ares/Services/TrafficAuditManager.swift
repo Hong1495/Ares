@@ -117,6 +117,9 @@ final class TrafficAuditManager: ObservableObject {
     // Map: ConnectionID -> (Upload, Download)
     private var connectionSnapshots: [String: (up: Int64, down: Int64)] = [:]
 
+    // Cache: Original Path -> Parsed Main Bundle Path
+    private var pathCache: [String: String] = [:]
+
     private var lastUpdateTime: Date = Date()
 
     private init() {}
@@ -254,21 +257,34 @@ final class TrafficAuditManager: ObservableObject {
     private func findMainBundle(_ path: String?) -> String {
         guard let path = path, !path.isEmpty else { return "Unknown" }
 
-        // 1. STANDARD MERGING: Check for .app Bundle FIRST
-        // If it's inside an app, it belongs to that app. Period.
-        if let appBundle = findEnclosingAppBundle(path) {
-            return appBundle
+        // 0. Cache hit
+        if let cached = pathCache[path] {
+            return cached
         }
 
-        // 2. Extensions (Outside of .app, e.g. ~/.vscode/extensions)
-        if path.contains(".vscode/extensions") { return "/Applications/Visual Studio Code.app" }
-        if path.contains(".cursor/extensions") { return "/Applications/Cursor.app" }
+        // 1. STANDARD MERGING: Check for .app Bundle FIRST
+        let result: String
+        if let appBundle = findEnclosingAppBundle(path) {
+            result = appBundle
+        } else if path.contains(".vscode/extensions") {
+            result = "/Applications/Visual Studio Code.app"
+        } else if path.contains(".cursor/extensions") {
+            result = "/Applications/Cursor.app"
+        } else if path.hasSuffix("language_server_macos_arm") {
+            result = "Code Intelligence (LSP)"
+        } else {
+            result = path
+        }
 
-        // 3. Standalone Binaries (Fallback for tools outside apps)
-        if path.hasSuffix("language_server_macos_arm") { return "Code Intelligence (LSP)" }
+        // Cache the result
+        pathCache[path] = result
 
-        // 4. Default: Return original path
-        return path
+        // Safety: Prevent cache from growing infinitely
+        if pathCache.count > 1000 {
+            pathCache.removeAll()
+        }
+
+        return result
     }
 
     /// Helper to find the nearest .app parent

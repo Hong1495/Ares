@@ -234,6 +234,9 @@ class ClashController: ObservableObject {
         receiveTrafficMessage()
     }
 
+    private var lastTrafficUpdate: Date = Date()
+    private var lastTrafficStats: TrafficStats = TrafficStats()
+
     private func receiveTrafficMessage() {
         guard isMonitoring, let ws = trafficWebSocket else { return }
 
@@ -254,8 +257,17 @@ class ClashController: ObservableObject {
                     guard self.isMonitoring, self.trafficWebSocket === ws else { break }
 
                     self.consecutiveFailures = 0
+                    // 优化：在此处进行节流 (Throttling)
+                    // 仅当距离上次更新超过 500ms 时才推送给 UI
+                    let now = Date()
                     if let s = stats {
-                        self.traffic = s
+                        // 总是保存最新的 stats
+                        self.lastTrafficStats = s
+
+                        if now.timeIntervalSince(self.lastTrafficUpdate) > 0.5 {
+                            self.traffic = s
+                            self.lastTrafficUpdate = now
+                        }
                     }
 
                 } catch {

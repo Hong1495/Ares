@@ -43,71 +43,25 @@ struct TopologyView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            TimelineView(.animation) { timeline in
-                Canvas { context, size in
-                    let time = timeline.date.timeIntervalSinceReferenceDate
-
-                    // 1. Draw Edges (Curves)
-                    for edge in graph.edges {
-                        if let startNode = graph.nodes.first(where: { $0.id == edge.from }),
-                           let endNode = graph.nodes.first(where: { $0.id == edge.to }) {
-
-                            let start = startNode.position
-                            let end = endNode.position
-
-                            // Bundled Bezier Curve
-                            // Control points are shifted vertically based on controlOffset
-                            // creating a "bunched at ends, spread in middle" look
-                            let midX = start.x + (end.x - start.x) * 0.5
-                            let control1 = CGPoint(x: midX, y: start.y + edge.controlOffset)
-                            let control2 = CGPoint(x: midX, y: end.y + edge.controlOffset)
-
-                            let path = Path { p in
-                                p.move(to: start)
-                                p.addCurve(to: end, control1: control1, control2: control2)
-                            }
-
-                            // Gradient Stroke (Flow Visual)
-                            let gradient = Gradient(stops: [
-                                .init(color: edge.color.opacity(0.8), location: 0),
-                                .init(color: edge.color.opacity(0.4), location: 1.0)
-                            ])
-
-                            context.stroke(path, with: .linearGradient(gradient, startPoint: start, endPoint: end), lineWidth: 1.5)
-
-                            // Particles Flowing
-                            let particleCount = 2
-                            for i in 0..<particleCount {
-                                let offset = (time * 0.4 + edge.randomPhase + Double(i) / Double(particleCount)).truncatingRemainder(dividingBy: 1.0)
-                                if let point = path.trimmedPath(from: 0, to: CGFloat(offset)).currentPoint {
-                                    let particleSize = 3.0
-                                    let particleRect = CGRect(x: point.x - particleSize/2, y: point.y - particleSize/2, width: particleSize, height: particleSize)
-                                    context.fill(Path(ellipseIn: particleRect), with: .color(edge.color))
-                                }
-                            }
+            ZStack {
+                if graph.nodes.isEmpty {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Analyzing Network Topology...")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .transition(.opacity)
+                } else {
+                    TimelineView(.animation) { timeline in
+                        Canvas { context, size in
+                            let time = timeline.date.timeIntervalSinceReferenceDate
+                            drawGraph(in: context, size: size, time: time)
                         }
                     }
-
-                    // 2. Draw Nodes
-                    for node in graph.nodes {
-                        let nodeRadius: CGFloat = 4
-                        let nodeRect = CGRect(x: node.position.x - nodeRadius, y: node.position.y - nodeRadius, width: nodeRadius * 2, height: nodeRadius * 2)
-
-                        // Outer Glow
-                        context.fill(Path(ellipseIn: nodeRect.insetBy(dx: -2, dy: -2)), with: .color(node.color.opacity(0.3)))
-                        // Core
-                        context.fill(Path(ellipseIn: nodeRect), with: .color(node.color))
-
-                        // Label
-                        let text = Text(node.label)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.primary)
-
-                        context.draw(text, at: CGPoint(x: node.position.x, y: node.position.y + 14), anchor: .top)
-                    }
-
-                } symbols: {
-                    // Optional symbols
+                    .transition(.opacity)
                 }
             }
             .onAppear {
@@ -120,11 +74,66 @@ struct TopologyView: View {
             }
             .onChange(of: clashController.activeChains) { _ in
                 // Only update structure when data changes, NOT on every frame
-                updateGraph()
+                withAnimation(.easeInOut(duration: 0.5)) {
+                    updateGraph()
+                }
             }
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
         .cornerRadius(12)
+    }
+
+    // Extraction for cleaner body
+    private func drawGraph(in context: GraphicsContext, size: CGSize, time: Double) {
+        // 1. Draw Edges (Curves)
+        for edge in graph.edges {
+            if let startNode = graph.nodes.first(where: { $0.id == edge.from }),
+               let endNode = graph.nodes.first(where: { $0.id == edge.to }) {
+
+                let start = startNode.position
+                let end = endNode.position
+
+                let midX = start.x + (end.x - start.x) * 0.5
+                let control1 = CGPoint(x: midX, y: start.y + edge.controlOffset)
+                let control2 = CGPoint(x: midX, y: end.y + edge.controlOffset)
+
+                let path = Path { p in
+                    p.move(to: start)
+                    p.addCurve(to: end, control1: control1, control2: control2)
+                }
+
+                let gradient = Gradient(stops: [
+                    .init(color: edge.color.opacity(0.8), location: 0),
+                    .init(color: edge.color.opacity(0.4), location: 1.0)
+                ])
+
+                context.stroke(path, with: .linearGradient(gradient, startPoint: start, endPoint: end), lineWidth: 1.5)
+
+                let particleCount = 2
+                for i in 0..<particleCount {
+                    let offset = (time * 0.4 + edge.randomPhase + Double(i) / Double(particleCount)).truncatingRemainder(dividingBy: 1.0)
+                    if let point = path.trimmedPath(from: 0, to: CGFloat(offset)).currentPoint {
+                        let particleSize = 3.0
+                        let particleRect = CGRect(x: point.x - particleSize/2, y: point.y - particleSize/2, width: particleSize, height: particleSize)
+                        context.fill(Path(ellipseIn: particleRect), with: .color(edge.color))
+                    }
+                }
+            }
+        }
+
+        // 2. Draw Nodes
+        for node in graph.nodes {
+            let nodeRadius: CGFloat = 4
+            let nodeRect = CGRect(x: node.position.x - nodeRadius, y: node.position.y - nodeRadius, width: nodeRadius * 2, height: nodeRadius * 2)
+            context.fill(Path(ellipseIn: nodeRect.insetBy(dx: -2, dy: -2)), with: .color(node.color.opacity(0.3)))
+            context.fill(Path(ellipseIn: nodeRect), with: .color(node.color))
+
+            let text = Text(node.label)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.primary)
+
+            context.draw(text, at: CGPoint(x: node.position.x, y: node.position.y + 14), anchor: .top)
+        }
     }
 
     // MARK: - Graph Algorithm

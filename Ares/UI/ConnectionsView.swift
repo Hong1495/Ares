@@ -57,13 +57,25 @@ struct ConnectionsView: View {
         }
         .navigationTitle("Activity")
         .task {
-            await Task.yield()
-            await viewModel.startMonitoring()
+            // Initial Start (Defer slightly to let UI settle)
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            if scenePhase == .active {
+                await viewModel.startMonitoring()
+            }
         }
         .onDisappear {
             viewModel.stopMonitoring()
         }
+        .onChange(of: scenePhase) { newPhase in
+            if newPhase == .active {
+                Task { await viewModel.startMonitoring() }
+            } else if newPhase == .background {
+                viewModel.stopMonitoring()
+            }
+        }
     }
+
+    @Environment(\.scenePhase) private var scenePhase
 
     // MARK: - Toolbar
 

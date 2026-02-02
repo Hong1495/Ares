@@ -71,7 +71,18 @@ struct EnhancedTrafficGraphView: View {
         .onDisappear {
             viewModel.stopMonitoring()
         }
+        .onChange(of: scenePhase) { newPhase in
+            if newPhase == .active {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    viewModel.startMonitoring()
+                }
+            } else if newPhase == .background {
+                viewModel.stopMonitoring()
+            }
+        }
     }
+
+    @Environment(\.scenePhase) private var scenePhase
 
     private func formatSpeed(_ bytes: Int64) -> String {
         let formatter = ByteCountFormatter()

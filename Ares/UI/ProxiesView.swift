@@ -5,7 +5,7 @@ enum ProxyTab: String, CaseIterable, Identifiable {
     case rule = "Rule"
     case global = "Global"
     case direct = "Direct"
-    
+
     var id: String { rawValue }
 }
 
@@ -17,14 +17,14 @@ struct ProxiesView: View {
     @State private var testingNodes = Set<String>()
     @State private var searchText = ""
     @State private var sortMode: SortMode = .default
-    
+
     enum SortMode: String, CaseIterable, Identifiable {
         case `default` = "Default"
         case name = "Name"
         case delay = "Delay"
         var id: String { rawValue }
     }
-    
+
     // Filter groups based on selected tab
     var filteredGroups: [ProxyGroup] {
         switch selectedTab {
@@ -41,7 +41,7 @@ struct ProxiesView: View {
             return []
         }
     }
-    
+
     var body: some View {
         VStack(spacing: 0) {
             // Header: Mode + Search + Sort
@@ -55,9 +55,9 @@ struct ProxiesView: View {
                     }
                     .pickerStyle(.segmented)
                     .frame(width: 240)
-                    
+
                     Spacer()
-                    
+
                     // Sort picker
                     HStack(spacing: 6) {
                         Image(systemName: "line.3.horizontal.decrease.circle")
@@ -77,17 +77,17 @@ struct ProxiesView: View {
                     .background(Color.primary.opacity(0.05))
                     .cornerRadius(8)
                 }
-                
+
                 // Search bar
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
                         .font(.system(size: 13, weight: .medium))
-                    
+
                     TextField("Search among \(clashController.proxyNodes.count) nodes...", text: $searchText)
                         .textFieldStyle(.plain)
                         .font(.system(size: 13))
-                    
+
                     if !searchText.isEmpty {
                         Button {
                             withAnimation { searchText = "" }
@@ -109,9 +109,9 @@ struct ProxiesView: View {
             }
             .padding()
             .background(Color(nsColor: .windowBackgroundColor))
-            
+
             Divider()
-            
+
             // Content
             ScrollView(showsIndicators: false) {
                 if selectedTab == .direct {
@@ -175,11 +175,15 @@ struct ProxiesView: View {
         }
         .onReceive(Timer.publish(every: 10, on: .main, in: .common).autoconnect()) { _ in
             // Refresh proxy status every 10 seconds (reduced from 3s to minimize log noise)
+            // Pause in background
+            guard scenePhase == .active else { return }
             Task {
                 try? await clashController.fetchProxiesData()
             }
         }
     }
+
+    @Environment(\.scenePhase) private var scenePhase
 }
 
 // SIMPLE card - just like Clash Verge
@@ -190,9 +194,9 @@ struct SimpleProxyGroupCard: View {
     let sortMode: ProxiesView.SortMode
     @Binding var testingNodes: Set<String>
     let onToggle: () -> Void
-    
+
     @EnvironmentObject var clashController: ClashController
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Header - clickable entire row
@@ -210,7 +214,7 @@ struct SimpleProxyGroupCard: View {
                             .font(.system(size: 12, weight: .bold))
                             .foregroundStyle(.blue)
                     }
-                    
+
                     VStack(alignment: .leading, spacing: 1) {
                         Text(group.name)
                             .font(.system(size: 14, weight: .bold))
@@ -218,9 +222,9 @@ struct SimpleProxyGroupCard: View {
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(.secondary)
                     }
-                    
+
                     Spacer()
-                    
+
                     // Current selection
                     if let now = group.now {
                         Text(now)
@@ -234,37 +238,37 @@ struct SimpleProxyGroupCard: View {
                                     .shadow(color: Color.blue.opacity(0.3), radius: 4, x: 0, y: 2)
                             )
                     }
-                    
+
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(.secondary.opacity(0.5))
                 }
             }
             .buttonStyle(.plain)
-            
+
             if isExpanded {
                 Divider()
-                
+
                 // Filter and Sort items
                 let filteredItems = group.all.filter { itemName in
                     searchText.isEmpty || itemName.localizedCaseInsensitiveContains(searchText)
                 }
-                
+
                 let sortedItems = filteredItems.sorted { a, b in
                     switch sortMode {
-                    case .default: 
+                    case .default:
                         return false // Keep original order
                     case .name:
                         return a.localizedCaseInsensitiveCompare(b) == .orderedAscending
                     case .delay:
                         let delayA = clashController.proxyNodes[a]?.delay ?? 99999
                         let delayB = clashController.proxyNodes[b]?.delay ?? 99999
-                        // Always keep direct/reject at top if they are in the group? 
+                        // Always keep direct/reject at top if they are in the group?
                         // Actually let's just sort by delay.
                         return delayA < delayB
                     }
                 }
-                
+
                 if !sortedItems.isEmpty {
                     // Simple grid - just show all items
                     let columns = [
@@ -273,7 +277,7 @@ struct SimpleProxyGroupCard: View {
                         GridItem(.flexible(), spacing: 12),
                         GridItem(.flexible(), spacing: 12)
                     ]
-                    
+
                     LazyVGrid(columns: columns, spacing: 12) {
                         ForEach(sortedItems, id: \.self) { itemName in
                             SimpleProxyButton(
@@ -329,7 +333,7 @@ struct SimpleProxyGroupCard: View {
                 .stroke(Color.primary.opacity(0.05), lineWidth: 1)
         )
     }
-    
+
     private var groupIcon: String {
         switch group.type {
         case "Selector": return "hand.tap"
@@ -349,14 +353,14 @@ struct SimpleProxyButton: View {
     let isTesting: Bool
     let onSelect: () -> Void
     let onTest: () -> Void
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(name)
                 .font(.system(size: 12, weight: isSelected ? .bold : .medium))
                 .lineLimit(1)
                 .foregroundStyle(isSelected ? .white : .primary)
-            
+
             HStack(spacing: 6) {
                 if let ms = delay {
                     HStack(spacing: 4) {
@@ -372,9 +376,9 @@ struct SimpleProxyButton: View {
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(isSelected ? .white.opacity(0.6) : Color.secondary.opacity(0.5))
                 }
-                
+
                 Spacer()
-                
+
                 if isTesting {
                     if isSelected {
                         ProgressView()
@@ -403,8 +407,8 @@ struct SimpleProxyButton: View {
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(isSelected ? 
-                    AnyShapeStyle(LinearGradient(colors: [.blue, .blue.opacity(0.8)], startPoint: .topLeading, endPoint: .bottomTrailing)) : 
+                .fill(isSelected ?
+                    AnyShapeStyle(LinearGradient(colors: [.blue, .blue.opacity(0.8)], startPoint: .topLeading, endPoint: .bottomTrailing)) :
                     AnyShapeStyle(Color.primary.opacity(0.03)))
         )
         .shadow(color: isSelected ? Color.blue.opacity(0.3) : Color.clear, radius: 4, x: 0, y: 2)
@@ -418,7 +422,7 @@ struct SimpleProxyButton: View {
             onSelect()
         }
     }
-    
+
     private func delayColor(_ ms: Int) -> Color {
         switch ms {
         case 0..<100: return .green

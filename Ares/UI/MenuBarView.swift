@@ -48,12 +48,26 @@ struct MenuBarView: View {
 
             Divider().padding(.horizontal, 16)
 
-            // 2. Traffic Section (Compact Graph)
-            VStack(spacing: 0) {
-                EnhancedTrafficGraphView(showHeader: false)
-                    .frame(height: 80)
+            // 2. Traffic Section (Simple Text)
+            HStack(spacing: 16) {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.cyan)
+                    Text(formatSpeed(clashController.traffic.up))
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                }
+
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.down")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.green)
+                    Text(formatSpeed(clashController.traffic.down))
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                }
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, 8)
+            .padding(.horizontal, 16)
 
             Divider().padding(.horizontal, 16)
 
@@ -174,6 +188,14 @@ struct MenuBarView: View {
         if let window = NSApp.windows.first {
             window.makeKeyAndOrderFront(nil)
         }
+    }
+
+    private func formatSpeed(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useKB, .useMB, .useGB]
+        formatter.countStyle = .file
+        let formatted = formatter.string(fromByteCount: bytes)
+        return formatted == "Zero KB" ? "0 KB/s" : formatted + "/s"
     }
 }
 

@@ -355,6 +355,9 @@ class BrowserAnalysisService: ObservableObject {
     private var pruningTimer: AnyCancellable?
     private let staleThreshold: TimeInterval = 600 // Keep tabs for 10 mins without updates
 
+    private var pendingWrappers: [PayloadWrapper] = []
+    private var isBatching = false
+
     private init() {
         worker.start()
         startPruningTimer()
@@ -382,10 +385,30 @@ class BrowserAnalysisService: ObservableObject {
     }
 
     func handleBatchedUpdates(_ wrappers: [PayloadWrapper]) {
+        self.pendingWrappers.append(contentsOf: wrappers)
+
+        guard !isBatching else { return }
+        isBatching = true
+
+        Task {
+            // Buffer updates for 500ms to avoid flooding Main Actor
+            try? await Task.sleep(nanoseconds: 500_000_000)
+
+            self.applyPendingUpdates()
+            self.isBatching = false
+        }
+    }
+
+    private func applyPendingUpdates() {
+        guard !pendingWrappers.isEmpty else { return }
+
+        let wrappers = pendingWrappers
+        pendingWrappers.removeAll()
+
         self.lastReceived = Date()
         self.connectionCount += wrappers.count
 
-        // Batch updates to reduce View redraws
+        // Signal single update for the entire batch
         objectWillChange.send()
 
         for w in wrappers {
