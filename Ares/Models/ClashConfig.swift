@@ -8,44 +8,44 @@ struct ClashConfig: Codable {
         case global = "global"
         case direct = "direct"
     }
-    
+
     // Ports (避免与 Clash Verge 冲突)
     var mixedPort: Int = 7890  // 改为 7890
     var socksPort: Int = 7891  // 改为 7891
     var httpPort: Int = 7892   // 改为 7892
-    
+
     // Core settings
     var mode: Mode = .rule
     var logLevel: String = "info"
     var allowLan: Bool = false
     var ipv6: Bool = true
-    
+
     // External controller
     var externalController: String = "127.0.0.1:9097"
     var secret: String = ""
-    
+
     // TUN settings
     var enableTun: Bool = false
     var tunStack: String = "system"
     var tunAutoRoute: Bool = true
     var tunAutoDetectInterface: Bool = true
     var mptcp: Bool = false
-    
+
     // MITM Integration (for TUN mode)
     var mitmEnabled: Bool = false
     var mitmPort: Int = 0
-    
+
     // Config skip flags (preserve subscription's optimized config)
     var skipDNS: Bool = false
     var skipSniffer: Bool = false
-    
 
-    
+
+
     /// Initialize with default values
-    
+
     /// Initialize with default values
     init() {}
-    
+
     /// Initialize from UserDefaults
     init(fromUserDefaults: Bool) {
         if fromUserDefaults {
@@ -66,23 +66,24 @@ struct ClashConfig: Codable {
             if defaults.object(forKey: "tunAutoDetectInterface") == nil {
                 self.tunAutoDetectInterface = true
             }
-            
-            // Check legacy keys or string/bool variants if needed? 
+
+            // Check legacy keys or string/bool variants if needed?
             // SwiftUI AppStorage usually stores as the type defined.
             // But TextFields bound to String might store as String even if we want Int.
-            
+
             self.allowLan = defaults.bool(forKey: "allowLan")
             self.ipv6 = defaults.bool(forKey: "ipv6")
             self.logLevel = defaults.string(forKey: "logLevel") ?? "info"
-            
+            self.mitmEnabled = defaults.bool(forKey: "mitmEnabled")
+
             // Mode is usually managed by AppState, but we load initial here
             if let modeStr = defaults.string(forKey: "clashMode"), let m = Mode(rawValue: modeStr) {
                 self.mode = m
             }
-            
+
         }
     }
-    
+
     /// Generate YAML representation for config.yaml
     func toYAML() -> String {
         // Port isolation: TUN mode uses different ports to avoid TIME_WAIT conflicts
@@ -90,7 +91,7 @@ struct ClashConfig: Codable {
         let actualSocksPort: Int
         let actualHttpPort: Int
         let actualController: String
-        
+
         if enableTun {
             // TUN mode uses isolated ports to avoid TIME_WAIT conflicts when switching modes
             // This ensures clean port release when toggling between TUN and Normal
@@ -105,7 +106,7 @@ struct ClashConfig: Codable {
             actualHttpPort = httpPort
             actualController = externalController
         }
-        
+
         var yaml = """
         # Ares Clash Configuration
         mixed-port: \(actualMixedPort)
@@ -117,24 +118,24 @@ struct ClashConfig: Codable {
         ipv6: \(ipv6)
         external-controller: \(actualController)
         secret: "\(secret)"
-        
+
         # Profile Settings - Enable proxy selection persistence
         profile:
           store-selected: true
           store-fake-ip: true
         """
-        
+
         // TUN configuration
         if enableTun {
             yaml += """
-            
+
             # Performance Settings
             keep-alive-interval: 15
             find-process-mode: always
             tcp-concurrent: true
             udp-timeout: 120
             mptcp: false
-            
+
             # TUN Mode Configuration
             tun:
               enable: true
@@ -144,11 +145,11 @@ struct ClashConfig: Codable {
               auto-route: \(tunAutoRoute)
               auto-detect-interface: \(tunAutoDetectInterface)
             """
-            
+
             // Only add our DNS config if subscription doesn't have one
             if !skipDNS {
                 yaml += """
-            
+
             # DNS Configuration (Fallback - subscription didn't provide)
             dns:
               enable: true
@@ -177,11 +178,11 @@ struct ClashConfig: Codable {
                 geoip-code: CN
             """
             }
-            
+
             // Only add our sniffer config if subscription doesn't have one
             if !skipSniffer {
                 yaml += """
-            
+
             # Sniffer Configuration (Fallback - subscription didn't provide)
             sniffer:
               enable: true
@@ -193,10 +194,10 @@ struct ClashConfig: Codable {
             """
             }
         }
-        
+
         // NOTE: MITM integration is handled by ConfigService.injectMITMConfig()
         // to properly merge with profile's existing proxies/rules sections
-        
+
         return yaml
     }
 }

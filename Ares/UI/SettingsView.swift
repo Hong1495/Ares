@@ -6,7 +6,7 @@ struct SettingsView: View {
     @AppStorage("autoStart") private var autoStart = false
     @AppStorage("silentStart") private var silentStart = true
     @AppStorage("theme") private var theme = "system"
-    
+
     // Clash Config - Persisted
     @AppStorage("socksPort") private var socksPort = "7891"
     @AppStorage("httpPort") private var httpPort = "7892" // Changed from 7890 to avoid conflict with mixed
@@ -14,21 +14,23 @@ struct SettingsView: View {
     @AppStorage("allowLan") private var allowLan = false
     @AppStorage("ipv6") private var ipv6 = false
     @AppStorage("logLevel") private var logLevel = "info"
-    
+
     // TUN Mode
     @AppStorage("tunEnabled") private var tunEnabled = false
     @AppStorage("tunStack") private var tunStack = "system"
     @AppStorage("tunAutoRoute") private var tunAutoRoute = true
     @AppStorage("tunAutoDetectInterface") private var tunAutoDetectInterface = true
-    
+
     // System Proxy Bypass
     @AppStorage("bypassRules") private var bypassRules = "localhost,127.*,10.*,172.16.*,172.31.*,192.168.*"
-    
+
     // MITM Settings
+    @AppStorage("mitmEnabled") private var mitmEnabled = false
+    @ObservedObject private var certManager = CertificateManager.shared
     @AppStorage("mitmPorts") private var mitmPorts = "80, 443, 8080, 8443"
     @AppStorage("mitmHosts") private var mitmHosts = ""  // Empty = intercept all hosts
     @AppStorage("tlsFingerprint") private var tlsFingerprint = "none"
-    
+
     var body: some View {
         Form {
             // General Settings
@@ -42,12 +44,12 @@ struct SettingsView: View {
                         try? LaunchService.shared.setLaunchAtLogin(enabled: newValue)
                     }
                 }
-                
+
                 Toggle(isOn: $silentStart) {
                     Label("Silent Start", systemImage: "bell.slash")
                         .fontWeight(.medium)
                 }
-                
+
                 Picker(selection: $theme) {
                     Text("System").tag("system")
                     Text("Light").tag("light")
@@ -62,7 +64,7 @@ struct SettingsView: View {
                     }
                 }
             }
-            
+
             // Core Networking
             Section {
                 LabeledContent {
@@ -73,7 +75,7 @@ struct SettingsView: View {
                     Text("HTTP Port")
                         .fontWeight(.medium)
                 }
-                
+
                 LabeledContent {
                     TextField("", text: $socksPort)
                         .multilineTextAlignment(.trailing)
@@ -91,7 +93,7 @@ struct SettingsView: View {
                     Text("Mixed Port")
                         .fontWeight(.medium)
                 }
-                
+
                 Toggle(isOn: $allowLan) {
                     Text("Allow LAN")
                         .fontWeight(.medium)
@@ -100,7 +102,7 @@ struct SettingsView: View {
                     Text("IPv6 Support")
                         .fontWeight(.medium)
                 }
-                
+
                 Button("Restart Clash Core") {
                     Task {
                         await clashViewModel.restart()
@@ -113,26 +115,26 @@ struct SettingsView: View {
                 Text("Port changes require core restart to take effect")
                     .font(.footnote)
             }
-            
+
             // Unified TUN Mode Info
             Section {
                 Toggle(isOn: $tunEnabled) {
                     Text("Enable TUN Support")
                         .fontWeight(.medium)
                 }
-                
+
                 Picker("Network Stack", selection: $tunStack) {
                     Text("System").tag("system")
                     Text("gVisor").tag("gvisor")
                 }
                 .disabled(!tunEnabled)
-                
+
                 Toggle(isOn: $tunAutoRoute) {
                     Text("Auto Route")
                         .fontWeight(.medium)
                 }
                     .disabled(!tunEnabled)
-                
+
                 Toggle(isOn: $tunAutoDetectInterface) {
                     Text("Auto Detect Interface")
                         .fontWeight(.medium)
@@ -150,7 +152,7 @@ struct SettingsView: View {
                 .font(.footnote)
                 .fontWeight(.medium)
             }
-            
+
             // System Proxy Bypass
             Section {
                 VStack(alignment: .leading, spacing: 8) {
@@ -164,33 +166,78 @@ struct SettingsView: View {
                         .cornerRadius(4)
                         .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.gray.opacity(0.2)))
                         .scrollIndicators(.hidden)
-                    
+
                     Text("Comma-separated domains/IPs to bypass proxy")
                         .font(.footnote)
                         .fontWeight(.medium)
                         .foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 4)
-                
+
                 VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("CA Certificate")
+                            .fontWeight(.medium)
+
+                        HStack {
+                            if certManager.isRootCAInstalled {
+                                Label("Installed", systemImage: "checkmark.shield.fill")
+                                    .foregroundStyle(.green)
+                                    .font(.callout)
+                            } else {
+                                Label("Not Installed", systemImage: "exclamationmark.shield")
+                                    .foregroundStyle(.red)
+                                    .font(.callout)
+                            }
+
+                            Spacer()
+
+                            Button("Install to System") {
+                                Task {
+                                    try? await certManager.installToKeychain()
+                                }
+                            }
+                            .disabled(certManager.isRootCAInstalled)
+                            .controlSize(.small)
+
+                            Button("Export") {
+                                let panel = NSSavePanel()
+                                panel.nameFieldStringValue = "ares-root-ca.crt"
+                                panel.begin { response in
+                                    if response == .OK, let url = panel.url {
+                                        Task {
+                                            try? await certManager.exportRootCA(to: url)
+                                        }
+                                    }
+                                }
+                            }
+                            .controlSize(.small)
+                        }
+                        .padding(8)
+                        .background(Color(nsColor: .controlBackgroundColor))
+                        .cornerRadius(6)
+
+                        Divider()
+                    }
+
                     Text("MITM Intercept Ports")
                         .fontWeight(.medium)
                     TextField("Ports", text: $mitmPorts)
                         .textFieldStyle(.roundedBorder)
-                    
+
                     Text("Comma-separated ports to intercept (e.g. 80, 443, 8888)")
                         .font(.footnote)
                         .fontWeight(.medium)
                         .foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 4)
-                
+
                 VStack(alignment: .leading, spacing: 8) {
                     Text("MITM Host Whitelist")
                         .fontWeight(.medium)
                     TextField("Hosts (empty = all)", text: $mitmHosts)
                         .textFieldStyle(.roundedBorder)
-                    
+
                     Text("Comma-separated hosts/IPs to intercept (e.g. 10.10.25.251, api.example.com)")
                         .font(.footnote)
                         .fontWeight(.medium)
@@ -199,46 +246,46 @@ struct SettingsView: View {
                 .padding(.vertical, 4)
 
 
-                
+
                 Button("Apply Proxy Rules") {
                     Task {
                         // 0. Refresh MITM Backend whitelist (for display filtering and connection bypass)
                         await MITMBackend.shared.refreshDisplayWhitelist()
-                        
+
                         // 1. Refresh system proxy with new rules if currently enabled
                         if appState.systemProxyEnabled {
                             await appState.toggleSystemProxy() // Off
                             await appState.toggleSystemProxy() // On with new rules
                         }
-                        
+
                         // 2. If TUN mode is active, we MUST restart Clash to rebuild config with new MITM domain rules
                         if tunEnabled {
                             let wasMITMRunning = NetworkMITMService.shared.isRunning
-                            
+
                             // Stop MITM first to prevent errors during Clash restart
                             if wasMITMRunning {
                                 await NetworkMITMService.shared.stop()
                             }
-                            
+
                             await clashViewModel.restart()
-                            
-                            // Restart MITM if it was running (with safety delay)
-                            if wasMITMRunning {
+
+                            // Restart MITM if it was running (with safety delay) OR if newly enabled
+                            if wasMITMRunning || mitmEnabled {
                                 try? await Task.sleep(nanoseconds: 1_000_000_000) // 1s wait for Core stability
                                 await NetworkMITMService.shared.start()
                             }
                         }
-                        
+
                         clashViewModel.addLog("[Settings] ✅ Proxy rules applied")
                     }
                 }
                 .buttonStyle(.bordered)
             }
-            
+
             // Advanced Features
             Section("Advanced") {
 
-                
+
                 Picker("TLS Fingerprint", selection: $tlsFingerprint) {
                     Text("Disabled (Default)").tag("none")
                     Text("Chrome (Recommended)").tag("chrome")
@@ -252,7 +299,7 @@ struct SettingsView: View {
                         await clashViewModel.restart()
                     }
                 }
-                
+
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Mimic browser fingerprints to bypass DPI and reduce drops for AI models.")
                 }
@@ -260,7 +307,7 @@ struct SettingsView: View {
                 .foregroundStyle(.secondary)
                 .padding(.vertical, 4)
             }
-            
+
             // Other & Maintenance
             Section("Other") {
                 Picker("Log Level", selection: $logLevel) {
@@ -275,7 +322,7 @@ struct SettingsView: View {
                         try? await ClashController.shared.setLogLevel(newValue)
                     }
                 }
-                
+
                 HStack {
                     Button("Clear Cache") {
                         clearCache()
@@ -293,14 +340,14 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         .scrollIndicators(.hidden)
     }
-    
+
     private func clearCache() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let cacheDir = appSupport.appendingPathComponent("Ares/cache")
         try? FileManager.default.removeItem(at: cacheDir)
         print("[Settings] Cache cleared")
     }
-    
+
     private func resetSettings() {
         httpPort = "7892"
         socksPort = "7891"
@@ -312,7 +359,7 @@ struct SettingsView: View {
         silentStart = true
         theme = "system"
         bypassRules = "localhost,127.*,10.*,172.16.*,172.31.*,192.168.*"
-        
+
         Task {
             await clashViewModel.restart()
         }
