@@ -148,32 +148,13 @@ struct MutedWorldMapView: NSViewRepresentable {
     func makeNSView(context: Context) -> MKMapView {
         let mapView = MKMapView()
         mapView.delegate = context.coordinator
-
-        // 1. Globe Mode Configuration
-        // HybridFlyover/Realistic enables the 3D globe which allows infinite zoom out
-        let config = MKHybridMapConfiguration(elevationStyle: .realistic)
-        config.pointOfInterestFilter = .excludingAll
-        config.showsTraffic = false
-        mapView.preferredConfiguration = config
-
-        // 2. Interaction Tweaks
-        mapView.isZoomEnabled = true
-        mapView.isScrollEnabled = true
-        mapView.isPitchEnabled = true // Required for globe feel
-        mapView.isRotateEnabled = true
-
-        // 3. Set Initial Global View
-        // Center on user location (Shanghai) in Globe mode
-        let camera = MKMapCamera(lookingAtCenter: CLLocationCoordinate2D(latitude: 31.23, longitude: 121.47),
-                                 fromDistance: 40_000_000, // 40,000 km altitude for full globe
-                                 pitch: 0,
-                                 heading: 0)
-        mapView.setCamera(camera, animated: false)
+        context.coordinator.configure(mapView)
 
         return mapView
     }
 
     func updateNSView(_ nsView: MKMapView, context: Context) {
+        context.coordinator.configure(nsView)
         updateOverlays(in: nsView)
     }
 
@@ -207,9 +188,38 @@ struct MutedWorldMapView: NSViewRepresentable {
 
     class Coordinator: NSObject, MKMapViewDelegate {
         var parent: MutedWorldMapView
+        private var didConfigure = false
 
         init(_ parent: MutedWorldMapView) {
             self.parent = parent
+        }
+
+        func configure(_ mapView: MKMapView) {
+            guard !didConfigure else { return }
+            didConfigure = true
+
+            // 1. Globe Mode Configuration
+            // Standard (realistic) is more stable on macOS and still supports globe zoom.
+            let config = MKStandardMapConfiguration(elevationStyle: .realistic)
+            config.pointOfInterestFilter = .excludingAll
+            config.showsTraffic = false
+            config.emphasisStyle = .muted
+            mapView.preferredConfiguration = config
+
+            // 2. Interaction Tweaks
+            mapView.isZoomEnabled = true
+            mapView.isScrollEnabled = true
+            mapView.isPitchEnabled = true // Required for globe feel
+            mapView.isRotateEnabled = true
+
+            // 3. Set Initial Global View
+            let camera = MKMapCamera(
+                lookingAtCenter: CLLocationCoordinate2D(latitude: 31.23, longitude: 121.47),
+                fromDistance: 40_000_000, // 40,000 km altitude for full globe
+                pitch: 0,
+                heading: 0
+            )
+            mapView.setCamera(camera, animated: false)
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
