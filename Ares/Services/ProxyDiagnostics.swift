@@ -28,7 +28,7 @@ class ProxyDiagnostics {
     
     private func testClashAPI() async {
         do {
-            guard let url = URL(string: "http://127.0.0.1:9097/version") else { return }
+            guard let url = URL(string: "http://127.0.0.1:\(ClashPorts.apiNormal)/version") else { return }
             let (data, response) = try await URLSession.shared.data(from: url)
             
             if let httpResponse = response as? HTTPURLResponse {
@@ -47,13 +47,13 @@ class ProxyDiagnostics {
     }
     
     private func testHTTPProxy() async {
-        ClashViewModel.shared.addLog("[Diagnostics] 🔌 Testing HTTP proxy on 127.0.0.1:7890...")
+        ClashViewModel.shared.addLog("[Diagnostics] 🔌 Testing HTTP proxy on 127.0.0.1:\(ClashPorts.defaultMixed)...")
         
         let config = URLSessionConfiguration.ephemeral
         config.connectionProxyDictionary = [
             kCFNetworkProxiesHTTPEnable: true,
             kCFNetworkProxiesHTTPProxy: "127.0.0.1",
-            kCFNetworkProxiesHTTPPort: 7890
+            kCFNetworkProxiesHTTPPort: ClashPorts.defaultMixed
         ]
         
         let session = URLSession(configuration: config)
@@ -75,13 +75,13 @@ class ProxyDiagnostics {
     }
     
     private func testSOCKSProxy() async {
-        ClashViewModel.shared.addLog("[Diagnostics] 🔌 Testing SOCKS proxy on 127.0.0.1:7891...")
+        ClashViewModel.shared.addLog("[Diagnostics] 🔌 Testing SOCKS proxy on 127.0.0.1:\(ClashPorts.defaultSocks)...")
         
         let config = URLSessionConfiguration.ephemeral
         config.connectionProxyDictionary = [
             kCFNetworkProxiesSOCKSEnable: true,
             kCFNetworkProxiesSOCKSProxy: "127.0.0.1",
-            kCFNetworkProxiesSOCKSPort: 7891
+            kCFNetworkProxiesSOCKSPort: ClashPorts.defaultSocks
         ]
         
         let session = URLSession(configuration: config)
@@ -109,10 +109,10 @@ class ProxyDiagnostics {
         config.connectionProxyDictionary = [
             kCFNetworkProxiesHTTPEnable: true,
             kCFNetworkProxiesHTTPProxy: "127.0.0.1",
-            kCFNetworkProxiesHTTPPort: 7890,
+            kCFNetworkProxiesHTTPPort: ClashPorts.defaultMixed,
             kCFNetworkProxiesHTTPSEnable: true,
             kCFNetworkProxiesHTTPSProxy: "127.0.0.1",
-            kCFNetworkProxiesHTTPSPort: 7890
+            kCFNetworkProxiesHTTPSPort: ClashPorts.defaultMixed
         ]
         
         let session = URLSession(configuration: config)

@@ -6,7 +6,7 @@ class ThemeService: ObservableObject {
     static let shared = ThemeService()
     
     private let defaults = UserDefaults.standard
-    private let themeKey = "theme"
+    private let themeKey = DefaultsKeys.theme
     
     var theme: String {
         get { defaults.string(forKey: themeKey) ?? "system" }

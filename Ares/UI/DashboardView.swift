@@ -156,7 +156,7 @@ struct ProxyServiceCard: View {
                 }
 
                 let statusText = clashViewModel.isRunning ?
-                    (appState.systemProxyEnabled ? "Proxy enabled (port 7890)" : "Clash running (Proxy OFF)") :
+                    (appState.systemProxyEnabled ? "Proxy enabled (port \(ClashPorts.defaultMixed))" : "Clash running (Proxy OFF)") :
                     "Proxy disabled"
 
                 Text(statusText)
@@ -244,6 +244,5 @@ struct ProxyModeCard: View {
         }
     }
 }
-
 
 

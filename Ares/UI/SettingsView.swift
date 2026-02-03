@@ -3,33 +3,33 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject var clashViewModel: ClashViewModel
     @EnvironmentObject var appState: AppState
-    @AppStorage("autoStart") private var autoStart = false
-    @AppStorage("silentStart") private var silentStart = true
-    @AppStorage("theme") private var theme = "system"
+    @AppStorage(DefaultsKeys.autoStart) private var autoStart = false
+    @AppStorage(DefaultsKeys.silentStart) private var silentStart = true
+    @AppStorage(DefaultsKeys.theme) private var theme = "system"
 
     // Clash Config - Persisted
-    @AppStorage("socksPort") private var socksPort = "7891"
-    @AppStorage("httpPort") private var httpPort = "7892" // Changed from 7890 to avoid conflict with mixed
-    @AppStorage("mixedPort") private var mixedPort = "7890" // Changed from 7897 to standard 7890
-    @AppStorage("allowLan") private var allowLan = false
-    @AppStorage("ipv6") private var ipv6 = false
-    @AppStorage("logLevel") private var logLevel = "info"
+    @AppStorage(DefaultsKeys.socksPort) private var socksPort = "\(ClashPorts.defaultSocks)"
+    @AppStorage(DefaultsKeys.httpPort) private var httpPort = "\(ClashPorts.defaultHttp)" // Changed from 7890 to avoid conflict with mixed
+    @AppStorage(DefaultsKeys.mixedPort) private var mixedPort = "\(ClashPorts.defaultMixed)" // Changed from 7897 to standard 7890
+    @AppStorage(DefaultsKeys.allowLan) private var allowLan = false
+    @AppStorage(DefaultsKeys.ipv6) private var ipv6 = false
+    @AppStorage(DefaultsKeys.logLevel) private var logLevel = "info"
 
     // TUN Mode
-    @AppStorage("tunEnabled") private var tunEnabled = false
-    @AppStorage("tunStack") private var tunStack = "system"
-    @AppStorage("tunAutoRoute") private var tunAutoRoute = true
-    @AppStorage("tunAutoDetectInterface") private var tunAutoDetectInterface = true
+    @AppStorage(DefaultsKeys.tunEnabled) private var tunEnabled = false
+    @AppStorage(DefaultsKeys.tunStack) private var tunStack = "system"
+    @AppStorage(DefaultsKeys.tunAutoRoute) private var tunAutoRoute = true
+    @AppStorage(DefaultsKeys.tunAutoDetectInterface) private var tunAutoDetectInterface = true
 
     // System Proxy Bypass
-    @AppStorage("bypassRules") private var bypassRules = "localhost,127.*,10.*,172.16.*,172.31.*,192.168.*"
+    @AppStorage(DefaultsKeys.bypassRules) private var bypassRules = "localhost,127.*,10.*,172.16.*,172.31.*,192.168.*"
 
     // MITM Settings
-    @AppStorage("mitmEnabled") private var mitmEnabled = false
+    @AppStorage(DefaultsKeys.mitmEnabled) private var mitmEnabled = false
     @ObservedObject private var certManager = CertificateManager.shared
-    @AppStorage("mitmPorts") private var mitmPorts = "80, 443, 8080, 8443"
-    @AppStorage("mitmHosts") private var mitmHosts = ""  // Empty = intercept all hosts
-    @AppStorage("tlsFingerprint") private var tlsFingerprint = "none"
+    @AppStorage(DefaultsKeys.mitmPorts) private var mitmPorts = "80, 443, 8080, 8443"
+    @AppStorage(DefaultsKeys.mitmHosts) private var mitmHosts = ""  // Empty = intercept all hosts
+    @AppStorage(DefaultsKeys.tlsFingerprint) private var tlsFingerprint = "none"
 
     var body: some View {
         Form {
@@ -349,9 +349,9 @@ struct SettingsView: View {
     }
 
     private func resetSettings() {
-        httpPort = "7892"
-        socksPort = "7891"
-        mixedPort = "7890"
+        httpPort = "\(ClashPorts.defaultHttp)"
+        socksPort = "\(ClashPorts.defaultSocks)"
+        mixedPort = "\(ClashPorts.defaultMixed)"
         allowLan = false
         ipv6 = false
         logLevel = "info"

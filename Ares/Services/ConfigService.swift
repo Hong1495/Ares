@@ -69,11 +69,11 @@ actor ConfigService {
             return (
                 mitm.isRunning,
                 Int(mitm.currentPort),
-                defaults.string(forKey: "bypassRules") ?? "",
-                defaults.string(forKey: "localRules") ?? "",
-                defaults.string(forKey: "mitmPorts") ?? "80, 443, 8080, 8443",
-                defaults.string(forKey: "mitmHosts") ?? "",  // Whitelist domains
-                defaults.string(forKey: "tlsFingerprint") ?? "none"
+                defaults.string(forKey: DefaultsKeys.bypassRules) ?? "",
+                defaults.string(forKey: DefaultsKeys.localRules) ?? "",
+                defaults.string(forKey: DefaultsKeys.mitmPorts) ?? "80, 443, 8080, 8443",
+                defaults.string(forKey: DefaultsKeys.mitmHosts) ?? "",  // Whitelist domains
+                defaults.string(forKey: DefaultsKeys.tlsFingerprint) ?? "none"
             )
         }
         

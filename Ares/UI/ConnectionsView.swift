@@ -541,6 +541,9 @@ final class ConnectionsViewModel: ObservableObject {
     private var webSocketTask: URLSessionWebSocketTask?
     private var isMonitoring = false
     private var cancellables = Set<AnyCancellable>()
+    private var lastConnectionsUpdate: Date = .distantPast
+    private let minConnectionsInterval: TimeInterval = 0.25
+    private var isProcessingConnections = false
 
     var totalDownload: Int64 {
         // TrafficAuditManager.shared.sessions is source of truth
@@ -596,13 +599,14 @@ final class ConnectionsViewModel: ObservableObject {
     // MARK: - Monitoring
 
     func startMonitoring(isRetry: Bool = false) async {
+        guard AppState.shared.isForeground else { return }
         if !isRetry {
             guard !isMonitoring else { return }
             isMonitoring = true
         }
 
         let tunEnabled = AppState.shared.tunEnabled
-        let port = tunEnabled ? 19097 : 9097
+        let port = tunEnabled ? ClashPorts.apiTun : ClashPorts.apiNormal
         let url = URL(string: "ws://127.0.0.1:\(port)/connections")!
 
         webSocketTask?.cancel()
@@ -619,6 +623,10 @@ final class ConnectionsViewModel: ObservableObject {
     }
 
     private func receiveMessages() async {
+        guard AppState.shared.isForeground else {
+            stopMonitoring()
+            return
+        }
         guard let webSocket = webSocketTask else { return }
         do {
             let message = try await webSocket.receive()
@@ -639,7 +647,19 @@ final class ConnectionsViewModel: ObservableObject {
     }
 
     private func parseConnectionsData(_ jsonString: String) {
-        Task.detached(priority: .userInitiated) {
+        let now = Date()
+        guard now.timeIntervalSince(lastConnectionsUpdate) >= minConnectionsInterval else { return }
+        guard !isProcessingConnections else { return }
+        lastConnectionsUpdate = now
+        isProcessingConnections = true
+
+        Task.detached(priority: .userInitiated) { [weak self] in
+            guard let self = self else { return }
+            defer {
+                Task { @MainActor in
+                    self.isProcessingConnections = false
+                }
+            }
 
             // 1. Parse JSON (Pure func)
             var rawConnections = Self.parseJSON(jsonString)
@@ -739,7 +759,7 @@ final class ConnectionsViewModel: ObservableObject {
 
     func closeConnection(id: String) async {
          let tunEnabled = AppState.shared.tunEnabled
-         let port = tunEnabled ? 19097 : 9097
+         let port = tunEnabled ? ClashPorts.apiTun : ClashPorts.apiNormal
          guard let url = URL(string: "http://127.0.0.1:\(port)/connections/\(id)") else { return }
          var request = URLRequest(url: url)
          request.httpMethod = "DELETE"

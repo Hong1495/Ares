@@ -173,17 +173,8 @@ struct ProxiesView: View {
                 expandedGroups = []
             }
         }
-        .onReceive(Timer.publish(every: 10, on: .main, in: .common).autoconnect()) { _ in
-            // Refresh proxy status every 10 seconds (reduced from 3s to minimize log noise)
-            // Pause in background
-            guard scenePhase == .active else { return }
-            Task {
-                try? await clashController.fetchProxiesData()
-            }
-        }
     }
 
-    @Environment(\.scenePhase) private var scenePhase
 }
 
 // SIMPLE card - just like Clash Verge

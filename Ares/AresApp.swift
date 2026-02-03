@@ -1,7 +1,11 @@
 import SwiftUI
+import AppKit
 
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
+    private var lifecycleObservers: [NSObjectProtocol] = []
+    private var workspaceObservers: [NSObjectProtocol] = []
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // App started
         Task {
@@ -9,8 +13,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             await checkAndRecoverState()
         }
 
+        registerLifecycleObservers()
+        registerWorkspaceObservers()
+
         // Handle Silent Start
-        let silent = UserDefaults.standard.bool(forKey: "silentStart")
+        let silent = UserDefaults.standard.bool(forKey: DefaultsKeys.silentStart)
         if silent {
             print("[AppDelegate] 🤫 Silent start enabled - hiding application")
             // Hide the entire application from foreground
@@ -27,7 +34,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 1. CRITICAL: Disable system proxy FIRST to prevent network outage
         // This must happen BEFORE we kill Clash, otherwise macOS traffic
         // will try to connect to a dead port (127.0.0.1:7890)
-        if UserDefaults.standard.bool(forKey: "systemProxyEnabled") {
+        if UserDefaults.standard.bool(forKey: DefaultsKeys.systemProxyEnabled) {
             print("🔌 Disabling system proxy...")
             SystemProxyManager.shared.disableAllProxiesSync()
             // NOTE: Keep systemProxyEnabled = true so proxy auto-restarts on next launch
@@ -72,6 +79,41 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 await AppState.shared.enableSystemProxy()
             }
         }
+    }
+
+    private func registerLifecycleObservers() {
+        let center = NotificationCenter.default
+        lifecycleObservers.append(
+            center.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
+                Task { @MainActor in
+                    AppState.shared.wakeUp()
+                }
+            }
+        )
+        lifecycleObservers.append(
+            center.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { _ in
+                Task { @MainActor in
+                    AppState.shared.goSilent()
+                }
+            }
+        )
+    }
+
+    private func registerWorkspaceObservers() {
+        let center = NSWorkspace.shared.notificationCenter
+        workspaceObservers.append(
+            center.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { notification in
+                guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
+                let isSelf = app.bundleIdentifier == Bundle.main.bundleIdentifier
+                Task { @MainActor in
+                    if isSelf {
+                        AppState.shared.wakeUp()
+                    } else {
+                        AppState.shared.goSilent()
+                    }
+                }
+            }
+        )
     }
 }
 

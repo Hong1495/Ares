@@ -31,6 +31,9 @@ struct RouteMapPageView: View {
         .padding()
         .background(Color(nsColor: .textBackgroundColor))
         .navigationTitle("Routing")
+        .onAppear {
+            Task { await clashController.monitorConnections() }
+        }
     }
 
     // Helper to deduplicate connections by simulating coordinates

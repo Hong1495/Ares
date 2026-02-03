@@ -20,15 +20,24 @@ struct SmoothSparklineView: View {
     let data: [(Date, Double)]
     let color: Color
     let maxDataPoints: Int // Kept for API compatibility, but we use time-based logic now
+    let animate: Bool
 
     // Config
     private let visibleDuration: TimeInterval = 60 // Show last 60 seconds
 
-    @EnvironmentObject private var appState: AppState
+    @ObservedObject var appState: AppState
+
+    init(data: [(Date, Double)], color: Color, maxDataPoints: Int, animate: Bool = true, appState: AppState = .shared) {
+        self.data = data
+        self.color = color
+        self.maxDataPoints = maxDataPoints
+        self.animate = animate
+        self.appState = appState
+    }
 
     var body: some View {
         Group {
-            if appState.animationsEnabled {
+            if animate && appState.animationsEnabled && appState.isForeground {
                 TimelineView(.animation) { timeline in
                     chartCanvas(timeline: timeline)
                 }
@@ -38,7 +47,6 @@ struct SmoothSparklineView: View {
                 }
             }
         }
-        .drawingGroup()
     }
 
     @ViewBuilder
@@ -105,11 +113,18 @@ struct DualSmoothGraphView: View {
     let downloadData: [(Date, Double)]
     var visibleDuration: TimeInterval = 60 // Seconds history to show
 
-    @EnvironmentObject private var appState: AppState
+    @ObservedObject var appState: AppState
+
+    init(uploadData: [(Date, Double)], downloadData: [(Date, Double)], visibleDuration: TimeInterval = 60, appState: AppState = .shared) {
+        self.uploadData = uploadData
+        self.downloadData = downloadData
+        self.visibleDuration = visibleDuration
+        self.appState = appState
+    }
 
     var body: some View {
         Group {
-            if appState.animationsEnabled {
+            if appState.animationsEnabled && appState.isForeground {
                 TimelineView(.animation) { timeline in
                     dualChartCanvas(timeline: timeline)
                 }

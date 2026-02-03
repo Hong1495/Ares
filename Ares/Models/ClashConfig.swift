@@ -10,9 +10,9 @@ struct ClashConfig: Codable {
     }
 
     // Ports (避免与 Clash Verge 冲突)
-    var mixedPort: Int = 7890  // 改为 7890
-    var socksPort: Int = 7891  // 改为 7891
-    var httpPort: Int = 7892   // 改为 7892
+    var mixedPort: Int = ClashPorts.defaultMixed  // 改为 7890
+    var socksPort: Int = ClashPorts.defaultSocks  // 改为 7891
+    var httpPort: Int = ClashPorts.defaultHttp   // 改为 7892
 
     // Core settings
     var mode: Mode = .rule
@@ -21,7 +21,7 @@ struct ClashConfig: Codable {
     var ipv6: Bool = true
 
     // External controller
-    var externalController: String = "127.0.0.1:9097"
+    var externalController: String = "127.0.0.1:\(ClashPorts.apiNormal)"
     var secret: String = ""
 
     // TUN settings
@@ -53,17 +53,17 @@ struct ClashConfig: Codable {
             // Use current preferences or defaults
             // Note: Keys must match AppStorage in SettingsView
             // Fix: httpPort default should be 7892 to avoid conflict with mixedPort (7890)
-            self.httpPort = Int(defaults.string(forKey: "httpPort") ?? "7892") ?? 7892
-            self.socksPort = Int(defaults.string(forKey: "socksPort") ?? "7891") ?? 7891
-            self.mixedPort = Int(defaults.string(forKey: "mixedPort") ?? "7890") ?? 7890 // Default 7890
-            self.tunStack = defaults.string(forKey: "tunStack") ?? "system"
-            self.tunAutoRoute = defaults.bool(forKey: "tunAutoRoute")
-            self.tunAutoDetectInterface = defaults.bool(forKey: "tunAutoDetectInterface")
+            self.httpPort = Int(defaults.string(forKey: DefaultsKeys.httpPort) ?? "\(ClashPorts.defaultHttp)") ?? ClashPorts.defaultHttp
+            self.socksPort = Int(defaults.string(forKey: DefaultsKeys.socksPort) ?? "\(ClashPorts.defaultSocks)") ?? ClashPorts.defaultSocks
+            self.mixedPort = Int(defaults.string(forKey: DefaultsKeys.mixedPort) ?? "\(ClashPorts.defaultMixed)") ?? ClashPorts.defaultMixed // Default 7890
+            self.tunStack = defaults.string(forKey: DefaultsKeys.tunStack) ?? "system"
+            self.tunAutoRoute = defaults.bool(forKey: DefaultsKeys.tunAutoRoute)
+            self.tunAutoDetectInterface = defaults.bool(forKey: DefaultsKeys.tunAutoDetectInterface)
             // Handle case where keys don't exist (default to true)
-            if defaults.object(forKey: "tunAutoRoute") == nil {
+            if defaults.object(forKey: DefaultsKeys.tunAutoRoute) == nil {
                 self.tunAutoRoute = true
             }
-            if defaults.object(forKey: "tunAutoDetectInterface") == nil {
+            if defaults.object(forKey: DefaultsKeys.tunAutoDetectInterface) == nil {
                 self.tunAutoDetectInterface = true
             }
 
@@ -71,13 +71,13 @@ struct ClashConfig: Codable {
             // SwiftUI AppStorage usually stores as the type defined.
             // But TextFields bound to String might store as String even if we want Int.
 
-            self.allowLan = defaults.bool(forKey: "allowLan")
-            self.ipv6 = defaults.bool(forKey: "ipv6")
-            self.logLevel = defaults.string(forKey: "logLevel") ?? "info"
-            self.mitmEnabled = defaults.bool(forKey: "mitmEnabled")
+            self.allowLan = defaults.bool(forKey: DefaultsKeys.allowLan)
+            self.ipv6 = defaults.bool(forKey: DefaultsKeys.ipv6)
+            self.logLevel = defaults.string(forKey: DefaultsKeys.logLevel) ?? "info"
+            self.mitmEnabled = defaults.bool(forKey: DefaultsKeys.mitmEnabled)
 
             // Mode is usually managed by AppState, but we load initial here
-            if let modeStr = defaults.string(forKey: "clashMode"), let m = Mode(rawValue: modeStr) {
+            if let modeStr = defaults.string(forKey: DefaultsKeys.clashMode), let m = Mode(rawValue: modeStr) {
                 self.mode = m
             }
 
@@ -95,10 +95,10 @@ struct ClashConfig: Codable {
         if enableTun {
             // TUN mode uses isolated ports to avoid TIME_WAIT conflicts when switching modes
             // This ensures clean port release when toggling between TUN and Normal
-            actualMixedPort = 17890
-            actualSocksPort = 17891
-            actualHttpPort = 17892
-            actualController = "127.0.0.1:19097"
+            actualMixedPort = ClashPorts.tunMixed
+            actualSocksPort = ClashPorts.tunSocks
+            actualHttpPort = ClashPorts.tunHttp
+            actualController = "127.0.0.1:\(ClashPorts.apiTun)"
         } else {
             // Normal mode uses user-configured ports
             actualMixedPort = mixedPort

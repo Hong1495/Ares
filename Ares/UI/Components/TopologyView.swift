@@ -56,14 +56,12 @@ struct TopologyView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .transition(.opacity)
                 } else {
-                    Group {
-                        if appState.animationsEnabled {
+                    ZStack {
+                        staticCanvas
+
+                        if appState.animationsEnabled && appState.isForeground {
                             TimelineView(.animation) { timeline in
-                                topologyCanvas(timeline: timeline)
-                            }
-                        } else {
-                            TimelineView(.explicit([Date()])) { timeline in
-                                topologyCanvas(timeline: timeline)
+                                particleCanvas(timeline: timeline)
                             }
                         }
                     }
@@ -90,16 +88,22 @@ struct TopologyView: View {
     }
 
     @ViewBuilder
-    private func topologyCanvas(timeline: TimelineViewDefaultContext) -> some View {
+    private var staticCanvas: some View {
         Canvas { context, size in
-            let time = timeline.date.timeIntervalSinceReferenceDate
-            drawGraph(in: context, size: size, time: time)
+            drawStaticGraph(in: context, size: size)
         }
     }
 
-    // Extraction for cleaner body
-    private func drawGraph(in context: GraphicsContext, size: CGSize, time: Double) {
-        // 1. Draw Edges (Curves)
+    private func particleCanvas(timeline: TimelineViewDefaultContext) -> some View {
+        Canvas { context, size in
+            let time = timeline.date.timeIntervalSinceReferenceDate
+            drawParticles(in: context, size: size, time: time)
+        }
+    }
+
+    // Static layer: edges + nodes + labels (only re-rendered when graph changes)
+    private func drawStaticGraph(in context: GraphicsContext, size: CGSize) {
+        // Draw Edges (Curves)
         for edge in graph.edges {
             if let startNode = graph.nodes.first(where: { $0.id == edge.from }),
                let endNode = graph.nodes.first(where: { $0.id == edge.to }) {
@@ -122,20 +126,10 @@ struct TopologyView: View {
                 ])
 
                 context.stroke(path, with: .linearGradient(gradient, startPoint: start, endPoint: end), lineWidth: 1.5)
-
-                let particleCount = 2
-                for i in 0..<particleCount {
-                    let offset = (time * 0.4 + edge.randomPhase + Double(i) / Double(particleCount)).truncatingRemainder(dividingBy: 1.0)
-                    if let point = path.trimmedPath(from: 0, to: CGFloat(offset)).currentPoint {
-                        let particleSize = 3.0
-                        let particleRect = CGRect(x: point.x - particleSize/2, y: point.y - particleSize/2, width: particleSize, height: particleSize)
-                        context.fill(Path(ellipseIn: particleRect), with: .color(edge.color))
-                    }
-                }
             }
         }
 
-        // 2. Draw Nodes
+        // Draw Nodes
         for node in graph.nodes {
             let nodeRadius: CGFloat = 4
             let nodeRect = CGRect(x: node.position.x - nodeRadius, y: node.position.y - nodeRadius, width: nodeRadius * 2, height: nodeRadius * 2)
@@ -147,6 +141,39 @@ struct TopologyView: View {
                 .foregroundStyle(.primary)
 
             context.draw(text, at: CGPoint(x: node.position.x, y: node.position.y + 14), anchor: .top)
+        }
+    }
+
+    // Animated layer: particles only (lightweight)
+    private func drawParticles(in context: GraphicsContext, size: CGSize, time: Double) {
+        let animatedEdges = graph.edges.prefix(30)
+        let particleCount = 1
+
+        for edge in animatedEdges {
+            if let startNode = graph.nodes.first(where: { $0.id == edge.from }),
+               let endNode = graph.nodes.first(where: { $0.id == edge.to }) {
+
+                let start = startNode.position
+                let end = endNode.position
+
+                let midX = start.x + (end.x - start.x) * 0.5
+                let control1 = CGPoint(x: midX, y: start.y + edge.controlOffset)
+                let control2 = CGPoint(x: midX, y: end.y + edge.controlOffset)
+
+                let path = Path { p in
+                    p.move(to: start)
+                    p.addCurve(to: end, control1: control1, control2: control2)
+                }
+
+                for i in 0..<particleCount {
+                    let offset = (time * 0.4 + edge.randomPhase + Double(i) / Double(particleCount)).truncatingRemainder(dividingBy: 1.0)
+                    if let point = path.trimmedPath(from: 0, to: CGFloat(offset)).currentPoint {
+                        let particleSize = 3.0
+                        let particleRect = CGRect(x: point.x - particleSize / 2, y: point.y - particleSize / 2, width: particleSize, height: particleSize)
+                        context.fill(Path(ellipseIn: particleRect), with: .color(edge.color))
+                    }
+                }
+            }
         }
     }
 

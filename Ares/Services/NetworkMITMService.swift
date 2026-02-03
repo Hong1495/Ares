@@ -48,11 +48,11 @@ final class NetworkMITMService: ObservableObject {
         let tunEnabled = await MainActor.run { AppState.shared.tunEnabled }
         let clashPort: UInt16
         if tunEnabled {
-            clashPort = 17890  // TUN mode isolated port
-            ClashViewModel.shared.addLog("[NetworkMITMService] 📡 TUN mode detected, using Clash port 17890")
+            clashPort = UInt16(ClashPorts.tunMixed)  // TUN mode isolated port
+            ClashViewModel.shared.addLog("[NetworkMITMService] 📡 TUN mode detected, using Clash port \(ClashPorts.tunMixed)")
         } else {
-            let userPort = UserDefaults.standard.integer(forKey: "mixedPort")
-            clashPort = UInt16(userPort == 0 ? 7890 : userPort)
+            let userPort = UserDefaults.standard.integer(forKey: DefaultsKeys.mixedPort)
+            clashPort = UInt16(userPort == 0 ? ClashPorts.defaultMixed : userPort)
             ClashViewModel.shared.addLog("[NetworkMITMService] 📡 Normal mode, using Clash port \(clashPort)")
         }
         
@@ -194,4 +194,3 @@ struct InterceptedRequest: Identifiable {
     let path: String
     let timestamp: Date
 }
-

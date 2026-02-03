@@ -86,7 +86,7 @@ class ClashViewModel: ObservableObject {
     ///   - level: Log level (default: .info)
     func addLog(_ message: String, level: LogLevel = .info) {
         // Get user's log level setting
-        let userLogLevelString = UserDefaults.standard.string(forKey: "logLevel") ?? "info"
+        let userLogLevelString = UserDefaults.standard.string(forKey: DefaultsKeys.logLevel) ?? "info"
         let userLogLevel = LogLevel.from(string: userLogLevelString)
         
         // Filter: only show logs at or above user's level

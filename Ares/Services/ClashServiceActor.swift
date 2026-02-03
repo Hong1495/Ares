@@ -224,11 +224,11 @@ actor ClashServiceActor {
             // Background port verification (informational only)
             Task {
                 try? await Task.sleep(nanoseconds: 1_500_000_000) // Increase wait to 1.5s
-                let portReady = await waitForPort(19097, timeout: 5.0)
+                let portReady = await waitForPort(ClashPorts.apiTun, timeout: 5.0)
                 if !portReady {
-                    addLog("[ClashServiceActor] ⚠️ Port 19097 check timeout - core may still be initializing")
+                    addLog("[ClashServiceActor] ⚠️ Port \(ClashPorts.apiTun) check timeout - core may still be initializing")
                 } else {
-                    addLog("[ClashServiceActor] 🟢 Port 19097 is now listening")
+                    addLog("[ClashServiceActor] 🟢 Port \(ClashPorts.apiTun) is now listening")
                 }
             }
         } catch {
@@ -280,9 +280,9 @@ actor ClashServiceActor {
             
             // Background port verification (informational only)
             Task {
-                let portReady = await waitForPort(9097, timeout: 5.0)
+                let portReady = await waitForPort(ClashPorts.apiNormal, timeout: 5.0)
                 if !portReady {
-                    addLog("[ClashServiceActor] ⚠️ Port 9097 check timeout - core may still be initializing")
+                    addLog("[ClashServiceActor] ⚠️ Port \(ClashPorts.apiNormal) check timeout - core may still be initializing")
                 }
             }
         } catch {
@@ -307,14 +307,14 @@ actor ClashServiceActor {
     private func cleanupOldProcesses() async -> Bool {
         // Get actual configured ports dynamically
         let defaults = UserDefaults.standard
-        let normalMixedPort = Int(defaults.string(forKey: "mixedPort") ?? "7890") ?? 7890
-        let normalSocksPort = Int(defaults.string(forKey: "socksPort") ?? "7891") ?? 7891
-        let normalHttpPort = Int(defaults.string(forKey: "httpPort") ?? "7892") ?? 7892
+        let normalMixedPort = Int(defaults.string(forKey: DefaultsKeys.mixedPort) ?? "\(ClashPorts.defaultMixed)") ?? ClashPorts.defaultMixed
+        let normalSocksPort = Int(defaults.string(forKey: DefaultsKeys.socksPort) ?? "\(ClashPorts.defaultSocks)") ?? ClashPorts.defaultSocks
+        let normalHttpPort = Int(defaults.string(forKey: DefaultsKeys.httpPort) ?? "\(ClashPorts.defaultHttp)") ?? ClashPorts.defaultHttp
         
         // Clean up both Normal and TUN mode ports to be thorough
         let portsToClean = [
-            normalMixedPort, normalSocksPort, normalHttpPort, 9097,  // Normal mode
-            17890, 17891, 17892, 19097  // TUN mode (fixed)
+            normalMixedPort, normalSocksPort, normalHttpPort, ClashPorts.apiNormal,  // Normal mode
+            ClashPorts.tunMixed, ClashPorts.tunSocks, ClashPorts.tunHttp, ClashPorts.apiTun  // TUN mode (fixed)
         ]
         
         var killedAny = false
@@ -387,13 +387,13 @@ actor ClashServiceActor {
     private func performPortCleanup() async -> Bool {
         // Get actual configured ports dynamically
         let defaults = UserDefaults.standard
-        let normalMixedPort = Int(defaults.string(forKey: "mixedPort") ?? "7890") ?? 7890
-        let normalSocksPort = Int(defaults.string(forKey: "socksPort") ?? "7891") ?? 7891
-        let normalHttpPort = Int(defaults.string(forKey: "httpPort") ?? "7892") ?? 7892
+        let normalMixedPort = Int(defaults.string(forKey: DefaultsKeys.mixedPort) ?? "\(ClashPorts.defaultMixed)") ?? ClashPorts.defaultMixed
+        let normalSocksPort = Int(defaults.string(forKey: DefaultsKeys.socksPort) ?? "\(ClashPorts.defaultSocks)") ?? ClashPorts.defaultSocks
+        let normalHttpPort = Int(defaults.string(forKey: DefaultsKeys.httpPort) ?? "\(ClashPorts.defaultHttp)") ?? ClashPorts.defaultHttp
         
         let portsToCheck = [
-            normalMixedPort, normalSocksPort, normalHttpPort, 9097,  // Normal mode
-            17890, 17891, 17892, 19097  // TUN mode (fixed)
+            normalMixedPort, normalSocksPort, normalHttpPort, ClashPorts.apiNormal,  // Normal mode
+            ClashPorts.tunMixed, ClashPorts.tunSocks, ClashPorts.tunHttp, ClashPorts.apiTun  // TUN mode (fixed)
         ]
         
         // Kill by port

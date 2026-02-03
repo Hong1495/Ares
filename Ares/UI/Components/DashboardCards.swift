@@ -427,8 +427,8 @@ struct IpAddressCard: View {
 
         if isProxy {
             let defaults = UserDefaults.standard
-            let basePort = Int(defaults.string(forKey: "mixedPort") ?? "7890") ?? 7890
-            let proxyPort = appState.tunEnabled ? 17890 : basePort
+            let basePort = Int(defaults.string(forKey: DefaultsKeys.mixedPort) ?? "\(ClashPorts.defaultMixed)") ?? ClashPorts.defaultMixed
+            let proxyPort = appState.tunEnabled ? ClashPorts.tunMixed : basePort
 
             config.connectionProxyDictionary = [
                 kCFNetworkProxiesHTTPEnable: 1,
@@ -585,7 +585,7 @@ struct ClashInfoCard: View {
     private func fetchClashInfo() async -> Bool {
         if clashViewModel.isToggling { return false }
 
-        let port = appState.tunEnabled ? 19097 : 9097
+        let port = appState.tunEnabled ? ClashPorts.apiTun : ClashPorts.apiNormal
         let url = URL(string: "http://127.0.0.1:\(port)/version")!
         // Quick timeout
         let config = URLSessionConfiguration.ephemeral

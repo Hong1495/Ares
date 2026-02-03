@@ -42,7 +42,7 @@ class ProfileService: ObservableObject {
             self.profiles = decoded
 
             // Restore active profile ID from UserDefaults
-            if let savedIDString = UserDefaults.standard.string(forKey: "activeProfileID"),
+            if let savedIDString = UserDefaults.standard.string(forKey: DefaultsKeys.activeProfileID),
                let savedID = UUID(uuidString: savedIDString),
                profiles.contains(where: { $0.id == savedID }) {
                 activeProfileID = savedID
@@ -75,7 +75,7 @@ class ProfileService: ObservableObject {
 
             // Also persist active profile ID
             if let activeID = activeProfileID {
-                UserDefaults.standard.set(activeID.uuidString, forKey: "activeProfileID")
+                UserDefaults.standard.set(activeID.uuidString, forKey: DefaultsKeys.activeProfileID)
             }
 
             print("[ProfileService] Saved \(profiles.count) profiles, active: \(activeProfileID?.uuidString ?? "none")")

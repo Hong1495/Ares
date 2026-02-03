@@ -217,12 +217,12 @@ actor MITMBackend {
     }
     
     func refreshResilienceMode() {
-        ideResilienceMode = UserDefaults.standard.bool(forKey: "ideResilienceMode")
+        ideResilienceMode = UserDefaults.standard.bool(forKey: DefaultsKeys.ideResilienceMode)
         print("[MITMBackend] 🛡️ Resilience Mode: \(ideResilienceMode)")
     }
     
     func refreshDisplayWhitelist() {
-        let mitmHostsString = UserDefaults.standard.string(forKey: "mitmHosts") ?? ""
+        let mitmHostsString = UserDefaults.standard.string(forKey: DefaultsKeys.mitmHosts) ?? ""
         let trimmed = mitmHostsString.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
             displayWhitelist = []

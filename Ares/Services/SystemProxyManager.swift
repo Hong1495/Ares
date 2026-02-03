@@ -11,7 +11,7 @@ class SystemProxyManager {
     /// This will prompt for password on each toggle
     /// Set system proxy using networksetup command
     /// Uses password-less sudo if available, otherwise prompts for password
-    func setSystemProxy(enabled: Bool, httpPort: Int = 7890, socksPort: Int = 7891, bypassRules: String = "") async -> Bool {
+    func setSystemProxy(enabled: Bool, httpPort: Int = ClashPorts.defaultMixed, socksPort: Int = ClashPorts.defaultSocks, bypassRules: String = "") async -> Bool {
         print("[SystemProxy] \(enabled ? "Enabling" : "Disabling") system proxy via networksetup...")
         
         let bypassArray = bypassRules.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }

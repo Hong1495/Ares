@@ -17,6 +17,9 @@ struct TopologyPageView: View {
                 .background(Color(nsColor: .textBackgroundColor))
         }
         .navigationTitle("Topology")
+        .onAppear {
+            Task { await clashController.monitorConnections() }
+        }
     }
 
     func formatBytes(_ bytes: Int64) -> String {
