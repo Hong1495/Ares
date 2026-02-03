@@ -181,20 +181,35 @@ final class ConnectionBuffer: @unchecked Sendable {
 }
 
 final class TelemetryWorker: @unchecked Sendable {
-    private let decoder: JSONDecoder
-    private var listener: NWListener?
-
-    init() {
-        self.decoder = JSONDecoder()
+    private static let sharedDecoder: JSONDecoder = {
+        let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder throws -> Date in
             let container = try decoder.singleValueContainer()
             let s = try container.decode(String.self)
-            let f = ISO8601DateFormatter()
-            if let d = f.date(from: s) { return d }
-            f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            return f.date(from: s) ?? Date()
+
+            // Fast Path: ISO8601
+            if let d = TelemetryWorker.sharedFormatter.date(from: s) { return d }
+
+            // Slow Path: Fractional Seconds handling
+            return TelemetryWorker.sharedFractionalFormatter.date(from: s) ?? Date()
         }
-    }
+        return decoder
+    }()
+
+    private static let sharedFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        return f
+    }()
+
+    private static let sharedFractionalFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+
+    private var listener: NWListener?
+
+    init() {}
 
     func start() {
         // Cancel existing listener if any to prevent port conflicts
@@ -274,7 +289,7 @@ final class TelemetryWorker: @unchecked Sendable {
         guard data.count > 2 else { return false }
 
         // 1. Try Batched (Array)
-        if let updates = try? decoder.decode([PayloadWrapper].self, from: data) {
+        if let updates = try? Self.sharedDecoder.decode([PayloadWrapper].self, from: data) {
             // Debug: Log received request methods
             for update in updates {
                 if let req = update.request {
@@ -295,7 +310,7 @@ final class TelemetryWorker: @unchecked Sendable {
         }
 
         // 2. Try Single (Object)
-        if let wrapper = try? decoder.decode(PayloadWrapper.self, from: data) {
+        if let wrapper = try? Self.sharedDecoder.decode(PayloadWrapper.self, from: data) {
             /*
             if let req = wrapper.request {
                 // print("[TeleWorker] 📥 Received: \(req.method) \(req.url.prefix(60))...")
@@ -342,6 +357,171 @@ final class TelemetryWorker: @unchecked Sendable {
 
 // MARK: - 3. UI Service (Main Actor)
 
+// MARK: - 3. UI Service (Main Actor)
+
+actor BrowserAnalyzer {
+    // Internal state for fast lookups
+    private var tabMap: [String: BrowserTab] = [:]
+
+    // Config
+    private let staleThreshold: TimeInterval = 600 // 10 mins
+
+    func process(activeTabs: [BrowserTab], wrappers: [PayloadWrapper]) -> [BrowserTab] {
+        var needsSort = false
+
+        // 1. Sync internal map if needed (first run or reset)
+        if tabMap.isEmpty && !activeTabs.isEmpty {
+            for tab in activeTabs {
+                tabMap[tab.id] = tab
+            }
+        }
+
+        // 2. Apply Updates
+        for w in wrappers {
+            if let req = w.request, let tid = w.tabId {
+                addRequestToTab(tabId: tid, request: req)
+                needsSort = true
+            } else if let tab = w.id != nil ? w.asTab() : nil {
+                updateTab(tab)
+                needsSort = true
+            } else if let tid = w.tabId, w.tabRemoved == true {
+                removeTab(id: tid)
+                needsSort = true
+            }
+        }
+
+        // 3. Prune Stale
+        pruneStaleTabs()
+
+        // 4. Return sorted list (only if needed to save CPU, but usually for UI we sort)
+        // For simplicity, we return sorted values
+        return tabMap.values.sorted { $0.lastUpdate > $1.lastUpdate }
+    }
+
+    private func updateTab(_ tab: BrowserTab) {
+        if var existing = tabMap[tab.id] {
+            existing.url = tab.url
+            existing.title = tab.title
+            existing.lastUpdate = Date()
+            tabMap[tab.id] = existing
+        } else {
+            tabMap[tab.id] = tab
+        }
+    }
+
+    func addRequest(tabId: String, request: BrowserRequest) -> [BrowserTab] {
+        addRequestToTab(tabId: tabId, request: request)
+        pruneStaleTabs()
+        return tabMap.values.sorted { $0.lastUpdate > $1.lastUpdate }
+    }
+
+    private func addRequestToTab(tabId: String, request: BrowserRequest) {
+        var tab = tabMap[tabId] ?? BrowserTab(
+            id: tabId,
+            url: request.url,
+            title: "Loading...",
+            lastUpdate: Date(),
+            requests: []
+        )
+
+        // 1. Precise ID Matching
+        if let ri = tab.requests.firstIndex(where: { $0.id == request.id }) {
+            // print("[BrowserAnalyzer] ✅ Found matching request by ID: \(request.id)")
+            merge(request, into: &tab.requests[ri])
+        }
+        // 2. Heuristic Body Matching
+        else if request.id.hasPrefix("body-") {
+            let bodyMatchWindow = 5.0
+            if let mi = tab.requests.firstIndex(where: {
+                guard $0.url == request.url && $0.method == request.method else { return false }
+                let refTime = $0.lastUpdateTimestamp ?? $0.timestamp
+                return abs(refTime.timeIntervalSince(request.timestamp)) < bodyMatchWindow
+            }) {
+                merge(request, into: &tab.requests[mi])
+            }
+        }
+        // 3. New Entry or Polling Coalescing
+        else {
+            var nr = request; nr.lastUpdateTimestamp = Date()
+            let isSafeMethod = ["GET", "HEAD", "OPTIONS"].contains(request.method.uppercased())
+            let recentThreshold = 0.5
+
+            if isSafeMethod, let ei = tab.requests.firstIndex(where: {
+                $0.url == request.url && $0.method == request.method &&
+                abs($0.timestamp.timeIntervalSince(request.timestamp)) < recentThreshold
+            }) {
+                tab.requests[ei].hitCount += 1
+
+                let newHit = RequestHit(
+                    timestamp: request.timestamp,
+                    statusCode: request.statusCode,
+                    duration: request.duration,
+                    requestBody: request.requestBody,
+                    responseBody: request.responseBody
+                )
+                tab.requests[ei].hits.append(newHit)
+
+                if tab.requests[ei].hits.count > 50 {
+                    tab.requests[ei].hits.removeFirst(tab.requests[ei].hits.count - 50)
+                }
+
+                merge(request, into: &tab.requests[ei])
+            } else {
+                tab.requests.insert(nr, at: 0)
+            }
+        }
+
+        tab.lastUpdate = Date()
+
+        // History limit
+        if tab.requests.count > 500 {
+            tab.requests.removeLast()
+        }
+
+        tabMap[tabId] = tab
+    }
+
+    private func removeTab(id: String) {
+        tabMap.removeValue(forKey: id)
+    }
+
+    private func pruneStaleTabs() {
+        let now = Date()
+        let staleKeys = tabMap.filter { now.timeIntervalSince($0.value.lastUpdate) > staleThreshold }.map { $0.key }
+        for k in staleKeys { tabMap.removeValue(forKey: k) }
+    }
+
+    private func merge(_ src: BrowserRequest, into dst: inout BrowserRequest) {
+        if src.status != .pending { dst.status = src.status }
+        if let c = src.statusCode { dst.statusCode = c }
+        if let m = src.mimeType { dst.mimeType = m }
+        if let s = src.size, s > 0 { dst.size = s }
+        if let d = src.duration, d > 0 { dst.duration = d }
+        if let ip = src.remoteAddress { dst.remoteAddress = ip }
+        if let reqH = src.requestHeaders { dst.requestHeaders = reqH }
+        if let resH = src.responseHeaders { dst.responseHeaders = resH }
+        if let reqB = src.requestBody { dst.requestBody = reqB }
+        if let resB = src.responseBody { dst.responseBody = resB }
+        if let msg = src.errorMessage { dst.errorMessage = msg }
+
+        if !dst.hits.isEmpty {
+            let lastIdx = dst.hits.count - 1
+            var hit = dst.hits[lastIdx]
+            if let c = src.statusCode { hit = RequestHit(timestamp: hit.timestamp, statusCode: c, duration: hit.duration, requestBody: hit.requestBody, responseBody: hit.responseBody) }
+            if let d = src.duration { hit = RequestHit(timestamp: hit.timestamp, statusCode: hit.statusCode, duration: d, requestBody: hit.requestBody, responseBody: hit.responseBody) }
+            if let rb = src.requestBody { hit.requestBody = rb }
+            if let sb = src.responseBody { hit.responseBody = sb }
+            dst.hits[lastIdx] = hit
+        }
+
+        dst.lastUpdateTimestamp = Date()
+    }
+
+    func reset() {
+        tabMap.removeAll()
+    }
+}
+
 @MainActor
 class BrowserAnalysisService: ObservableObject {
     static let shared = BrowserAnalysisService()
@@ -352,15 +532,31 @@ class BrowserAnalysisService: ObservableObject {
     @Published var connectionCount: Int = 0
 
     private let worker = TelemetryWorker()
-    private var pruningTimer: AnyCancellable?
-    private let staleThreshold: TimeInterval = 600 // Keep tabs for 10 mins without updates
+    private let analyzer = BrowserAnalyzer()
 
     private var pendingWrappers: [PayloadWrapper] = []
     private var isBatching = false
+    private var cancellables = Set<AnyCancellable>()
 
     private init() {
         worker.start()
-        startPruningTimer()
+
+        // MARK: - Global Lifecycle (Event Bus)
+        NotificationCenter.default.publisher(for: .appDidGoSilent)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                print("[BrowserAnalysis] 🌙 Received Silence Signal - HARD STOP")
+                self?.stopListening()
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .appDidWakeUp)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                print("[BrowserAnalysis] ☀️ Received Wake Signal - RESTART")
+                self?.startListening()
+            }
+            .store(in: &cancellables)
     }
 
     /// Start listening for browser extension data
@@ -394,190 +590,39 @@ class BrowserAnalysisService: ObservableObject {
             // Buffer updates for 500ms to avoid flooding Main Actor
             try? await Task.sleep(nanoseconds: 500_000_000)
 
-            self.applyPendingUpdates()
+            await self.applyPendingUpdates()
             self.isBatching = false
         }
     }
 
-    private func applyPendingUpdates() {
+    private func applyPendingUpdates() async {
         guard !pendingWrappers.isEmpty else { return }
 
         let wrappers = pendingWrappers
         pendingWrappers.removeAll()
 
+        let count = wrappers.count
+
+        // Offload processing to background Actor
+        // We pass the current UI state (activeTabs) to sync the actor if needed, or rely on actor state.
+        // To be safe and robust, we pass activeTabs to actor only if actor is empty (handled inside process),
+        // or we fully rely on actor state. Let's rely on actor state for integrity.
+        let newTabs = await analyzer.process(activeTabs: self.activeTabs, wrappers: wrappers)
+
+        // Update UI
+        self.activeTabs = newTabs
         self.lastReceived = Date()
-        self.connectionCount += wrappers.count
-
-        // Signal single update for the entire batch
-        objectWillChange.send()
-
-        for w in wrappers {
-            if let req = w.request, let tid = w.tabId {
-                addRequestToTab(tabId: tid, request: req)
-            } else if let tab = w.id != nil ? w.asTab() : nil {
-                updateTab(tab)
-            } else if let tid = w.tabId, w.tabRemoved == true {
-                removeTab(id: tid)
-            }
-        }
-    }
-
-    private func updateTab(_ tab: BrowserTab) {
-        if let i = activeTabs.firstIndex(where: { $0.id == tab.id }) {
-            activeTabs[i].url = tab.url
-            activeTabs[i].title = tab.title
-            activeTabs[i].lastUpdate = Date()
-        } else {
-            activeTabs.append(tab)
-        }
+        self.connectionCount += count
     }
 
     func addRequestToTab(tabId: String, request: BrowserRequest) {
-        // Ensure subscribers know an update occurred, crucial for TrafficAnalyzer
-        self.lastReceived = Date()
-
-        if let i = activeTabs.firstIndex(where: { $0.id == tabId }) {
-            addRequestToTabIndex(i, request: request)
-        } else {
-            // Race condition: request arrived before tab metadata. Create placeholder.
-            activeTabs.append(BrowserTab(
-                id: tabId,
-                url: request.url,
-                title: "Loading...",
-                lastUpdate: Date(),
-                requests: [request]
-            ))
-        }
-    }
-
-    private func addRequestToTabIndex(_ i: Int, request: BrowserRequest) {
-        // 1. Precise ID Matching (Internal tracking)
-        if let ri = activeTabs[i].requests.firstIndex(where: { $0.id == request.id }) {
-            print("[BrowserAnalysisService] ✅ Found matching request by ID: \(request.id)")
-            merge(request, into: &activeTabs[i].requests[ri])
-        }
-        // 2. Heuristic Body Matching (IDs starting with "body-")
-        // IMPORTANT: Body capture should ONLY merge, NEVER create new entries
-        // Only telemetry (chrome.webRequest) should create entries to avoid duplicates
-        else if request.id.hasPrefix("body-") {
-            // Find a matching request by URL and method within a reasonable time window
-            let bodyMatchWindow = 5.0
-            if let mi = activeTabs[i].requests.firstIndex(where: {
-                guard $0.url == request.url && $0.method == request.method else { return false }
-                // Check against either the original timestamp or last update
-                let refTime = $0.lastUpdateTimestamp ?? $0.timestamp
-                return abs(refTime.timeIntervalSince(request.timestamp)) < bodyMatchWindow
-            }) {
-                // print("[TeleWorker] ✅ Body merged into request: \(request.url.prefix(40))...")
-                merge(request, into: &activeTabs[i].requests[mi])
-            } else {
-                // No match found - discard body capture, don't create new entry
-                // This prevents duplicate entries from body capture + telemetry
-                // print("[TeleWorker] ⏳ Body capture waiting (no matching telemetry yet): \(request.url.prefix(40))...")
+        Task {
+            let newTabs = await analyzer.addRequest(tabId: tabId, request: request)
+            await MainActor.run {
+                self.activeTabs = newTabs
+                self.lastReceived = Date()
             }
         }
-        // 3. New Entry or Polling Coalescing
-        else {
-            var nr = request; nr.lastUpdateTimestamp = Date()
-
-            // Only merge true duplicates/retries within 500ms - NOT normal polling
-            // CRITICAL: Do NOT merge POST/PUT/PATCH methods, as bodies might differ.
-            // Only merge GET/HEAD where parameters are fully visible in the URL.
-            let isSafeMethod = ["GET", "HEAD", "OPTIONS"].contains(request.method.uppercased())
-
-            let recentThreshold = 0.5
-            if isSafeMethod, let ei = activeTabs[i].requests.firstIndex(where: {
-                $0.url == request.url && $0.method == request.method &&
-                abs($0.timestamp.timeIntervalSince(request.timestamp)) < recentThreshold
-            }) {
-                // print("[TeleWorker] 🔄 POLLING MERGE: \(request.method) \(request.url.prefix(40))... (id: \(request.id.prefix(20)))")
-                activeTabs[i].requests[ei].hitCount += 1
-
-                // Record the new hit in the history
-                // Record the new hit in the history with its specific body
-                let newHit = RequestHit(
-                    timestamp: request.timestamp,
-                    statusCode: request.statusCode,
-                    duration: request.duration,
-                    requestBody: request.requestBody,
-                    responseBody: request.responseBody
-                )
-                activeTabs[i].requests[ei].hits.append(newHit)
-
-                // 限制 hits 历史记录数量，防止内存无限增长
-                let maxHitsPerRequest = 50
-                if activeTabs[i].requests[ei].hits.count > maxHitsPerRequest {
-                    activeTabs[i].requests[ei].hits.removeFirst(activeTabs[i].requests[ei].hits.count - maxHitsPerRequest)
-                }
-
-                // IMPORTANT: Use merge to preserve body data and other fields!
-                merge(request, into: &activeTabs[i].requests[ei])
-            } else {
-                // print("[TeleWorker] ➕ NEW REQUEST: \(request.method) \(request.url.prefix(100))... (id: \(request.id.prefix(8))) [type: \(request.type)] [init: \(request.initiator ?? "nil")]")
-                activeTabs[i].requests.insert(nr, at: 0)
-            }
-        }
-
-        activeTabs[i].lastUpdate = Date()
-
-        // History limit: keep it under 500 items per tab
-        if activeTabs[i].requests.count > 500 {
-            activeTabs[i].requests.removeLast()
-        }
-    }
-
-    private func removeTab(id: String) {
-        activeTabs.removeAll(where: { $0.id == id })
-    }
-
-    private func startPruningTimer() {
-        pruningTimer = Timer.publish(every: 60, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] _ in
-                self?.pruneStaleTabs()
-            }
-    }
-
-    private func pruneStaleTabs() {
-        let now = Date()
-        activeTabs.removeAll { now.timeIntervalSince($0.lastUpdate) > staleThreshold }
-    }
-
-    private func merge(_ src: BrowserRequest, into dst: inout BrowserRequest) {
-        if src.status != .pending { dst.status = src.status }
-        if let c = src.statusCode { dst.statusCode = c }
-        if let m = src.mimeType { dst.mimeType = m }
-        if let s = src.size, s > 0 { dst.size = s }
-        if let d = src.duration, d > 0 { dst.duration = d }
-        if let ip = src.remoteAddress { dst.remoteAddress = ip }
-        if let reqH = src.requestHeaders { dst.requestHeaders = reqH }
-        if let resH = src.responseHeaders { dst.responseHeaders = resH }
-        if let reqB = src.requestBody {
-            if let existingBody = dst.requestBody, existingBody != reqB {
-                // print("[TeleWorker] ⚠️ BODY MISMATCH in merge! Keeping new body. (Old: \(existingBody.prefix(30))... New: \(reqB.prefix(30))...)")
-            } else {
-                // print("[TeleWorker] 📝 Merging requestBody: \(reqB.prefix(50))...")
-            }
-            dst.requestBody = reqB
-        }
-        if let resB = src.responseBody {
-            // print("[TeleWorker] 📝 Merging responseBody: \(resB.prefix(50))...")
-            dst.responseBody = resB
-        }
-        if let msg = src.errorMessage { dst.errorMessage = msg }
-
-        // Update the most recent hit with finalized status/duration if it was previously nil
-        if !dst.hits.isEmpty {
-            let lastIdx = dst.hits.count - 1
-            if let c = src.statusCode { dst.hits[lastIdx] = RequestHit(timestamp: dst.hits[lastIdx].timestamp, statusCode: c, duration: dst.hits[lastIdx].duration, requestBody: dst.hits[lastIdx].requestBody, responseBody: dst.hits[lastIdx].responseBody) }
-            if let d = src.duration { dst.hits[lastIdx] = RequestHit(timestamp: dst.hits[lastIdx].timestamp, statusCode: dst.hits[lastIdx].statusCode, duration: d, requestBody: dst.hits[lastIdx].requestBody, responseBody: dst.hits[lastIdx].responseBody) }
-
-            // Also update body in the latest hit if captured
-            if let rb = src.requestBody { dst.hits[lastIdx].requestBody = rb }
-            if let sb = src.responseBody { dst.hits[lastIdx].responseBody = sb }
-        }
-
-        dst.lastUpdateTimestamp = Date()
     }
 }
 

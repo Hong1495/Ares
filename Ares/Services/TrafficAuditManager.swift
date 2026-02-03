@@ -103,166 +103,107 @@ enum ActivityNode: Identifiable, Hashable, Sendable {
     }
 }
 
-/// Singleton manager responsible for auditing traffic and maintaining app sessions.
-@MainActor
-final class TrafficAuditManager: ObservableObject {
-    static let shared = TrafficAuditManager()
-
-    @Published var sessions: [AppSession] = []
-
+/// Background Actor for processing traffic data
+actor TrafficAuditor {
     // Internal state for diffing
-    // Map: ProcessPath -> AppSession
     private var sessionMap: [String: AppSession] = [:]
-
-    // Map: ConnectionID -> (Upload, Download)
     private var connectionSnapshots: [String: (up: Int64, down: Int64)] = [:]
-
-    // Cache: Original Path -> Parsed Main Bundle Path
     private var pathCache: [String: String] = [:]
-
     private var lastUpdateTime: Date = Date()
 
-    private init() {}
-
-    // MARK: - Core Logic
-
-    /// Process a new snapshot of active connections from the kernel.
-    /// Updates cumulative totals and session states.
-    func update(with currentConnections: [Connection]) {
+    // Aggregates connections into sessions and calculates speeds
+    func process(connections: [Connection]) -> [AppSession] {
         let now = Date()
         let timeDiff = now.timeIntervalSince(lastUpdateTime)
-        let safeTimeDiff = timeDiff > 0 ? timeDiff : 1.0 // Avoid division by zero
+        let safeTimeDiff = timeDiff > 0 ? timeDiff : 1.0
         lastUpdateTime = now
 
-        var touchList: Set<String> = [] // Track which apps are active in this snapshot
-
-        // Temporary holding for grouping active connections by app and calculating period deltas
+        var touchList: Set<String> = []
         var appActiveConns: [String: [Connection]] = [:]
         var appDeltas: [String: (up: Int64, down: Int64)] = [:]
 
-        for conn in currentConnections {
-            // OPTIMIZATION: Aggregate Helper Processes to Main App Bundle
-            // e.g. "Google Chrome Helper" -> "Google Chrome"
+        for conn in connections {
             let appKey = findMainBundle(conn.metadata.processPath)
-
-            // Calculate Delta
             let prev = connectionSnapshots[conn.id] ?? (0, 0)
-
             let deltaUp = max(0, conn.upload - prev.up)
             let deltaDown = max(0, conn.download - prev.down)
 
-            // Update Snapshot
             connectionSnapshots[conn.id] = (conn.upload, conn.download)
 
-            // Prepare or Get Session
             if sessionMap[appKey] == nil {
                 let name = processName(from: appKey)
-                sessionMap[appKey] = AppSession(
-                    id: appKey,
-                    name: name,
-                    iconPath: appKey // Use aggregated bundle path for icon
-                )
+                sessionMap[appKey] = AppSession(id: appKey, name: name, iconPath: appKey)
             }
 
-            // Accumulate Traffic to Session (Historical Total)
             sessionMap[appKey]?.totalUpload += deltaUp
             sessionMap[appKey]?.totalDownload += deltaDown
             sessionMap[appKey]?.lastActiveTime = now
 
-            // Accumulate Deltas for Speed Calculation (Speed in this window)
             let currentDeltas = appDeltas[appKey] ?? (0, 0)
             appDeltas[appKey] = (currentDeltas.up + deltaUp, currentDeltas.down + deltaDown)
 
-            // Group for active list
             touchList.insert(appKey)
             appActiveConns[appKey, default: []].append(conn)
         }
 
-        // 2. Cleanup Closed Connections from Snapshot Map
-        let currentIDs = Set(currentConnections.map { $0.id })
+        // Cleanup Closed Connections
+        let currentIDs = Set(connections.map { $0.id })
         let storedIDs = Set(connectionSnapshots.keys)
         let removedIDs = storedIDs.subtracting(currentIDs)
         for id in removedIDs {
             connectionSnapshots.removeValue(forKey: id)
         }
 
-        // 3. Update Session States (Running/Terminated)
+        // Update Sessions
         for key in sessionMap.keys {
             guard var session = sessionMap[key] else { continue }
-
-            // Is it present in current snapshot?
             let isActiveInSnapshot = touchList.contains(key)
 
-            // Update Active Connections List
             session.activeConnections = appActiveConns[key] ?? []
             session.activeConnectionCount = session.activeConnections.count
 
-            // Update Speeds based on accumulated deltas in this time window
-            var currentDownSpeed: Int64 = 0
             if let deltas = appDeltas[key] {
                 session.currentUploadSpeed = Int64(Double(deltas.up) / safeTimeDiff)
-                currentDownSpeed = Int64(Double(deltas.down) / safeTimeDiff)
-                session.currentDownloadSpeed = currentDownSpeed
+                session.currentDownloadSpeed = Int64(Double(deltas.down) / safeTimeDiff)
             } else {
                 session.currentUploadSpeed = 0
                 session.currentDownloadSpeed = 0
             }
 
-            // Update History (Keep last 60 points)
-            session.speedHistory.append((now, currentDownSpeed))
+            session.speedHistory.append((now, session.currentDownloadSpeed))
             if session.speedHistory.count > 60 {
                 session.speedHistory.removeFirst()
             }
 
-            // Determine "Running" State
             session.isRunning = isActiveInSnapshot
-
             sessionMap[key] = session
         }
 
-        // 4. Cleanup Stale Sessions (Memory Leak Fix)
-        // Remove sessions inactive for > 5 minutes
+        // Cleanup Stale Sessions (> 5 min inactive)
         let cleanupThreshold = now.addingTimeInterval(-300)
         let staleKeys = sessionMap.filter { $0.value.lastActiveTime < cleanupThreshold && !$0.value.isRunning }.map { $0.key }
         for key in staleKeys {
             sessionMap.removeValue(forKey: key)
         }
 
-        // 5. Publish sorted list
-        // Sort: Active first, then by Download Speed (desc), then by Total Download
-        self.sessions = sessionMap.values.sorted {
-            if $0.isRunning != $1.isRunning {
-                return $0.isRunning && !$1.isRunning
-            }
-            if $0.currentDownloadSpeed != $1.currentDownloadSpeed {
-                return $0.currentDownloadSpeed > $1.currentDownloadSpeed
-            }
+        // Return sorted list
+        return sessionMap.values.sorted {
+            if $0.isRunning != $1.isRunning { return $0.isRunning && !$1.isRunning }
+            if $0.currentDownloadSpeed != $1.currentDownloadSpeed { return $0.currentDownloadSpeed > $1.currentDownloadSpeed }
             return $0.totalDownload > $1.totalDownload
         }
     }
 
-    /// Reset all statistics
     func reset() {
         sessionMap.removeAll()
-        self.sessions = []
+        connectionSnapshots.removeAll()
     }
 
-    // MARK: - Helper
-
-    /// Finds the main app bundle path from a process path.
-    /// Priority:
-    /// 1. Standard .app Bundle (Everything inside App.app belongs to App)
-    /// 2. Known Extension Paths (VSCode/Cursor extensions)
-    /// 3. Known Standalone Binaries
+    // MARK: - Helpers
     private func findMainBundle(_ path: String?) -> String {
         guard let path = path, !path.isEmpty else { return "Unknown" }
+        if let cached = pathCache[path] { return cached }
 
-        // 0. Cache hit
-        if let cached = pathCache[path] {
-            return cached
-        }
-
-        // 1. STANDARD MERGING: Check for .app Bundle FIRST
         let result: String
         if let appBundle = findEnclosingAppBundle(path) {
             result = appBundle
@@ -276,29 +217,18 @@ final class TrafficAuditManager: ObservableObject {
             result = path
         }
 
-        // Cache the result
         pathCache[path] = result
-
-        // Safety: Prevent cache from growing infinitely
-        if pathCache.count > 1000 {
-            pathCache.removeAll()
-        }
-
+        if pathCache.count > 1000 { pathCache.removeAll() }
         return result
     }
 
-    /// Helper to find the nearest .app parent
     private func findEnclosingAppBundle(_ path: String) -> String? {
         if !path.contains(".app") { return nil }
-
         let components = path.split(separator: "/")
         var currentPath = ""
-
         for component in components {
             currentPath += "/" + component
-            if component.hasSuffix(".app") {
-                return currentPath
-            }
+            if component.hasSuffix(".app") { return currentPath }
         }
         return nil
     }
@@ -306,5 +236,34 @@ final class TrafficAuditManager: ObservableObject {
     private func processName(from path: String) -> String {
         guard !path.isEmpty && path != "Unknown" else { return "Unknown" }
         return URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
+    }
+}
+
+
+/// Singleton manager responsible for auditing traffic and maintaining app sessions.
+@MainActor
+final class TrafficAuditManager: ObservableObject {
+    static let shared = TrafficAuditManager()
+
+    @Published var sessions: [AppSession] = []
+
+    // Background worker
+    private let auditor = TrafficAuditor()
+
+    private init() {}
+
+    /// Process a new snapshot of active connections from the kernel.
+    func update(with currentConnections: [Connection]) async {
+        // Offload heavy processing to background actor
+        let updatedSessions = await auditor.process(connections: currentConnections)
+
+        // Update UI on MainActor
+        self.sessions = updatedSessions
+    }
+
+    /// Reset all statistics
+    func reset() {
+        Task { await auditor.reset() }
+        self.sessions = []
     }
 }

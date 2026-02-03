@@ -34,6 +34,7 @@ class AppState: ObservableObject {
         }
     }
     @Published var selection: NavigationItem = .dashboard
+    @Published var animationsEnabled: Bool = true
 
     // System toggles
     @Published var systemProxyEnabled = false
@@ -72,8 +73,13 @@ class AppState: ObservableObject {
         pollingTimer = Timer.publish(every: 10.0, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
+                guard let self = self else { return }
+
+                // OPTIMIZATION: Pause heartbeat in background
+                guard self.animationsEnabled else { return }
+
                 Task {
-                    self?.syncStatus()
+                    self.syncStatus()
                 }
             }
     }
@@ -121,6 +127,43 @@ class AppState: ObservableObject {
                 await verifyAndFixPortMismatches()
             }
         }
+    }
+
+    // MARK: - Service Lifecycle Management (Codebase Detox)
+
+    /// Global "Wake Up" - Called when App enters Foreground
+    func wakeUp() {
+        print("[AppState] ☀️ Waking up services...")
+        self.animationsEnabled = true
+
+        // Broadcast Wake Up
+        NotificationCenter.default.post(name: .appDidWakeUp, object: nil)
+
+        // 1. Resume Traffic Monitoring
+        if clashViewModel.isRunning {
+             clashController.startTrafficMonitor()
+        }
+
+        // 2. Resume Heartbeat
+        // Note: Polling timer is auto-connected, but we ensured strictly valid execution
+        // We could force a sync immediately here
+        syncStatus()
+    }
+
+    /// Global "Go Silent" - Called when App enters Background
+    func goSilent() {
+        print("[AppState] 🌙 Going silent (Background)...")
+        self.animationsEnabled = false
+
+        // Broadcast Silence
+        NotificationCenter.default.post(name: .appDidGoSilent, object: nil)
+
+        // 1. Hard Stop Traffic Monitoring (Close Socket)
+        clashController.stopTrafficMonitor()
+
+        // 2. Stop Connections Monitoring (Will be handled by View onDisappear, but double check?)
+        // ConnectionsViewModel is StateObject in View, so it handles itself via View lifecycle.
+        // But preventing Global Polling is key.
     }
 
     /// Sync state from Clash API

@@ -84,6 +84,7 @@ struct AresApp: App {
     private let clashController = ClashController.shared
     @StateObject private var appState = AppState.shared
     @StateObject private var themeService = ThemeService.shared
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup(id: "main") {
@@ -98,6 +99,14 @@ struct AresApp: App {
                     NSWindow.allowsAutomaticWindowTabbing = false
                 }
                 .preferredColorScheme(themeService.theme == "dark" ? .dark : (themeService.theme == "light" ? .light : nil))
+                .onChange(of: scenePhase) { newPhase in
+                    print("[App] 🎬 Scene Phase changed to: \(newPhase)")
+                    if newPhase == .active {
+                        appState.wakeUp()
+                    } else if newPhase == .background {
+                        appState.goSilent()
+                    }
+                }
         }
         .commands {
             // Disable "New Window" to enforce single window behavior

@@ -36,6 +36,7 @@ struct TopologyEdge: Identifiable {
 
 struct TopologyView: View {
     @EnvironmentObject var clashController: ClashController
+    @EnvironmentObject var appState: AppState
     @State private var size: CGSize = .zero
 
     // Cache the graph to avoid recalculation on every frame
@@ -55,10 +56,15 @@ struct TopologyView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .transition(.opacity)
                 } else {
-                    TimelineView(.animation) { timeline in
-                        Canvas { context, size in
-                            let time = timeline.date.timeIntervalSinceReferenceDate
-                            drawGraph(in: context, size: size, time: time)
+                    Group {
+                        if appState.animationsEnabled {
+                            TimelineView(.animation) { timeline in
+                                topologyCanvas(timeline: timeline)
+                            }
+                        } else {
+                            TimelineView(.explicit([Date()])) { timeline in
+                                topologyCanvas(timeline: timeline)
+                            }
                         }
                     }
                     .transition(.opacity)
@@ -81,6 +87,14 @@ struct TopologyView: View {
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
         .cornerRadius(12)
+    }
+
+    @ViewBuilder
+    private func topologyCanvas(timeline: TimelineViewDefaultContext) -> some View {
+        Canvas { context, size in
+            let time = timeline.date.timeIntervalSinceReferenceDate
+            drawGraph(in: context, size: size, time: time)
+        }
     }
 
     // Extraction for cleaner body
@@ -139,16 +153,12 @@ struct TopologyView: View {
     // MARK: - Graph Algorithm
 
     func updateGraph() {
-        // Run calculation off main thread if needed, but for now just function call
-        // preventing it from being in the View body is the main fix.
         let newGraph = calculateGraph(chains: clashController.activeChains, size: size)
         self.graph = newGraph
     }
 
     func calculateGraph(chains: [ConnectionChain], size: CGSize) -> (nodes: [TopologyNode], edges: [TopologyEdge]) {
         var nodes: [String: TopologyNode] = [:]
-
-        // --- 1. Layout Nodes (Same as before) ---
 
         let width = size.width
         let height = size.height
@@ -215,8 +225,6 @@ struct TopologyView: View {
         layoutColumn(items: Array(proxies), x: col3X, type: .proxy)
         layoutColumn(items: Array(targets), x: col4X, type: .target)
 
-        // --- 2. Edge Generation & Bundling ---
-
         var rawEdges: [TopologyEdge] = []
 
         func addEdge(uName: String, uType: TopologyNode.NodeType, vName: String, vType: TopologyNode.NodeType, sourceName: String) {
@@ -241,10 +249,6 @@ struct TopologyView: View {
             addEdge(uName: proxy, uType: .proxy, vName: target, vType: .target, sourceName: source)
         }
 
-        // Bundle Edges
-        // Key idea: Group edges by (u, v) pair.
-        // For each group, distribute controlOffset around 0 (+/- spread).
-
         var edgeGroups: [String: [UUID]] = [:] // "u|v" -> [EdgeID]
         for edge in rawEdges {
             let key = "\(edge.from)|\(edge.to)"
@@ -267,12 +271,9 @@ struct TopologyView: View {
         return (Array(nodes.values), finalEdges)
     }
 
-    // Spread control points to create a "bundle"
     func calculateControlOffset(index: Int, total: Int) -> CGFloat {
         if total <= 1 { return 0 }
-        // Spread range depends on distance, but fixed scalar works for visual effect
         let maxSpread: CGFloat = 40.0
-        // Map 0..total-1 to -maxSpread/2 .. +maxSpread/2
         let step = maxSpread / CGFloat(total)
         let start = -maxSpread / 2.0 + step / 2.0
         return start + CGFloat(index) * step

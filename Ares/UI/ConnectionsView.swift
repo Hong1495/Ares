@@ -455,33 +455,100 @@ struct ApplicationIconView: View {
 
 // MARK: - ViewModel
 
+actor ConnectionsCalculator {
+    private var previousSnapshots: [String: (up: Int64, down: Int64, time: Date)] = [:]
+
+    func process(rawConnections: [Connection], appSessions: [AppSession], groupingMode: GroupingMode) -> [ActivityNode] {
+        let now = Date()
+
+        // 1. Calculate Speeds
+        var computedConnections = rawConnections
+        for i in 0..<computedConnections.count {
+            let conn = computedConnections[i]
+            if let prev = previousSnapshots[conn.id] {
+                let timeDiff = now.timeIntervalSince(prev.time)
+                if timeDiff > 0 {
+                    computedConnections[i].uploadSpeed = Int64(Double(conn.upload - prev.up) / timeDiff)
+                    computedConnections[i].downloadSpeed = Int64(Double(conn.download - prev.down) / timeDiff)
+                }
+            }
+        }
+
+        // Update Snapshots
+        var newSnapshots: [String: (up: Int64, down: Int64, time: Date)] = [:]
+        for conn in computedConnections {
+            newSnapshots[conn.id] = (conn.upload, conn.download, now)
+        }
+        previousSnapshots = newSnapshots
+
+        // 2. Grouping Logic
+        return group(connections: computedConnections, sessions: appSessions, mode: groupingMode)
+    }
+
+    func regroup(connections: [Connection], sessions: [AppSession], mode: GroupingMode) -> [ActivityNode] {
+        return group(connections: connections, sessions: sessions, mode: mode)
+    }
+
+    private func group(connections: [Connection], sessions: [AppSession], mode: GroupingMode) -> [ActivityNode] {
+        switch mode {
+        case .app:
+            return sessions.map { ActivityNode.app($0) }
+
+        case .proxy:
+            let groups = Dictionary(grouping: connections) { conn -> String in
+                conn.chains.last ?? "Direct"
+            }
+            return groups.map { id, conns in
+                ActivityNode.group(ActivityGroup(id: id, title: id, icon: "network", connections: conns))
+            }
+
+        case .host:
+            let groups = Dictionary(grouping: connections) { conn -> String in
+                conn.metadata.host.isEmpty ? conn.metadata.destinationIP : conn.metadata.host
+            }
+            return groups.map { id, conns in
+                ActivityNode.group(ActivityGroup(id: id, title: id, icon: "globe", connections: conns))
+            }
+
+        case .rule:
+            let groups = Dictionary(grouping: connections) { conn -> String in
+                conn.rule.isEmpty ? "Unmatched" : conn.rule
+            }
+            return groups.map { id, conns in
+                ActivityNode.group(ActivityGroup(id: id, title: id, icon: "list.bullet.rectangle", connections: conns))
+            }
+        }
+    }
+}
+
 @MainActor
 final class ConnectionsViewModel: ObservableObject {
     @Published var groupedNodes: [ActivityNode] = []
 
     // Grouping
     @Published var groupingMode: GroupingMode = .app {
-        didSet { computeNodes() }
+        didSet { recomputeNodes() }
     }
 
-    // Raw Data
-    private var connections: [Connection] = []
-    private var appSessions: [AppSession] = []
+    // Raw Data (Cached for regrouping without new data)
+    private var lastRawConnections: [Connection] = []
 
+    // Public readonly access to connections for UI/Export
+    var connections: [Connection] { lastRawConnections }
+
+    // Dependencies
+    private let calculator = ConnectionsCalculator()
     private var webSocketTask: URLSessionWebSocketTask?
     private var isMonitoring = false
     private var cancellables = Set<AnyCancellable>()
 
-    // Speed calculation
-    private var previousSnapshots: [String: (up: Int64, down: Int64, time: Date)] = [:]
-
     var totalDownload: Int64 {
-        // AppSession is source of truth for totals
-        appSessions.reduce(0) { $0 + $1.totalDownload }
+        // TrafficAuditManager.shared.sessions is source of truth
+        TrafficAuditManager.shared.sessions.reduce(0) { $0 + $1.totalDownload }
     }
 
     var totalUpload: Int64 {
-        appSessions.reduce(0) { $0 + $1.totalUpload }
+        TrafficAuditManager.shared.sessions.reduce(0) { $0 + $1.totalUpload }
     }
 
     init() {
@@ -489,8 +556,27 @@ final class ConnectionsViewModel: ObservableObject {
         TrafficAuditManager.shared.$sessions
             .receive(on: RunLoop.main)
             .sink { [weak self] sessions in
-                self?.appSessions = sessions
-                self?.computeNodes()
+                // If we are in .app mode, simple update is enough?
+                // Actually, TrafficAuditManager update drives the cycle usually.
+                // But for pure regrouping logic, we might need this if TrafficAuditManager updates independently.
+                // However, our flow is: WebSocket -> parse -> TrafficAuditManager.update -> Calculator.process -> UI.
+                // This subscription might be redundant for the main flow, but good for consistency.
+            }
+            .store(in: &cancellables)
+
+        // MARK: - Global Lifecycle (Event Bus)
+        NotificationCenter.default.publisher(for: .appDidGoSilent)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                print("[ConnectionsVM] 🌙 Received Silence Signal - HARD STOP")
+                self?.stopMonitoring()
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .appDidWakeUp)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                // Ready for wakeup
             }
             .store(in: &cancellables)
     }
@@ -499,40 +585,11 @@ final class ConnectionsViewModel: ObservableObject {
         TrafficAuditManager.shared.reset()
     }
 
-    // MARK: - Core Logic
-
-    private func computeNodes() {
-        switch groupingMode {
-        case .app:
-            // Use persistent AppSessions
-            self.groupedNodes = appSessions.map { ActivityNode.app($0) }
-
-        case .proxy:
-            // Group active connections by Chain's last node
-            let groups = Dictionary(grouping: connections) { conn -> String in
-                conn.chains.last ?? "Direct" // Provide fallback
-            }
-            self.groupedNodes = groups.map { id, conns in
-                ActivityNode.group(ActivityGroup(id: id, title: id, icon: "network", connections: conns))
-            }
-
-        case .host:
-             // Group by Host or Destination IP
-             let groups = Dictionary(grouping: connections) { conn -> String in
-                 conn.metadata.host.isEmpty ? conn.metadata.destinationIP : conn.metadata.host
-             }
-             self.groupedNodes = groups.map { id, conns in
-                 ActivityNode.group(ActivityGroup(id: id, title: id, icon: "globe", connections: conns))
-             }
-
-        case .rule:
-              // Group by Rule
-              let groups = Dictionary(grouping: connections) { conn -> String in
-                  conn.rule.isEmpty ? "Unmatched" : conn.rule
-              }
-              self.groupedNodes = groups.map { id, conns in
-                  ActivityNode.group(ActivityGroup(id: id, title: id, icon: "list.bullet.rectangle", connections: conns))
-              }
+    private func recomputeNodes() {
+        Task {
+            let sessions = TrafficAuditManager.shared.sessions
+            let nodes = await calculator.regroup(connections: self.lastRawConnections, sessions: sessions, mode: self.groupingMode)
+            self.groupedNodes = nodes
         }
     }
 
@@ -583,10 +640,11 @@ final class ConnectionsViewModel: ObservableObject {
 
     private func parseConnectionsData(_ jsonString: String) {
         Task.detached(priority: .userInitiated) {
+
+            // 1. Parse JSON (Pure func)
             var rawConnections = Self.parseJSON(jsonString)
 
-            // Critical: Filter out "Ares" self-traffic immediately
-            // This prevents feedback loops and UI clutter
+            // Critical: Filter out "Ares" self-traffic
             rawConnections.removeAll { conn in
                 guard let path = conn.metadata.processPath else { return false }
                 let process = (path as NSString).lastPathComponent
@@ -595,41 +653,30 @@ final class ConnectionsViewModel: ObservableObject {
                        path.contains("/Ares.app/")
             }
 
-            let now = Date()
-
-            // 2. Update Traffic Audit
+            // 2. Update Traffic Audit (MainActor, but internal logic is backgrounded)
             await TrafficAuditManager.shared.update(with: rawConnections)
 
-            // 3. Process Speed Calculation
-            await MainActor.run { [weak self] in
-                guard let self = self else { return }
+            // 3. Process Speed & Grouping (Background Actor)
+            // Fetch latest sessions from MainActor before going to background
+            let sessions = await TrafficAuditManager.shared.sessions
+            let mode = await MainActor.run { self.groupingMode }
 
-                var computedConnections = rawConnections
-                for i in 0..<computedConnections.count {
-                    let conn = computedConnections[i]
-                    if let prev = self.previousSnapshots[conn.id] {
-                        let timeDiff = now.timeIntervalSince(prev.time)
-                        if timeDiff > 0 {
-                            computedConnections[i].uploadSpeed = Int64(Double(conn.upload - prev.up) / timeDiff)
-                            computedConnections[i].downloadSpeed = Int64(Double(conn.download - prev.down) / timeDiff)
-                        }
-                    }
-                }
+            let nodes = await self.calculator.process(rawConnections: rawConnections, appSessions: sessions, groupingMode: mode)
 
-                // 只保留当前活跃连接的快照，防止内存无限增长
-                let activeIDs = Set(computedConnections.map { $0.id })
-                var newSnapshots: [String: (up: Int64, down: Int64, time: Date)] = [:]
-                for conn in computedConnections {
-                    newSnapshots[conn.id] = (conn.upload, conn.download, now)
-                }
-                // 移除已关闭连接的快照
-                self.previousSnapshots = newSnapshots
-
-                self.connections = computedConnections
-                self.computeNodes() // Re-compute grouping on new data
+            // 4. Update UI
+            await MainActor.run {
+                self.lastRawConnections = rawConnections
+                self.groupedNodes = nodes
             }
         }
     }
+
+    // Shared formatter to avoid expensive allocation in loop
+    private static let sharedDateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
 
     nonisolated private static func parseJSON(_ jsonString: String) -> [Connection] {
          guard let data = jsonString.data(using: .utf8),
@@ -672,9 +719,7 @@ final class ConnectionsViewModel: ObservableObject {
 
             var startDate = Date()
             if let startStr = connData["start"] as? String {
-                let formatter = ISO8601DateFormatter()
-                formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-                startDate = formatter.date(from: startStr) ?? Date()
+                startDate = Self.sharedDateFormatter.date(from: startStr) ?? Date()
             }
 
             let connection = Connection(

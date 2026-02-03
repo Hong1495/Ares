@@ -240,56 +240,70 @@ class ClashController: ObservableObject {
     private func receiveTrafficMessage() {
         guard isMonitoring, let ws = trafficWebSocket else { return }
 
-        // 使用 async/await 循环而非递归，避免栈增长
-        Task { @MainActor [weak self] in
+        // Offload the WebSocket receive loop to a background thread
+        Task.detached(priority: .medium) { [weak self] in
             guard let self = self else { return }
 
-            while self.isMonitoring, let currentWS = self.trafficWebSocket, currentWS === ws {
+            while await self.isMonitoring {
+                // accessing trafficWebSocket needs to be thread-safe or carefully managed.
+                // Since trafficWebSocket is internal and not an actor, we should be careful.
+                // ideally, we should grab the reference once.
+
+                guard let currentWS = await self.trafficWebSocket, currentWS === ws else { break }
+
                 do {
                     let message = try await currentWS.receive()
 
-                    // 在后台解析
-                    let stats = await Task.detached { [weak self] in
-                        self?.parseTrafficMessage(message)
-                    }.value
-
-                    // 验证仍在监控且使用同一个 socket
-                    guard self.isMonitoring, self.trafficWebSocket === ws else { break }
-
-                    self.consecutiveFailures = 0
-                    // 优化：在此处进行节流 (Throttling)
-                    // 仅当距离上次更新超过 500ms 时才推送给 UI
+                    // Throttle updates to ~2fps to save Main Thread CPU
                     let now = Date()
-                    if let s = stats {
-                        // 总是保存最新的 stats
-                        self.lastTrafficStats = s
+                    let lastUpdate = await self.lastTrafficUpdate
+                    if now.timeIntervalSince(lastUpdate) < 0.5 {
+                        continue
+                    }
 
-                        if now.timeIntervalSince(self.lastTrafficUpdate) > 0.5 {
-                            self.traffic = s
+                    // Parse in background
+                    if let stats = self.parseTrafficMessage(message) {
+                        // Update UI on MainActor
+                        await MainActor.run {
+                            self.consecutiveFailures = 0
+                            self.lastTrafficStats = stats
+                            self.traffic = stats
                             self.lastTrafficUpdate = now
                         }
                     }
 
                 } catch {
-                    guard self.isMonitoring, self.trafficWebSocket === ws else { break }
-                    self.consecutiveFailures += 1
+                    // removing await self.isMonitoring check here as we check at start of loop
+                    // but we need to check if we should break
+                    let stillMonitoring = await self.isMonitoring
+                    guard stillMonitoring, let currentWS = await self.trafficWebSocket, currentWS === ws else { break }
 
-                    let nsError = error as NSError
-                    if nsError.code != 57 && nsError.code != -999 {
-                        ClashViewModel.shared.addLog("[ClashController] ⚠️ Traffic WebSocket error (\(self.consecutiveFailures)/\(self.MAX_RETRY_FAILURES)): \(error.localizedDescription)")
+                    await MainActor.run {
+                        self.consecutiveFailures += 1
+
+                        let nsError = error as NSError
+                        if nsError.code != 57 && nsError.code != -999 {
+                            ClashViewModel.shared.addLog("[ClashController] ⚠️ Traffic WebSocket error (\(self.consecutiveFailures)/\(self.MAX_RETRY_FAILURES)): \(error.localizedDescription)")
+                        }
+
+                        if self.consecutiveFailures >= self.MAX_RETRY_FAILURES {
+                            ClashViewModel.shared.addLog("[ClashController] 🛑 Max retry failures reached, stopping monitor")
+                            self.stopTrafficMonitor()
+                        }
                     }
 
-                    if self.consecutiveFailures >= self.MAX_RETRY_FAILURES {
-                        ClashViewModel.shared.addLog("[ClashController] 🛑 Max retry failures reached, stopping monitor")
-                        self.stopTrafficMonitor()
-                        break
-                    }
+                    let cf = await self.consecutiveFailures
+                    let maxRetry = await self.MAX_RETRY_FAILURES
+                    if cf >= maxRetry { break }
 
                     try? await Task.sleep(nanoseconds: 1_000_000_000) // 1.0s wait
-                    if self.isMonitoring && ClashViewModel.shared.isRunning {
-                        self.restartMonitor()
+
+                    let isMonitoring = await self.isMonitoring
+                    let isRunning = await ClashViewModel.shared.isRunning
+                    if isMonitoring && isRunning {
+                        await MainActor.run { self.restartMonitor() }
                     }
-                    break // 错误后退出循环，由 restartMonitor 重新开始
+                    break
                 }
             }
         }
