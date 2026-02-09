@@ -3,7 +3,7 @@ import SwiftUI
 struct NetworkInspectorView: View {
     let requestId: String
     @ObservedObject var service = BrowserAnalysisService.shared
-    
+
     // Tab State
     enum InspectorTab: String, CaseIterable, Identifiable {
         case overview = "Overview"
@@ -11,9 +11,9 @@ struct NetworkInspectorView: View {
         case payload = "Payload"
         case preview = "Preview"
         case response = "Response"
-        
+
         var id: String { rawValue }
-        
+
         var icon: String {
             switch self {
             case .overview: return "chart.bar.doc.horizontal"
@@ -24,9 +24,9 @@ struct NetworkInspectorView: View {
             }
         }
     }
-    
+
     @State private var selectedTab: InspectorTab = .overview
-    
+
     var request: BrowserRequest? {
         // Search all tabs to find the request by ID
         for tab in service.activeTabs {
@@ -36,7 +36,7 @@ struct NetworkInspectorView: View {
             // Also check history even if merged
             for req in tab.requests {
                 if req.hits.contains(where: { $0.id.uuidString == requestId }) {
-                    return req 
+                    return req
                 }
             }
         }
@@ -59,11 +59,11 @@ struct NetworkInspectorView: View {
                         // Header
                         InspectorHeader(request: req)
                         Divider()
-                        
+
                         // Main Inspector Content
                         ZStack {
                             Color(nsColor: .textBackgroundColor) // Clean background
-                            
+
                             switch selectedTab {
                             case .overview:
                                 AnalysisInspector(request: req)
@@ -108,7 +108,7 @@ struct NetworkInspectorView: View {
 
 struct InspectorHeader: View {
     let request: BrowserRequest
-    
+
     var body: some View {
         HStack(spacing: 12) {
             // Method Badge
@@ -119,15 +119,15 @@ struct InspectorHeader: View {
                 .background(methodColor(request.method).opacity(0.1))
                 .foregroundColor(methodColor(request.method))
                 .cornerRadius(4)
-            
+
             // URL
             Text(request.url)
                 .font(.system(size: 13, weight: .medium))
                 .lineLimit(1)
                 .truncationMode(.middle)
-            
+
             Spacer()
-            
+
             // Status Code
             HStack(spacing: 4) {
                 Circle()
@@ -147,7 +147,7 @@ struct InspectorHeader: View {
         .padding(12)
         .background(Color(nsColor: .windowBackgroundColor))
     }
-    
+
     private func methodColor(_ method: String) -> Color {
         switch method {
         case "GET": return .green
@@ -157,7 +157,7 @@ struct InspectorHeader: View {
         default: return .secondary
         }
     }
-    
+
     private func statusColor(_ req: BrowserRequest) -> Color {
         if req.status == .error || (req.statusCode ?? 200) >= 400 { return .red }
         if req.status == .pending { return .orange }
@@ -171,7 +171,7 @@ struct InspectorHeader: View {
 
 struct HeadersInspector: View {
     let request: BrowserRequest
-    
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -182,7 +182,7 @@ struct HeadersInspector: View {
                     KeyValueRow(key: "Status Code", value: "\(request.statusCode ?? 0) \(request.status.rawValue)")
                     KeyValueRow(key: "Remote Address", value: request.remoteAddress ?? "-")
                 }
-                
+
                 // Response Headers
                 if let headers = request.responseHeaders {
                     SectionView(title: "Response Headers") {
@@ -191,7 +191,7 @@ struct HeadersInspector: View {
                         }
                     }
                 }
-                
+
                 // Request Headers
                 if let headers = request.requestHeaders {
                     SectionView(title: "Request Headers") {
@@ -208,7 +208,7 @@ struct HeadersInspector: View {
 
 struct PayloadInspector: View {
     let request: BrowserRequest
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Query String Parameters always on top if present
@@ -226,11 +226,12 @@ struct PayloadInspector: View {
                 .frame(maxHeight: 150) // Limit height for query params
                 Divider()
             }
-            
+
             if let body = request.requestBody, !body.isEmpty {
-                if body.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("{") || body.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("[") {
-                     // Full screen JSON
-                     JSONTreeView(jsonString: body)
+                // Use unified JSON detection logic
+                if body.looksLikeJSON {
+                     // Full screen JSON with preprocessing
+                     JSONTreeView(jsonString: body.preprocessJSON)
                  } else {
                      ScrollView {
                          BodyTextView(text: body)
@@ -246,7 +247,7 @@ struct PayloadInspector: View {
 
 struct PreviewInspector: View {
     let request: BrowserRequest
-    
+
     var body: some View {
          RichContentPreview(request: request)
     }
@@ -254,7 +255,7 @@ struct PreviewInspector: View {
 
 struct ResponseInspector: View {
     let request: BrowserRequest
-    
+
     var body: some View {
         RichContentPreview(request: request)
     }
@@ -262,23 +263,23 @@ struct ResponseInspector: View {
 
 struct RichContentPreview: View {
     let request: BrowserRequest
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if let body = request.responseBody, !body.isEmpty {
                 // Clean body (remove possible chunked encoding residue)
                 let cleanBody = cleanChunkedResidue(body)
-                
+
                 // 1. Determine Content Type
                 let contentType = request.responseHeaders?.first(where: { $0.key.lowercased() == "content-type" })?.value.lowercased() ?? ""
-                
+
                 // 2. Dispatch to correct view
                 if contentType.contains("image") {
                     renderImage(cleanBody, contentType: contentType)
                 } else if contentType.contains("css") || contentType.contains("javascript") || contentType.contains("html") || contentType.contains("xml") {
                     CodeView(code: cleanBody, lang: languageFor(contentType))
-                } else if looksLikeJSON(cleanBody) {
-                    JSONTreeView(jsonString: cleanBody)
+                } else if cleanBody.looksLikeJSON {
+                    JSONTreeView(jsonString: cleanBody.preprocessJSON)
                 } else {
                     // Default Text View
                     ScrollView {
@@ -286,7 +287,7 @@ struct RichContentPreview: View {
                             Text("Size: \(formatSize(cleanBody.count))")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
-                            
+
                             Text(cleanBody)
                                 .font(.system(size: 13, design: .monospaced))
                                 .textSelection(.enabled)
@@ -300,18 +301,14 @@ struct RichContentPreview: View {
             }
         }
     }
-    
-    /// Check if content looks like JSON (handles chunked residue)
-    private func looksLikeJSON(_ text: String) -> Bool {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.hasPrefix("{") || trimmed.hasPrefix("[")
-    }
-    
+
+
+
     /// Clean chunked encoding residue from body
     /// Handles cases like "28\n[[9,["noop"]]...]" -> "[[9,["noop"]]...]"
     private func cleanChunkedResidue(_ body: String) -> String {
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
-        
+
         // Check for pattern: hex number followed by newline then actual content
         // Common chunked residue: "xx\n{...}" or "xx\r\n{...}"
         if let firstNewline = trimmed.firstIndex(where: { $0 == "\n" || $0 == "\r" }) {
@@ -334,10 +331,10 @@ struct RichContentPreview: View {
         return trimmed
     }
 
-    
+
     @ViewBuilder
     func renderImage(_ body: String, contentType: String) -> some View {
-        
+
         if contentType.contains("svg") {
             // SVG Handling
             // 1. Try treating as Base64 first (common from CDP)
@@ -345,7 +342,7 @@ struct RichContentPreview: View {
                 // If it renders as image
                 if let nsImage = NSImage(data: data) {
                     ImagePreview(image: nsImage, info: "SVG Image (Decoded)")
-                } 
+                }
                 // If not image, maybe it's text/xml?
                 else if let decodedString = String(data: data, encoding: .utf8) {
                     CodeView(code: decodedString, lang: "svg")
@@ -353,7 +350,7 @@ struct RichContentPreview: View {
                      // Failed to decode to string, show raw
                     CodeView(code: body, lang: "svg")
                 }
-            } 
+            }
             // 2. Try treating as Raw XML String
             else if let data = body.data(using: .utf8), let nsImage = NSImage(data: data) {
                  ImagePreview(image: nsImage, info: "SVG Image")
@@ -382,7 +379,7 @@ struct RichContentPreview: View {
             }
         }
     }
-    
+
     func languageFor(_ type: String) -> String {
         if type.contains("css") { return "css" }
         if type.contains("javascript") { return "js" }
@@ -390,7 +387,7 @@ struct RichContentPreview: View {
         if type.contains("xml") { return "xml" }
         return "text"
     }
-    
+
     func formatSize(_ size: Int) -> String {
         return ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)
     }
@@ -399,7 +396,7 @@ struct RichContentPreview: View {
 struct ImagePreview: View {
     let image: NSImage
     let info: String
-    
+
     var body: some View {
         VStack {
             Spacer()
@@ -410,7 +407,7 @@ struct ImagePreview: View {
                 .background(Color(nsColor: .textBackgroundColor))
                 .cornerRadius(8)
                 .shadow(radius: 2)
-            
+
             Text("\(Int(image.size.width)) x \(Int(image.size.height)) - \(info)")
                 .font(.caption)
                 .foregroundColor(.secondary)
@@ -428,11 +425,11 @@ struct CodeView: View {
     @State private var formattedCode: String?
     @State private var searchText = ""
     @State private var isCopied = false
-    
+
     var displayCode: String {
         formattedCode ?? code
     }
-    
+
     var body: some View {
         VStack(spacing: 0) {
             // Toolbar
@@ -448,16 +445,16 @@ struct CodeView: View {
                 .background(Color(nsColor: .controlBackgroundColor))
                 .cornerRadius(6)
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.2)))
-                
+
                 Spacer()
-                
+
                 Text(lang.uppercased())
                     .font(.system(size: 10, weight: .bold))
                     .foregroundColor(.secondary)
                     .padding(4)
                     .background(Color.secondary.opacity(0.1))
                     .cornerRadius(4)
-                
+
                 Button {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(displayCode, forType: .string)
@@ -472,9 +469,9 @@ struct CodeView: View {
             }
             .padding(8)
             .background(Color(nsColor: .windowBackgroundColor))
-            
+
             Divider()
-            
+
             ScrollView {
                 Text(highlightedCode)
                     .font(.system(size: 13, design: .monospaced))
@@ -488,12 +485,12 @@ struct CodeView: View {
              formattedCode = BasicFormatter.format(code)
         }
     }
-    
+
     var highlightedCode: AttributedString {
         let text = displayCode
         var attributed = AttributedString(text)
         attributed.foregroundColor = colorForLang(lang)
-        
+
         if !searchText.isEmpty {
             // Find all ranges (Case insensitive)
             var range = attributed.startIndex..<attributed.endIndex
@@ -505,10 +502,10 @@ struct CodeView: View {
                 range = match.upperBound..<attributed.endIndex
             }
         }
-        
+
         return attributed
     }
-    
+
     func colorForLang(_ lang: String) -> Color {
         switch lang {
         case "css": return .blue
@@ -525,15 +522,15 @@ struct BasicFormatter {
         var formatted = ""
         var indent = 0
         let indentStr = "  "
-        
+
         // Normalize newlines (Use with caution on code with comments)
         let clean = code.replacingOccurrences(of: "\n", with: "")
                         .replacingOccurrences(of: "\r", with: "")
-        
+
         let charArray = Array(clean)
         for i in 0..<charArray.count {
             let char = charArray[i]
-            
+
             if char == "{" {
                 formatted.append(" {\n")
                 indent += 1
@@ -561,18 +558,18 @@ struct BasicFormatter {
 struct SectionView<Content: View>: View {
     let title: String
     let content: Content
-    
+
     init(title: String, @ViewBuilder content: () -> Content) {
         self.title = title
         self.content = content()
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
                 .font(.system(size: 11, weight: .bold))
                 .foregroundColor(.secondary)
-            
+
             content
         }
     }
@@ -581,18 +578,18 @@ struct SectionView<Content: View>: View {
 struct KeyValueRow: View {
     let key: String
     let value: String
-    
+
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Text(key + ":")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundColor(.secondary)
                 .frame(width: 120, alignment: .trailing)
-            
+
             Text(value)
                 .font(.system(size: 11, design: .monospaced))
                 .textSelection(.enabled)
-            
+
             Spacer()
         }
         .padding(.vertical, 2)

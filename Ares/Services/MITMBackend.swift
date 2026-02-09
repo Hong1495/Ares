@@ -914,11 +914,11 @@ actor MITMBoundConnection: Identifiable {
 
             if log && !firstRequestReported {
                 let host = targetHost
-                if let parsed = await MainActor.run(body: { HTTPParser.parseRequest(d) }) {
+                if let parsed = HTTPParser.parseRequest(d) {
                     let validMethods = ["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"]
                     if validMethods.contains(parsed.method) {
                         firstRequestReported = true
-                        var data = await MainActor.run(body: { MITMInterceptedData(host: host, method: parsed.method, path: parsed.path) })
+                        var data = MITMInterceptedData(host: host, method: parsed.method, path: parsed.path)
                         currentRequestId = data.id
                         data.requestHeaders = parsed.headers
                         data.requestSize = d.count
@@ -930,9 +930,9 @@ actor MITMBoundConnection: Identifiable {
 
                         if ["POST", "PUT", "PATCH"].contains(method) {
                             let ct = headers.first { $0.key.lowercased() == "content-type" }?.value
-                            if await MainActor.run(body: { HTTPParser.isTextContent(ct) }) && d.count > bodyOffset {
+                            if HTTPParser.isTextContent(ct) && d.count > bodyOffset {
                                 let body = d[bodyOffset...]
-                                if await MainActor.run(body: { body.count <= HTTPParser.maxBodyCapture }) { data.requestBody = body }
+                                if body.count <= HTTPParser.maxBodyCapture { data.requestBody = body }
                             }
                         }
                         await MITMBackend.shared.reportInterception(data)
@@ -969,7 +969,7 @@ actor MITMBoundConnection: Identifiable {
                     let isResilienceOn = resilienceEnabled
                     let currentRetry = retryCount
 
-                    if let parsed = await MainActor.run(body: { HTTPParser.parseResponse(accumulator) }), let requestId = reqId {
+                    if let parsed = HTTPParser.parseResponse(accumulator), let requestId = reqId {
                         let isChunked = parsed.headers.contains { $0.key.lowercased() == "transfer-encoding" && $0.value.lowercased().contains("chunked") }
                         let cl = (parsed.headers.first { $0.key.lowercased() == "content-length" }?.value).flatMap { Int($0) }
 
@@ -1008,7 +1008,7 @@ actor MITMBoundConnection: Identifiable {
                                 return
                             }
 
-                            var data = await MainActor.run(body: { MITMInterceptedData(host: host, method: "RESPONSE", path: "/") })
+                            var data = MITMInterceptedData(host: host, method: "RESPONSE", path: "/")
                             data.id = requestId
                             data.statusCode = parsed.statusCode
                             data.responseHeaders = parsed.headers
@@ -1016,25 +1016,25 @@ actor MITMBoundConnection: Identifiable {
                             data.responseSize = accumulator.count
 
                             let ct = parsed.headers.first { $0.key.lowercased() == "content-type" }?.value
-                            if await MainActor.run(body: { HTTPParser.isTextContent(ct) }) && accumulator.count > parsed.bodyOffset {
+                            if HTTPParser.isTextContent(ct) && accumulator.count > parsed.bodyOffset {
                                 var bodyData = Data(accumulator[parsed.bodyOffset...])
                                 if isChunked {
                                     let chunkedData = bodyData
-                                    bodyData = await MainActor.run(body: { HTTPParser.decodeChunkedBody(chunkedData) ?? chunkedData })
+                                    bodyData = HTTPParser.decodeChunkedBody(chunkedData) ?? chunkedData
                                 }
                                 let ce = parsed.headers.first { $0.key.lowercased() == "content-encoding" }?.value.lowercased()
                                 if let enc = ce {
                                     if enc.contains("gzip") || enc.contains("deflate") {
                                         let gzipData = bodyData
-                                        bodyData = await MainActor.run(body: { HTTPParser.decompressGzip(gzipData) ?? gzipData })
+                                        bodyData = HTTPParser.decompressGzip(gzipData) ?? gzipData
                                     }
                                     else if enc.contains("br") {
                                         let brData = bodyData
-                                        bodyData = await MainActor.run(body: { HTTPParser.decompressBrotli(brData) ?? brData })
+                                        bodyData = HTTPParser.decompressBrotli(brData) ?? brData
                                     }
                                 }
                                 let finalBody = bodyData
-                                if await MainActor.run(body: { finalBody.count <= HTTPParser.maxBodyCapture }) { data.responseBody = finalBody }
+                                if finalBody.count <= HTTPParser.maxBodyCapture { data.responseBody = finalBody }
                             }
                             await MITMBackend.shared.reportResponse(requestId: requestId, data: data)
                         }
