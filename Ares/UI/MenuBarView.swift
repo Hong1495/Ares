@@ -5,7 +5,6 @@ struct MenuBarView: View {
     @ObservedObject var appState = AppState.shared
     @ObservedObject var clashViewModel = ClashViewModel.shared
     @ObservedObject var clashController = ClashController.shared
-    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(spacing: 0) {
@@ -134,11 +133,11 @@ struct MenuBarView: View {
             // 5. Action Section
             HStack(spacing: 12) {
                 MenuActionButton(icon: "square.grid.2x2", title: "Dashboard") {
-                    openDashboard()
+                    openPage(.dashboard)
                 }
 
                 MenuActionButton(icon: "gearshape", title: "Settings") {
-                    openSettings()
+                    openPage(.settings)
                 }
 
                 Spacer()
@@ -173,37 +172,48 @@ struct MenuBarView: View {
         return .red
     }
 
-    private func openDashboard() {
-        appState.selection = .dashboard
-        showMainWindow()
-    }
+    private func openPage(_ page: AppState.NavigationItem) {
+        // Set the navigation target first
+        appState.selection = page
 
-    private func openSettings() {
-        appState.selection = .settings
-        showMainWindow()
-    }
+        // Use DispatchQueue to escape the MenuBarExtra popover context
+        DispatchQueue.main.async {
+            NSApp.activate(ignoringOtherApps: true)
 
-    private func showMainWindow() {
-        NSApp.activate(ignoringOtherApps: true)
+            // Find main window - check ALL windows regardless of state
+            var mainWindow: NSWindow? = nil
 
-        // Find the main window (could be minimized, hidden, or visible)
-        let mainWindow = NSApp.windows.first(where: {
-            $0.identifier?.rawValue.contains("main") == true
-        }) ?? NSApp.windows.first(where: {
-            // Fallback: find any content window that isn't the menu bar extra or inspector
-            $0.contentView != nil &&
-            $0.identifier?.rawValue != "network-inspector" &&
-            !($0.className.contains("MenuBarExtra") || $0.className.contains("StatusBar"))
-        })
+            for window in NSApp.windows {
+                let id = window.identifier?.rawValue ?? ""
 
-        if let window = mainWindow {
-            if window.isMiniaturized {
-                window.deminiaturize(nil)
+                // Skip MenuBarExtra windows and inspector
+                if id.contains("StatusBar") || id.contains("MenuBarExtra") ||
+                   id == "network-inspector" || window.level == .statusBar {
+                    continue
+                }
+
+                // Match by ID
+                if id.contains("main") {
+                    mainWindow = window
+                    break
+                }
+
+                // Fallback: any regular content window
+                if mainWindow == nil && window.contentView != nil && window.styleMask.contains(.titled) {
+                    mainWindow = window
+                }
             }
-            window.makeKeyAndOrderFront(nil)
-        } else {
-            // Window was fully closed, reopen via SwiftUI
-            openWindow(id: "main")
+
+            if let window = mainWindow {
+                if window.isMiniaturized {
+                    window.deminiaturize(nil)
+                }
+                if !window.isVisible {
+                    window.orderFront(nil)
+                }
+                window.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+            }
         }
     }
 
