@@ -1,6 +1,19 @@
 import SwiftUI
 import AppKit
 
+/// Intercepts the window close button to hide the window instead of destroying it.
+/// This is the standard pattern for menu bar apps where the app keeps running.
+class WindowCloseInterceptor: NSObject, NSWindowDelegate {
+    static let shared = WindowCloseInterceptor()
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        // Hide the window instead of closing/destroying it
+        sender.orderOut(nil)
+        // Return false to prevent the actual close (which destroys the SwiftUI WindowGroup)
+        return false
+    }
+}
+
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var lifecycleObservers: [NSObjectProtocol] = []
@@ -139,6 +152,18 @@ struct AresApp: App {
                 .frame(minWidth: 800, minHeight: 600)
                 .onAppear {
                     NSWindow.allowsAutomaticWindowTabbing = false
+                    // Install close interceptor on main window
+                    // This makes the close button hide instead of destroy
+                    DispatchQueue.main.async {
+                        for window in NSApp.windows {
+                            let id = window.identifier?.rawValue ?? ""
+                            if id.contains("main") || (window.contentView != nil && window.styleMask.contains(.titled) && window.level == .normal) {
+                                if window.delegate == nil || !(window.delegate is WindowCloseInterceptor) {
+                                    window.delegate = WindowCloseInterceptor.shared
+                                }
+                            }
+                        }
+                    }
                 }
                 .preferredColorScheme(themeService.theme == "dark" ? .dark : (themeService.theme == "light" ? .light : nil))
                 .onChange(of: scenePhase) { newPhase in
