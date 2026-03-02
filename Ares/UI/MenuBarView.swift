@@ -5,6 +5,7 @@ struct MenuBarView: View {
     @ObservedObject var appState = AppState.shared
     @ObservedObject var clashViewModel = ClashViewModel.shared
     @ObservedObject var clashController = ClashController.shared
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(spacing: 0) {
@@ -173,21 +174,30 @@ struct MenuBarView: View {
     }
 
     private func openDashboard() {
-        NSApp.activate(ignoringOtherApps: true)
         appState.selection = .dashboard
-        if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "main" }) {
-            window.makeKeyAndOrderFront(nil)
-        } else if let window = NSApp.windows.first {
-            window.makeKeyAndOrderFront(nil)
-        }
+        showMainWindow()
     }
 
     private func openSettings() {
-        NSApp.activate(ignoringOtherApps: true)
         appState.selection = .settings
-        if let window = NSApp.windows.first {
+        showMainWindow()
+    }
+
+    private func showMainWindow() {
+        NSApp.activate(ignoringOtherApps: true)
+
+        // Try to find and show existing main window
+        if let window = NSApp.windows.first(where: {
+            $0.identifier?.rawValue.contains("main") == true ||
+            ($0.title == "Ares" && !$0.title.isEmpty) ||
+            ($0 is NSWindow && $0.contentView != nil && !$0.isMiniaturized && $0.identifier?.rawValue != "network-inspector")
+        }) {
             window.makeKeyAndOrderFront(nil)
+            return
         }
+
+        // If no main window exists (was closed), reopen it via SwiftUI
+        openWindow(id: "main")
     }
 
     private func formatSpeed(_ bytes: Int64) -> String {
