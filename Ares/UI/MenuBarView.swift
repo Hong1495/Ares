@@ -186,18 +186,25 @@ struct MenuBarView: View {
     private func showMainWindow() {
         NSApp.activate(ignoringOtherApps: true)
 
-        // Try to find and show existing main window
-        if let window = NSApp.windows.first(where: {
-            $0.identifier?.rawValue.contains("main") == true ||
-            ($0.title == "Ares" && !$0.title.isEmpty) ||
-            ($0 is NSWindow && $0.contentView != nil && !$0.isMiniaturized && $0.identifier?.rawValue != "network-inspector")
-        }) {
-            window.makeKeyAndOrderFront(nil)
-            return
-        }
+        // Find the main window (could be minimized, hidden, or visible)
+        let mainWindow = NSApp.windows.first(where: {
+            $0.identifier?.rawValue.contains("main") == true
+        }) ?? NSApp.windows.first(where: {
+            // Fallback: find any content window that isn't the menu bar extra or inspector
+            $0.contentView != nil &&
+            $0.identifier?.rawValue != "network-inspector" &&
+            !($0.className.contains("MenuBarExtra") || $0.className.contains("StatusBar"))
+        })
 
-        // If no main window exists (was closed), reopen it via SwiftUI
-        openWindow(id: "main")
+        if let window = mainWindow {
+            if window.isMiniaturized {
+                window.deminiaturize(nil)
+            }
+            window.makeKeyAndOrderFront(nil)
+        } else {
+            // Window was fully closed, reopen via SwiftUI
+            openWindow(id: "main")
+        }
     }
 
     private func formatSpeed(_ bytes: Int64) -> String {
