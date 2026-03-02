@@ -10,6 +10,10 @@ extension AppState {
         // Check actual system state only if preference is missing? No, user preference dictates action.
         // If user wants it ON, we will enforce it later in AresApp.
 
+        // 2. Auto-detect and repair stale sudoers paths (migration/rebuild protection)
+        // This MUST run before any sudo-dependent operations
+        await PrivilegeService.shared.checkAndRepairSudoers()
+
         // 3. Ensure privileges if TUN is enabled (or just general check)
         // If TUN is requested, we MUST have privileges ready before Clash launches
         var shouldCheckPrivileges = tunEnabled

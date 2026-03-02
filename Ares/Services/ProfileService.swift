@@ -12,6 +12,17 @@ class ProfileService: ObservableObject {
     private let profilesDir: URL
     private let profilesMetadataFile: URL
 
+    /// Dedicated URLSession that bypasses system proxy for subscription downloads.
+    /// This prevents the chicken-and-egg problem where the subscription URL itself
+    /// gets routed through a proxy/TUN that depends on the subscription being loaded.
+    private lazy var directURLSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.connectionProxyDictionary = [:]  // Bypass ALL system proxies
+        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForResource = 60
+        return URLSession(configuration: config)
+    }()
+
     private init() {
         // Setup directories
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -156,7 +167,7 @@ class ProfileService: ObservableObject {
         var request = URLRequest(url: finalUrl)
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await directURLSession.data(for: request)
 
         // Parse subscription info from headers
         if let httpResponse = response as? HTTPURLResponse {
@@ -221,7 +232,7 @@ class ProfileService: ObservableObject {
         var request = URLRequest(url: finalUrl)
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await directURLSession.data(for: request)
 
         // Parse subscription info from headers
         if let httpResponse = response as? HTTPURLResponse {

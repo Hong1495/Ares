@@ -57,6 +57,19 @@ extension ClashController {
     func selectProxy(group: String, proxy: String) async throws {
         ClashViewModel.shared.addLog("[ClashController] 🎯 Selecting proxy: \(proxy) in group: \(group)")
 
+        // Pre-flight check: Ensure Clash API is reachable
+        let versionURL = URL(string: "\(baseURL)/version")!
+        do {
+            let (_, vResp) = try await URLSession.shared.data(from: versionURL)
+            if let httpResp = vResp as? HTTPURLResponse, httpResp.statusCode != 200 {
+                ClashViewModel.shared.addLog("[ClashController] ❌ Clash API not healthy (HTTP \(httpResp.statusCode)). Is Clash running?")
+                return
+            }
+        } catch {
+            ClashViewModel.shared.addLog("[ClashController] ❌ Clash API unreachable at \(baseURL). Is Clash running?")
+            return
+        }
+
         // URL encode the group name (contains Chinese/emoji)
         guard let encodedGroup = group.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
               let url = URL(string: "\(baseURL)/proxies/\(encodedGroup)") else {
