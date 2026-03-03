@@ -205,24 +205,11 @@ struct MenuBarView: View {
             }
 
             if let window = mainWindow {
-                let wasHidden = !window.isVisible
                 if window.isMiniaturized {
                     window.deminiaturize(nil)
                 }
                 window.makeKeyAndOrderFront(nil)
                 NSApp.activate(ignoringOtherApps: true)
-
-                // Restore saved frame AFTER showing (SwiftUI overrides frame during show)
-                if wasHidden {
-                    let frame = WindowCloseInterceptor.shared.savedFrame
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                        if let savedFrame = frame {
-                            window.setFrame(savedFrame, display: true, animate: false)
-                        } else {
-                            window.setFrameUsingName("AresMainWindow")
-                        }
-                    }
-                }
             }
         }
     }
