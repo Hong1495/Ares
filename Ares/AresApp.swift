@@ -6,7 +6,14 @@ import AppKit
 class WindowCloseInterceptor: NSObject, NSWindowDelegate {
     static let shared = WindowCloseInterceptor()
 
+    /// Saved frame to restore exact size/position when reshowing
+    var savedFrame: NSRect? = nil
+
     func windowShouldClose(_ sender: NSWindow) -> Bool {
+        // Save the current frame before hiding
+        savedFrame = sender.frame
+        // Also persist via autosave
+        sender.saveFrame(usingName: "AresMainWindow")
         // Hide the window instead of closing/destroying it
         sender.orderOut(nil)
         // Return false to prevent the actual close (which destroys the SwiftUI WindowGroup)
@@ -161,6 +168,8 @@ struct AresApp: App {
                                 if window.delegate == nil || !(window.delegate is WindowCloseInterceptor) {
                                     window.delegate = WindowCloseInterceptor.shared
                                 }
+                                // Enable frame autosave for persistent window size/position
+                                window.setFrameAutosaveName("AresMainWindow")
                             }
                         }
                     }

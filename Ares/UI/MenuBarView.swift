@@ -208,8 +208,14 @@ struct MenuBarView: View {
                 if window.isMiniaturized {
                     window.deminiaturize(nil)
                 }
+                // Restore saved frame if window was hidden via close button
                 if !window.isVisible {
-                    window.orderFront(nil)
+                    if let savedFrame = WindowCloseInterceptor.shared.savedFrame {
+                        window.setFrame(savedFrame, display: true)
+                    } else {
+                        // Try restoring from autosave
+                        window.setFrameUsingName("AresMainWindow")
+                    }
                 }
                 window.makeKeyAndOrderFront(nil)
                 NSApp.activate(ignoringOtherApps: true)
