@@ -1,17 +1,17 @@
 import SwiftUI
 import AppKit
 
-/// Proxy delegate that intercepts only windowShouldClose to hide instead of destroy,
-/// while preserving SwiftUI's original NSWindowDelegate for frame/state management.
-class WindowCloseProxy: NSObject, NSWindowDelegate {
+/// Intercepts window close to miniaturize instead of destroy.
+/// miniaturize preserves frame perfectly (managed by macOS window system).
+/// orderOut causes SwiftUI to tear down the view tree, losing window state.
+class WindowCloseHandler: NSObject, NSWindowDelegate {
     weak var originalDelegate: NSWindowDelegate?
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        sender.orderOut(nil)
+        sender.miniaturize(nil)
         return false
     }
 
-    // Forward all other delegate methods to SwiftUI's original delegate
     override func responds(to aSelector: Selector!) -> Bool {
         if aSelector == #selector(NSWindowDelegate.windowShouldClose(_:)) {
             return true
@@ -21,7 +21,7 @@ class WindowCloseProxy: NSObject, NSWindowDelegate {
 
     override func forwardingTarget(for aSelector: Selector!) -> Any? {
         if aSelector == #selector(NSWindowDelegate.windowShouldClose(_:)) {
-            return nil // handle ourselves
+            return nil
         }
         return originalDelegate
     }
@@ -169,10 +169,10 @@ struct AresApp: App {
                     // Uses proxy pattern to preserve SwiftUI's original delegate
                     DispatchQueue.main.async {
                         for window in NSApp.windows where window.styleMask.contains(.titled) && window.level == .normal {
-                            if !(window.delegate is WindowCloseProxy) {
-                                let proxy = WindowCloseProxy()
-                                proxy.originalDelegate = window.delegate
-                                window.delegate = proxy
+                            if !(window.delegate is WindowCloseHandler) {
+                                let handler = WindowCloseHandler()
+                                handler.originalDelegate = window.delegate
+                                window.delegate = handler
                             }
                         }
                     }
