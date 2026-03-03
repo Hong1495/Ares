@@ -1,32 +1,6 @@
 import SwiftUI
 import AppKit
 
-/// Intercepts window close to miniaturize instead of destroy.
-/// miniaturize preserves frame perfectly (managed by macOS window system).
-/// orderOut causes SwiftUI to tear down the view tree, losing window state.
-class WindowCloseHandler: NSObject, NSWindowDelegate {
-    weak var originalDelegate: NSWindowDelegate?
-
-    func windowShouldClose(_ sender: NSWindow) -> Bool {
-        sender.miniaturize(nil)
-        return false
-    }
-
-    override func responds(to aSelector: Selector!) -> Bool {
-        if aSelector == #selector(NSWindowDelegate.windowShouldClose(_:)) {
-            return true
-        }
-        return originalDelegate?.responds(to: aSelector) ?? super.responds(to: aSelector)
-    }
-
-    override func forwardingTarget(for aSelector: Selector!) -> Any? {
-        if aSelector == #selector(NSWindowDelegate.windowShouldClose(_:)) {
-            return nil
-        }
-        return originalDelegate
-    }
-}
-
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var lifecycleObservers: [NSObjectProtocol] = []
@@ -77,6 +51,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         task.waitUntilExit()
 
         print("✅ Cleanup complete")
+    }
+
+    /// Called when user clicks Dock icon while app is running
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag {
+            // No visible windows — reopen main window
+            WindowAccessor.showMainWindow(selection: nil)
+        }
+        return true
     }
 
     private func checkAndRecoverState() async {
@@ -143,6 +126,41 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+/// Global accessor for the SwiftUI openWindow action.
+/// Captured from MainView's onAppear so it can be used from MenuBarView.
+@MainActor
+enum WindowAccessor {
+    static var openWindow: OpenWindowAction?
+
+    static func showMainWindow(selection: AppState.NavigationItem?) {
+        if let selection = selection {
+            AppState.shared.selection = selection
+        }
+
+        DispatchQueue.main.async {
+            NSApp.activate(ignoringOtherApps: true)
+
+            // Find existing main window
+            let mainWindow = NSApp.windows.first(where: { window in
+                guard window.styleMask.contains(.titled), window.level == .normal else { return false }
+                let id = window.identifier?.rawValue ?? ""
+                if id == "network-inspector" { return false }
+                return true
+            })
+
+            if let window = mainWindow {
+                if window.isMiniaturized {
+                    window.deminiaturize(nil)
+                }
+                window.makeKeyAndOrderFront(nil)
+            } else {
+                // Window was closed (destroyed by SwiftUI) — create a new one
+                openWindow?(id: "main")
+            }
+        }
+    }
+}
+
 @main
 struct AresApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
@@ -153,6 +171,7 @@ struct AresApp: App {
     @StateObject private var appState = AppState.shared
     @StateObject private var themeService = ThemeService.shared
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
         WindowGroup(id: "main") {
@@ -165,17 +184,8 @@ struct AresApp: App {
                 .frame(minWidth: 800, minHeight: 600)
                 .onAppear {
                     NSWindow.allowsAutomaticWindowTabbing = false
-                    // Install close proxy on main window (hide instead of destroy)
-                    // Uses proxy pattern to preserve SwiftUI's original delegate
-                    DispatchQueue.main.async {
-                        for window in NSApp.windows where window.styleMask.contains(.titled) && window.level == .normal {
-                            if !(window.delegate is WindowCloseHandler) {
-                                let handler = WindowCloseHandler()
-                                handler.originalDelegate = window.delegate
-                                window.delegate = handler
-                            }
-                        }
-                    }
+                    // Capture openWindow for use from MenuBarView
+                    WindowAccessor.openWindow = openWindow
                 }
                 .preferredColorScheme(themeService.theme == "dark" ? .dark : (themeService.theme == "light" ? .light : nil))
                 .onChange(of: scenePhase) { newPhase in

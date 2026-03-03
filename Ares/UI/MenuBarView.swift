@@ -133,11 +133,11 @@ struct MenuBarView: View {
             // 5. Action Section
             HStack(spacing: 12) {
                 MenuActionButton(icon: "square.grid.2x2", title: "Dashboard") {
-                    openPage(.dashboard)
+                    WindowAccessor.showMainWindow(selection: .dashboard)
                 }
 
                 MenuActionButton(icon: "gearshape", title: "Settings") {
-                    openPage(.settings)
+                    WindowAccessor.showMainWindow(selection: .settings)
                 }
 
                 Spacer()
@@ -170,48 +170,6 @@ struct MenuBarView: View {
         if ms < 100 { return .green }
         if ms < 300 { return .yellow }
         return .red
-    }
-
-    private func openPage(_ page: AppState.NavigationItem) {
-        // Set the navigation target first
-        appState.selection = page
-
-        // Use DispatchQueue to escape the MenuBarExtra popover context
-        DispatchQueue.main.async {
-            NSApp.activate(ignoringOtherApps: true)
-
-            // Find main window - check ALL windows regardless of state
-            var mainWindow: NSWindow? = nil
-
-            for window in NSApp.windows {
-                let id = window.identifier?.rawValue ?? ""
-
-                // Skip MenuBarExtra windows and inspector
-                if id.contains("StatusBar") || id.contains("MenuBarExtra") ||
-                   id == "network-inspector" || window.level == .statusBar {
-                    continue
-                }
-
-                // Match by ID
-                if id.contains("main") {
-                    mainWindow = window
-                    break
-                }
-
-                // Fallback: any regular content window
-                if mainWindow == nil && window.contentView != nil && window.styleMask.contains(.titled) {
-                    mainWindow = window
-                }
-            }
-
-            if let window = mainWindow {
-                if window.isMiniaturized {
-                    window.deminiaturize(nil)
-                }
-                window.makeKeyAndOrderFront(nil)
-                NSApp.activate(ignoringOtherApps: true)
-            }
-        }
     }
 
     private func formatSpeed(_ bytes: Int64) -> String {
