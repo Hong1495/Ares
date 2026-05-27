@@ -27,6 +27,10 @@ struct ClashConfig: Codable {
     // TUN settings
     var enableTun: Bool = false
     var tunStack: String = "system"
+    var tunMTU: Int = 1400
+    var tunDevice: String = ""
+    var keepAliveInterval: Int = 15
+    var udpTimeout: Int = 120
     var tunAutoRoute: Bool = true
     var tunAutoDetectInterface: Bool = true
     var mptcp: Bool = false
@@ -65,6 +69,19 @@ struct ClashConfig: Codable {
             }
             if defaults.object(forKey: DefaultsKeys.tunAutoDetectInterface) == nil {
                 self.tunAutoDetectInterface = true
+            }
+
+            self.keepAliveInterval = defaults.integer(forKey: DefaultsKeys.keepAliveInterval)
+            self.udpTimeout = defaults.integer(forKey: DefaultsKeys.udpTimeout)
+
+            if defaults.object(forKey: DefaultsKeys.tunMTU) == nil {
+                self.tunMTU = 1400
+            }
+            if defaults.object(forKey: DefaultsKeys.keepAliveInterval) == nil {
+                self.keepAliveInterval = 15
+            }
+            if defaults.object(forKey: DefaultsKeys.udpTimeout) == nil {
+                self.udpTimeout = 120
             }
 
             // Check legacy keys or string/bool variants if needed?
@@ -130,27 +147,36 @@ struct ClashConfig: Codable {
             yaml += """
 
             # Performance Settings
-            keep-alive-interval: 15
+            keep-alive-interval: \(keepAliveInterval)
             find-process-mode: always
             tcp-concurrent: true
-            udp-timeout: 120
+            udp-timeout: \(udpTimeout)
             mptcp: false
 
             # TUN Mode Configuration
             tun:
               enable: true
               stack: \(tunStack)
+              mtu: \(tunMTU)
               dns-hijack:
                 - any:53
               auto-route: \(tunAutoRoute)
               auto-detect-interface: \(tunAutoDetectInterface)
             """
 
+            // Add device if specified
+            if !tunDevice.isEmpty {
+                yaml += """
+
+              device: \(tunDevice)
+            """
+            }
+
             // Only add our DNS config if subscription doesn't have one
             if !skipDNS {
                 yaml += """
 
-            # DNS Configuration (Fallback - subscription didn't provide)
+            # DNS Configuration
             dns:
               enable: true
               listen: 0.0.0.0:1053
@@ -170,9 +196,10 @@ struct ClashConfig: Codable {
                 - 223.5.5.5
                 - 119.29.29.29
                 - 114.114.114.114
+                - https://dns.alidns.com/dns-query
               fallback:
-                - 1.1.1.1
-                - 8.8.8.8
+                - tls://1.1.1.1
+                - tls://8.8.8.8
               fallback-filter:
                 geoip: true
                 geoip-code: CN
@@ -183,7 +210,7 @@ struct ClashConfig: Codable {
             if !skipSniffer {
                 yaml += """
 
-            # Sniffer Configuration (Fallback - subscription didn't provide)
+            # Sniffer Configuration
             sniffer:
               enable: true
               sniff:

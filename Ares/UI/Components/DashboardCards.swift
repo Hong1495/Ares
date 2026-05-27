@@ -421,26 +421,10 @@ struct IpAddressCard: View {
     }
 
     private func fetchPublicIP() async {
-        let isProxy = isProxyActive
+        // TUN routes traffic globally, system proxy is picked up by .default config automatically.
+        // No manual connectionProxyDictionary needed — it causes routing conflicts.
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 3.0 // Fast timeout
-
-        if isProxy {
-            let defaults = UserDefaults.standard
-            let basePort = Int(defaults.string(forKey: DefaultsKeys.mixedPort) ?? "\(ClashPorts.defaultMixed)") ?? ClashPorts.defaultMixed
-            let proxyPort = appState.tunEnabled ? ClashPorts.tunMixed : basePort
-
-            config.connectionProxyDictionary = [
-                kCFNetworkProxiesHTTPEnable: 1,
-                kCFNetworkProxiesHTTPProxy: "127.0.0.1",
-                kCFNetworkProxiesHTTPPort: proxyPort,
-                kCFNetworkProxiesHTTPSEnable: 1,
-                kCFNetworkProxiesHTTPSProxy: "127.0.0.1",
-                kCFNetworkProxiesHTTPSPort: proxyPort,
-                kCFStreamPropertySOCKSProxyHost: "127.0.0.1",
-                kCFStreamPropertySOCKSProxyPort: proxyPort
-            ]
-        }
+        config.timeoutIntervalForRequest = 8.0
 
         let session = URLSession(configuration: config)
         let endpoints = [
@@ -449,6 +433,9 @@ struct IpAddressCard: View {
             "https://api.ip.sb/geoip",
             "https://ipapi.co/json/"
         ]
+
+        var hasIP = false
+        var hasGeo = false
 
         await withTaskGroup(of: (String, String?)?.self) { group in
             for endpoint in endpoints {
@@ -466,10 +453,6 @@ struct IpAddressCard: View {
                 }
             }
 
-            // 2-Stage Update: Get IP fast, then wait for Geo info
-            var hasIP = false
-            var hasGeo = false
-
             for await result in group {
                 if let (ip, country) = result {
                     await MainActor.run {
@@ -479,12 +462,17 @@ struct IpAddressCard: View {
                     if !hasIP { hasIP = true }
                     if country != nil { hasGeo = true }
 
-                    // Stop if we have both, or after we've processed a few results
                     if hasIP && hasGeo {
                         group.cancelAll()
                         return
                     }
                 }
+            }
+        }
+
+        if !hasIP {
+            await MainActor.run {
+                appState.updateIPInfo(ip: "Offline", country: nil)
             }
         }
     }

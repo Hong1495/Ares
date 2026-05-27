@@ -16,6 +16,8 @@ enum DefaultsKeys {
     static let theme = "theme"
 
     static let tunStack = "tunStack"
+    static let tunMTU = "tunMTU"
+    static let tunDevice = "tunDevice"
     static let tunAutoRoute = "tunAutoRoute"
     static let tunAutoDetectInterface = "tunAutoDetectInterface"
 
@@ -29,4 +31,6 @@ enum DefaultsKeys {
     static let mitmPorts = "mitmPorts"
     static let localRules = "localRules"
     static let tlsFingerprint = "tlsFingerprint"
+    static let keepAliveInterval = "keepAliveInterval"
+    static let udpTimeout = "udpTimeout"
 }

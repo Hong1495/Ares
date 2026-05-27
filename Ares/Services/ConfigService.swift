@@ -84,6 +84,9 @@ actor ConfigService {
             cleanedProfile = injectFingerprint(into: cleanedProfile, fingerprint: activeFingerprint)
         }
         
+        // Override subscription's url-test interval for faster failover
+        cleanedProfile = overrideURLTestInterval(in: cleanedProfile, newInterval: 300)
+
         cleanedProfile = injectDynamicRules(into: cleanedProfile, tunEnabled: tunEnabled, mitmEnabled: mitmEnabled, mitmPort: mitmPort, bypassRules: bypassRules, localRules: localRules, mitmPortsString: mitmPortsString, mitmHosts: mitmHosts)
         
         // Build base Clash config with TUN setting (MainActor required for ClashConfig)
@@ -372,7 +375,14 @@ actor ConfigService {
         }
         return defaultIndent
     }
-    
+
+    /// Override url-test group intervals for faster failover (default: 300s)
+    nonisolated private func overrideURLTestInterval(in yaml: String, newInterval: Int) -> String {
+        let pattern = "(type:\\s*url-test[\\s\\S]*?interval:\\s*)\\d+"
+        let regex = try? NSRegularExpression(pattern: pattern)
+        return regex?.stringByReplacingMatches(in: yaml, range: NSRange(yaml.startIndex..., in: yaml), withTemplate: "$1\(newInterval)") ?? yaml
+    }
+
     /// Build a safe fallback config when no profile is available
     func buildSafeFallbackConfig() async throws {
         await MainActor.run {

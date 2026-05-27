@@ -18,8 +18,12 @@ struct SettingsView: View {
     // TUN Mode
     @AppStorage(DefaultsKeys.tunEnabled) private var tunEnabled = false
     @AppStorage(DefaultsKeys.tunStack) private var tunStack = "system"
+    @AppStorage(DefaultsKeys.tunMTU) private var tunMTU = 1400
+    @AppStorage(DefaultsKeys.tunDevice) private var tunDevice = ""
     @AppStorage(DefaultsKeys.tunAutoRoute) private var tunAutoRoute = true
     @AppStorage(DefaultsKeys.tunAutoDetectInterface) private var tunAutoDetectInterface = true
+    @AppStorage(DefaultsKeys.keepAliveInterval) private var keepAliveInterval = 15
+    @AppStorage(DefaultsKeys.udpTimeout) private var udpTimeout = 120
 
     // System Proxy Bypass
     @AppStorage(DefaultsKeys.bypassRules) private var bypassRules = "localhost,127.*,10.*,172.16.*,172.31.*,192.168.*"
@@ -124,8 +128,29 @@ struct SettingsView: View {
                 }
 
                 Picker("Network Stack", selection: $tunStack) {
+                    Text("Mixed (Recommended)").tag("mixed")
                     Text("System").tag("system")
                     Text("gVisor").tag("gvisor")
+                }
+                .disabled(!tunEnabled)
+
+                LabeledContent {
+                    TextField("", value: $tunMTU, format: .number)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 80)
+                } label: {
+                    Text("TUN MTU")
+                        .fontWeight(.medium)
+                }
+                .disabled(!tunEnabled)
+
+                LabeledContent {
+                    TextField("Auto", text: $tunDevice)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 120)
+                } label: {
+                    Text("TUN Device")
+                        .fontWeight(.medium)
                 }
                 .disabled(!tunEnabled)
 
@@ -146,7 +171,8 @@ struct SettingsView: View {
             } footer: {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("• Requires administrator privileges")
-                    Text("• Global traffic capture via virtual interface")
+                    Text("• Mixed = system TCP + gVisor UDP (best performance)")
+                    Text("• MTU 1400 recommended for proxy protocols")
                     Text("• Changes require core restart")
                 }
                 .font(.footnote)
@@ -285,6 +311,23 @@ struct SettingsView: View {
             // Advanced Features
             Section("Advanced") {
 
+                LabeledContent {
+                    TextField("", value: $keepAliveInterval, format: .number)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 80)
+                } label: {
+                    Text("Keep-Alive Interval")
+                        .fontWeight(.medium)
+                }
+
+                LabeledContent {
+                    TextField("", value: $udpTimeout, format: .number)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 80)
+                } label: {
+                    Text("UDP Timeout")
+                        .fontWeight(.medium)
+                }
 
                 Picker("TLS Fingerprint", selection: $tlsFingerprint) {
                     Text("Disabled (Default)").tag("none")
@@ -359,6 +402,13 @@ struct SettingsView: View {
         silentStart = true
         theme = "system"
         bypassRules = "localhost,127.*,10.*,172.16.*,172.31.*,192.168.*"
+        tunStack = "system"
+        tunMTU = 1400
+        tunDevice = ""
+        tunAutoRoute = true
+        tunAutoDetectInterface = true
+        keepAliveInterval = 15
+        udpTimeout = 120
 
         Task {
             await clashViewModel.restart()
