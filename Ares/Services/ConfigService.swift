@@ -242,9 +242,17 @@ actor ConfigService {
         // Fingerprint injection is best done before rule injection to keep logic clean.
         
         // 1. Generate Local Overrides (Highest Priority)
+        // Accept lines with or without a leading "- " (YAML list marker) for user-friendliness.
         let localLines = localRules.components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty && $0.hasPrefix("-") }
+            .filter { !$0.isEmpty && !$0.hasPrefix("#") }
+            .map { line -> String in
+                if line.hasPrefix("-") {
+                    return line
+                } else {
+                    return "- " + line
+                }
+            }
         
         rulesToInject.append(contentsOf: localLines)
         

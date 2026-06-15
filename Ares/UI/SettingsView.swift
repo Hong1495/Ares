@@ -7,6 +7,9 @@ struct SettingsView: View {
     @AppStorage(DefaultsKeys.silentStart) private var silentStart = true
     @AppStorage(DefaultsKeys.theme) private var theme = "system"
 
+    // Debounce task for auto-applying Custom Routing Rules
+    @State private var localRulesRestartTask: Task<Void, Never>?
+
     // Clash Config - Persisted
     @AppStorage(DefaultsKeys.socksPort) private var socksPort = "\(ClashPorts.defaultSocks)"
     @AppStorage(DefaultsKeys.httpPort) private var httpPort = "\(ClashPorts.defaultHttp)" // Changed from 7890 to avoid conflict with mixed
@@ -27,6 +30,9 @@ struct SettingsView: View {
 
     // System Proxy Bypass
     @AppStorage(DefaultsKeys.bypassRules) private var bypassRules = "localhost,127.*,10.*,172.16.*,172.31.*,192.168.*"
+
+    // Custom Routing Rules (highest priority, injected at top of `rules:` — survives subscription updates)
+    @AppStorage(DefaultsKeys.localRules) private var localRules = ""
 
     // MITM Settings
     @AppStorage(DefaultsKeys.mitmEnabled) private var mitmEnabled = false
@@ -194,6 +200,34 @@ struct SettingsView: View {
                         .scrollIndicators(.hidden)
 
                     Text("Comma-separated domains/IPs to bypass proxy")
+                        .font(.footnote)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Custom Routing Rules")
+                        .fontWeight(.medium)
+                    TextEditor(text: $localRules)
+                        .font(.system(.body, design: .monospaced))
+                        .frame(height: 120)
+                        .padding(4)
+                        .background(Color(nsColor: .textBackgroundColor))
+                        .cornerRadius(4)
+                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.gray.opacity(0.2)))
+                        .scrollIndicators(.hidden)
+                        .onChange(of: localRules) { _, _ in
+                            // Debounce: cancel any pending restart, schedule a new one 1.5s after typing stops.
+                            localRulesRestartTask?.cancel()
+                            localRulesRestartTask = Task {
+                                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                                if Task.isCancelled { return }
+                                await clashViewModel.restart()
+                            }
+                        }
+
+                    Text("One rule per line in mihomo syntax, e.g. `DOMAIN-SUFFIX,z.ai,DIRECT`. Injected at the top of `rules:` with the highest priority; survives subscription updates. Applies automatically 1.5s after you stop typing.")
                         .font(.footnote)
                         .fontWeight(.medium)
                         .foregroundStyle(.secondary)
@@ -402,6 +436,7 @@ struct SettingsView: View {
         silentStart = true
         theme = "system"
         bypassRules = "localhost,127.*,10.*,172.16.*,172.31.*,192.168.*"
+        localRules = ""
         tunStack = "system"
         tunMTU = 1400
         tunDevice = ""

@@ -140,18 +140,18 @@ struct ClashConfig: Codable {
         profile:
           store-selected: true
           store-fake-ip: true
+
+        # Performance Settings (always on; find-process-mode required for Activity feature)
+        keep-alive-interval: \(keepAliveInterval)
+        find-process-mode: always
+        tcp-concurrent: true
+        udp-timeout: \(udpTimeout)
+        mptcp: false
         """
 
         // TUN configuration
         if enableTun {
             yaml += """
-
-            # Performance Settings
-            keep-alive-interval: \(keepAliveInterval)
-            find-process-mode: always
-            tcp-concurrent: true
-            udp-timeout: \(udpTimeout)
-            mptcp: false
 
             # TUN Mode Configuration
             tun:
@@ -198,11 +198,15 @@ struct ClashConfig: Codable {
                 - 114.114.114.114
                 - https://dns.alidns.com/dns-query
               fallback:
-                - tls://1.1.1.1
-                - tls://8.8.8.8
+                - https://dns.alidns.com/dns-query
+                - https://doh.pub/dns-query
               fallback-filter:
                 geoip: true
                 geoip-code: CN
+                geosite:
+                  - geolocation-!cn
+                ipcidr:
+                  - 240.0.0.0/4
             """
             }
 
