@@ -3,7 +3,7 @@ import Compression
 import zlib
 
 /// Captured HTTP data from MITM interception
-struct MITMInterceptedData: Sendable {
+nonisolated struct MITMInterceptedData: Sendable {
     var id: String
     let host: String
     let method: String
@@ -44,7 +44,7 @@ struct MITMInterceptedData: Sendable {
 
 // MARK: - HTTP Parsing Utilities
 
-enum HTTPParser {
+nonisolated enum HTTPParser {
     /// Separator pattern between HTTP headers and body
     private static let headerBodySeparator = Data([0x0D, 0x0A, 0x0D, 0x0A]) // \r\n\r\n
     
@@ -182,33 +182,27 @@ enum HTTPParser {
         var result = Data()
         var offset = 0
         
-        print("[HTTPParser] 🔍 Decoding chunked body (\(data.count) bytes)")
-        
         while offset < data.count {
             // Find the CRLF that ends the chunk size line
             let searchRange = offset..<data.count
             guard let crlfIndex = data.range(of: crlf, in: searchRange)?.lowerBound else {
-                print("[HTTPParser] ⚠️ No CRLF found after offset \(offset)")
                 break
             }
             
             // Extract chunk size line (as hex string)
             let sizeLineData = data[offset..<crlfIndex]
             guard let sizeLine = String(data: Data(sizeLineData), encoding: .ascii)?.trimmingCharacters(in: .whitespaces) else {
-                print("[HTTPParser] ⚠️ Cannot parse size line as ASCII")
                 break
             }
             
             // Parse hex size (handle chunk extensions after semicolon)
             let sizeHex = sizeLine.split(separator: ";").first.map(String.init) ?? sizeLine
             guard let chunkSize = Int(sizeHex, radix: 16), chunkSize >= 0 else {
-                print("[HTTPParser] ⚠️ Invalid hex size: '\(sizeHex)'")
                 break
             }
             
             // End of chunked data
             if chunkSize == 0 {
-                print("[HTTPParser] ✅ Chunked decoding complete: \(result.count) bytes decoded")
                 break
             }
             
@@ -218,7 +212,6 @@ enum HTTPParser {
             
             // Check if we have enough data for this chunk
             guard chunkEnd <= data.count else {
-                print("[HTTPParser] ⚠️ Incomplete chunk: need \(chunkSize), have \(data.count - chunkStart)")
                 break
             }
             
@@ -234,17 +227,6 @@ enum HTTPParser {
         }
         
         let success = !result.isEmpty
-        print("[HTTPParser] \(success ? "✅" : "❌") Chunked decode result: \(result.count) bytes (input: \(data.count) bytes)")
-        
-        // Debug: verify the result is valid UTF-8
-        if success {
-            if let _ = String(data: result, encoding: .utf8) {
-                print("[HTTPParser] ✅ Result is valid UTF-8")
-            } else {
-                print("[HTTPParser] ⚠️ Result is NOT valid UTF-8, first 20 bytes: \(result.prefix(20).map { String(format: "%02X", $0) }.joined(separator: " "))")
-            }
-        }
-        
         return success ? result : nil
     }
     
@@ -252,13 +234,11 @@ enum HTTPParser {
     static func decompressGzip(_ data: Data) -> Data? {
         // Minimum valid gzip is 18 bytes (10 header + 8 trailer)
         guard data.count >= 18 else {
-            print("[HTTPParser] ⚠️ Gzip data too small: \(data.count) bytes")
             return nil
         }
         
         // Verify gzip magic bytes
         guard data[0] == 0x1F && data[1] == 0x8B else {
-            print("[HTTPParser] ⚠️ Not gzip data (magic bytes: \(String(format: "%02X %02X", data[0], data[1])))")
             return nil
         }
         
@@ -272,7 +252,6 @@ enum HTTPParser {
             // Use zlibVersion() function instead of ZLIB_VERSION macro for Swift compatibility
             let initResult = inflateInit2_(&stream, 31, zlibVersion(), Int32(MemoryLayout<z_stream>.size))
             if initResult != Z_OK {
-                print("[HTTPParser] ❌ inflateInit2 failed with code: \(initResult)")
                 return nil
             }
             defer { inflateEnd(&stream) }
@@ -301,7 +280,6 @@ enum HTTPParser {
                 }
                 
                 if status == Z_STREAM_END {
-                    print("[HTTPParser] ✅ Gzip decompressed: \(data.count) -> \(decompressed.count) bytes")
                     break // Successfully decompressed
                 } else if status == Z_OK {
                     // Continue decompressing
@@ -310,18 +288,15 @@ enum HTTPParser {
                     }
                 } else if status == Z_BUF_ERROR {
                     // No progress possible - likely incomplete data
-                    print("[HTTPParser] ⚠️ Gzip Z_BUF_ERROR after \(decompressed.count) bytes")
                     break
                 } else {
                     // Z_DATA_ERROR, Z_MEM_ERROR, etc.
-                    print("[HTTPParser] ❌ Gzip inflate error: \(status)")
                     return nil
                 }
             }
             
             // Return nil if decompression produced no output
             if decompressed.isEmpty {
-                print("[HTTPParser] ❌ Gzip decompression produced no output")
                 return nil
             }
             return decompressed

@@ -182,17 +182,22 @@ class SubscriptionConverter {
                         proxy["tls"] = true
                     } else if value == "reality" {
                         proxy["tls"] = true
-                        proxy["flow"] = "xtls-rprx-vision" // Reality usually implies vision or similar
-                        proxy["reality-opts"] = ["public-key": "TODO", "short-id": "TODO"] // Verify handling later
+                        proxy["reality-opts"] = [String: String]()
                     }
+                case "flow":
+                    proxy["flow"] = value
                 case "sni":
                     proxy["servername"] = value
                 case "fp":
                     proxy["client-fingerprint"] = value
                 case "pbk":
-                    // Reality public key
-                    // This creates complexity, basic VLESS for now
-                    break
+                    var realityOptions = proxy["reality-opts"] as? [String: String] ?? [:]
+                    realityOptions["public-key"] = value
+                    proxy["reality-opts"] = realityOptions
+                case "sid":
+                    var realityOptions = proxy["reality-opts"] as? [String: String] ?? [:]
+                    realityOptions["short-id"] = value
+                    proxy["reality-opts"] = realityOptions
                 case "type":
                     if value == "ws" {
                         proxy["network"] = "ws"
@@ -273,7 +278,7 @@ class SubscriptionConverter {
         // Assuming modern standard or SIP002
 
         guard let url = URL(string: uri) else { return nil }
-        var name = url.fragment?.removingPercentEncoding ?? "SS Info"
+        let name = url.fragment?.removingPercentEncoding ?? "SS Info"
 
         var method = ""
         var password = ""
@@ -359,6 +364,16 @@ class SubscriptionConverter {
             if let servername = proxy["servername"] as? String { yaml += "    servername: \(servername)\n" }
              if let skipCertVerify = proxy["skip-cert-verify"] as? Bool { yaml += "    skip-cert-verify: \(skipCertVerify)\n" }
             if let fingerprint = proxy["client-fingerprint"] as? String { yaml += "    client-fingerprint: \(fingerprint)\n" }
+            if let flow = proxy["flow"] as? String { yaml += "    flow: \(flow)\n" }
+            if let realityOptions = proxy["reality-opts"] as? [String: String], !realityOptions.isEmpty {
+                yaml += "    reality-opts:\n"
+                if let publicKey = realityOptions["public-key"] {
+                    yaml += "      public-key: \(publicKey)\n"
+                }
+                if let shortID = realityOptions["short-id"] {
+                    yaml += "      short-id: \(shortID)\n"
+                }
+            }
 
             // Network & Transport
             if let network = proxy["network"] { yaml += "    network: \(network)\n" }
@@ -367,7 +382,7 @@ class SubscriptionConverter {
             let wsPath = proxy["ws-path"] as? String
             let wsHeaders = proxy["ws-headers"] as? [String: String]
 
-            if wsPath != nil || (wsHeaders != nil && !wsHeaders!.isEmpty) {
+            if wsPath != nil || wsHeaders?.isEmpty == false {
                 yaml += "    ws-opts:\n"
                 if let path = wsPath {
                     yaml += "      path: \(path)\n"

@@ -72,11 +72,11 @@ struct TopologyView: View {
                 self.size = geometry.size
                 updateGraph()
             }
-            .onChange(of: geometry.size) { newSize in
+            .onChange(of: geometry.size) { _, newSize in
                 self.size = newSize
                 updateGraph()
             }
-            .onChange(of: clashController.activeChains) { _ in
+            .onChange(of: clashController.activeChains) { _, _ in
                 // Only update structure when data changes, NOT on every frame
                 withAnimation(.easeInOut(duration: 0.5)) {
                     updateGraph()

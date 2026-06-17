@@ -146,8 +146,6 @@ final class NetworkMITMService: ObservableObject {
     }
     
     private func updateRequestWithResponse(requestId: String, data: MITMInterceptedData) {
-        print("[NetworkMITMService] 📥 Updating request \(requestId) with response data")
-        
         // Create an update request with response data
         var updateReq = BrowserRequest(
             id: requestId,
@@ -166,15 +164,9 @@ final class NetworkMITMService: ObservableObject {
         
         // Populate response body if captured
         if let bodyData = data.responseBody {
-            print("[NetworkMITMService] 📦 Response body data: \(bodyData.count) bytes")
             if let bodyString = String(data: bodyData, encoding: .utf8) {
                 updateReq.responseBody = bodyString
-                print("[NetworkMITMService] ✅ Response body converted to string: \(bodyString.prefix(80))...")
-            } else {
-                print("[NetworkMITMService] ❌ Failed to convert response body to UTF-8 string")
             }
-        } else {
-            print("[NetworkMITMService] ⚠️ No response body data in MITMInterceptedData")
         }
         
         // Determine MIME type from response headers
@@ -182,7 +174,6 @@ final class NetworkMITMService: ObservableObject {
             updateReq.mimeType = contentType
         }
         
-        print("[NetworkMITMService] 📤 Sending update with responseBody=\(updateReq.responseBody != nil ? "SET(\(updateReq.responseBody!.count) chars)" : "nil")")
         BrowserAnalysisService.shared.addRequestToTab(tabId: "mitm_proxy_session", request: updateReq)
     }
 }

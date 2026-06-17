@@ -1,7 +1,7 @@
 import Foundation
 
 /// Proxy node model
-struct ProxyNode: Identifiable, Codable {
+nonisolated struct ProxyNode: Identifiable, Codable, Sendable {
     let id: String
     let name: String
     let type: String
@@ -28,7 +28,7 @@ struct ProxyNode: Identifiable, Codable {
 }
 
 /// Represents an item in a proxy group's selection list
-enum ProxyItem: Hashable, Identifiable {
+nonisolated enum ProxyItem: Hashable, Identifiable, Sendable {
     case group(String)      // Another proxy group
     case node(String)       // An actual proxy node
     case special(String)    // DIRECT, REJECT, etc.
@@ -56,7 +56,7 @@ enum ProxyItem: Hashable, Identifiable {
 }
 
 /// Proxy Group (Selector, URLTest, etc.)
-struct ProxyGroup: Identifiable, Codable {
+nonisolated struct ProxyGroup: Identifiable, Codable, Sendable {
     var id: String { name }
     let name: String
     let type: String

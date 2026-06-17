@@ -8,6 +8,7 @@
 
 /* Begin PBXFileReference section */
 		D53132D12EF23B3000640BD9 /* Ares.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Ares.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E10000012EF23B3300640BD9 /* AresTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AresTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -16,10 +17,22 @@
 			path = Ares;
 			sourceTree = "<group>";
 		};
+		E10000022EF23B3300640BD9 /* AresTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AresTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		D53132CE2EF23B3000640BD9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E10000032EF23B3300640BD9 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -33,6 +46,7 @@
 			isa = PBXGroup;
 			children = (
 				D53132D32EF23B3000640BD9 /* Ares */,
+				E10000022EF23B3300640BD9 /* AresTests */,
 				D53132D22EF23B3000640BD9 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,6 +55,7 @@
 			isa = PBXGroup;
 			children = (
 				D53132D12EF23B3000640BD9 /* Ares.app */,
+				E10000012EF23B3300640BD9 /* AresTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -70,6 +85,29 @@
 			productReference = D53132D12EF23B3000640BD9 /* Ares.app */;
 			productType = "com.apple.product-type.application";
 		};
+		E10000042EF23B3300640BD9 /* AresTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E10000102EF23B3300640BD9 /* Build configuration list for PBXNativeTarget "AresTests" */;
+			buildPhases = (
+				E10000052EF23B3300640BD9 /* Sources */,
+				E10000032EF23B3300640BD9 /* Frameworks */,
+				E10000062EF23B3300640BD9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E10000072EF23B3300640BD9 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				E10000022EF23B3300640BD9 /* AresTests */,
+			);
+			name = AresTests;
+			packageProductDependencies = (
+			);
+			productName = AresTests;
+			productReference = E10000012EF23B3300640BD9 /* AresTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -82,6 +120,10 @@
 				TargetAttributes = {
 					D53132D02EF23B3000640BD9 = {
 						CreatedOnToolsVersion = 26.2;
+					};
+					E10000042EF23B3300640BD9 = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = D53132D02EF23B3000640BD9;
 					};
 				};
 			};
@@ -100,12 +142,20 @@
 			projectRoot = "";
 			targets = (
 				D53132D02EF23B3000640BD9 /* Ares */,
+				E10000042EF23B3300640BD9 /* AresTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		D53132CF2EF23B3000640BD9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E10000062EF23B3300640BD9 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -122,7 +172,32 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E10000052EF23B3300640BD9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		E10000072EF23B3300640BD9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D53132D02EF23B3000640BD9 /* Ares */;
+			targetProxy = E10000082EF23B3300640BD9 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXContainerItemProxy section */
+		E10000082EF23B3300640BD9 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D53132C92EF23B3000640BD9 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D53132D02EF23B3000640BD9;
+			remoteInfo = Ares;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin XCBuildConfiguration section */
 		D53132DC2EF23B3200640BD9 /* Debug */ = {
@@ -178,7 +253,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.2;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -235,7 +310,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.2;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
@@ -301,6 +376,62 @@
 			};
 			name = Release;
 		};
+		E100000E2EF23B3300640BD9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = sakya.AresTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		E100000F2EF23B3300640BD9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_TESTABILITY = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = sakya.AresTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -318,6 +449,15 @@
 			buildConfigurations = (
 				D53132DF2EF23B3200640BD9 /* Debug */,
 				D53132E02EF23B3200640BD9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E10000102EF23B3300640BD9 /* Build configuration list for PBXNativeTarget "AresTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E100000E2EF23B3300640BD9 /* Debug */,
+				E100000F2EF23B3300640BD9 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -43,7 +43,9 @@ actor ConfigService {
         }
         
         guard let path = profilePath else {
-            print("[ConfigService] No active profile, using safe fallback")
+            await MainActor.run {
+                ClashViewModel.shared.addLog("[Config] No active profile, using safe fallback", level: .debug)
+            }
             try await buildSafeFallbackConfig()
             return
         }
@@ -125,6 +127,13 @@ actor ConfigService {
                 ClashViewModel.shared.addLog(preview, level: .debug)
             }
             try await fileManager.writeText(finalConfig, to: targetPath)
+            let isValid = await CoreManager.shared.validateConfig(configDir: targetDir)
+            guard isValid else {
+                await MainActor.run {
+                    ClashViewModel.shared.addLog("[Config] ❌ Generated config failed mihomo validation")
+                }
+                throw NSError(domain: "ConfigService", code: 2, userInfo: [NSLocalizedDescriptionKey: "Generated config failed mihomo validation"])
+            }
             await MainActor.run {
                 ClashViewModel.shared.addLog("[Config] ✅ Config written to: \(targetPath.lastPathComponent)")
             }
@@ -232,8 +241,6 @@ actor ConfigService {
     /// - mitm: MITM interception rules (hijack configured ports/domains)
     /// - mitmHosts: Whitelist domains - only these will be routed to MITM
     nonisolated private func injectDynamicRules(into yaml: String, tunEnabled: Bool, mitmEnabled: Bool, mitmPort: Int, bypassRules: String, localRules: String, mitmPortsString: String, mitmHosts: String) -> String {
-        print("[ConfigService] 🛠 Injecting Rules - Bypass: [\(bypassRules)], LocalRules: [\(localRules.count) chars], MITM Ports: [\(mitmPortsString)], MITM Hosts: [\(mitmHosts)], TUN: \(tunEnabled), MITM: \(mitmEnabled)")
-        
         var result = yaml
         var rulesToInject: [String] = []  // No indentation yet
         
@@ -293,7 +300,6 @@ actor ConfigService {
                 for domain in whitelistDomains {
                     rulesToInject.append("- AND,((DOMAIN-SUFFIX,\(domain)),(NOT,((PROCESS-NAME,Ares)))),MITM-Intercept")
                 }
-                print("[ConfigService] 📋 MITM Whitelist mode: \(whitelistDomains.count) domains will be intercepted")
             } else {
                 // Legacy mode: Intercept ports
                 let portSeparators = CharacterSet(charactersIn: ",，")
@@ -305,7 +311,6 @@ actor ConfigService {
                          rulesToInject.append("- AND,((DST-PORT,\(port)),(NOT,((PROCESS-NAME,Ares)))),MITM-Intercept")
                     }
                 }
-                print("[ConfigService] 📋 MITM Port mode: intercepting ports \(validPorts)")
             }
             
             // Inject MITM Proxy Definition
@@ -330,8 +335,6 @@ actor ConfigService {
                 result.append("\nproxies:\n" + mitmProxy)
             }
         }
-        
-        print("[ConfigService] 📋 Generated \(rulesToInject.count) dynamic rules")
         
         // 4. Inject Rules Buffer at the top of "rules:"
         if !rulesToInject.isEmpty {
@@ -421,14 +424,18 @@ actor ConfigService {
         """
         
         try await fileManager.writeText(config, to: targetPath)
-        print("[ConfigService] Safe fallback config created")
+        let isValid = await CoreManager.shared.validateConfig(configDir: targetDir)
+        guard isValid else {
+            throw NSError(domain: "ConfigService", code: 3, userInfo: [NSLocalizedDescriptionKey: "Fallback config failed mihomo validation"])
+        }
+        await MainActor.run {
+            ClashViewModel.shared.addLog("[Config] Safe fallback config created", level: .debug)
+        }
     }
 
     
     /// Inject TLS Fingerprint into proxy definitions (Robust Flow & Block support)
     nonisolated private func injectFingerprint(into yaml: String, fingerprint: String) -> String {
-        print("[ConfigService] 🕵️ Injecting TLS Fingerprint (Enhanced): \(fingerprint)")
-        
         let lines = yaml.components(separatedBy: .newlines)
         var result: [String] = []
         var count = 0
@@ -554,7 +561,6 @@ actor ConfigService {
         
         flushBuffer() // Final flush if ended in proxy section
         
-        print("[ConfigService] ✅ Injected fingerprint into \(count) nodes (Robust Mode)")
         return result.joined(separator: "\n")
     }
 }

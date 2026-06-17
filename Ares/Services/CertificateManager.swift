@@ -8,7 +8,7 @@ final class CertificateManager: ObservableObject {
     
     private let fileManager = FileManager.default
     private var certsDirectory: URL {
-        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let appSupport = Self.applicationSupportDirectory(fileManager: fileManager)
         let aresDir = appSupport.appendingPathComponent("Ares")
         let dir = aresDir.appendingPathComponent("Certs")
         try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -30,7 +30,7 @@ final class CertificateManager: ObservableObject {
     private let generator: IdentityGenerator
 
     private init() {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let appSupport = Self.applicationSupportDirectory()
         let aresDir = appSupport.appendingPathComponent("Ares")
         let certsDir = aresDir.appendingPathComponent("Certs")
         try? FileManager.default.createDirectory(at: certsDir, withIntermediateDirectories: true)
@@ -44,6 +44,13 @@ final class CertificateManager: ObservableObject {
             await self.pregenerateCommonCerts()
         }
     }
+
+    private static func applicationSupportDirectory(fileManager: FileManager = .default) -> URL {
+        if let url = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            return url
+        }
+        return URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
+    }
     
     /// Pre-generate certificates for commonly accessed domains
     private func pregenerateCommonCerts() async {
@@ -56,8 +63,6 @@ final class CertificateManager: ObservableObject {
             "cloudflare.com", "cdn.jsdelivr.net",
             "anthropic.com", "openai.com"
         ]
-        
-        print("[CertificateManager] 🔄 Pre-generating certificates for \(commonDomains.count) common domains...")
         
         for domain in commonDomains {
             // Run in background, don't block
@@ -84,7 +89,6 @@ final class CertificateManager: ObservableObject {
             if filename.hasPrefix("ca.") || filename == "openssl.cnf" { continue }
             try? fileManager.removeItem(at: file)
         }
-        print("[CertificateManager] 🧹 Cleaned up legacy host certificates")
     }
 
     /// Generates a new Root CA with proper extensions
@@ -111,104 +115,8 @@ final class CertificateManager: ObservableObject {
         private var caKeyPath: URL { certsDirectory.appendingPathComponent("ca.key") }
         private var openSSLConfigPath: URL { certsDirectory.appendingPathComponent("openssl.cnf") }
         
-        // Temporary keychain to avoid permission prompts
-        private var tempKeychain: SecKeychain?
-        private var tempKeychainPath: String { certsDirectory.appendingPathComponent("ares-mitm.keychain-db").path }
-        
         init(certsDirectory: URL) {
             self.certsDirectory = certsDirectory
-        }
-        
-        /// Gets or creates a temporary, password-less Keychain to avoid user prompts
-        /// Uses security CLI for complete control over keychain settings
-        private func getOrCreateTempKeychain() throws -> SecKeychain {
-            // Return cached keychain if available
-            if let kc = tempKeychain {
-                // Always unlock before returning
-                SecKeychainUnlock(kc, 0, "", true)
-                return kc
-            }
-            
-            let path = tempKeychainPath
-            
-            // Try to reuse existing keychain first (faster than recreating)
-            if FileManager.default.fileExists(atPath: path) {
-                var existingKeychain: SecKeychain?
-                let openStatus = SecKeychainOpen(path, &existingKeychain)
-                if openStatus == errSecSuccess, let kc = existingKeychain {
-                    // Try to unlock it
-                    let unlockStatus = SecKeychainUnlock(kc, 0, "", true)
-                    if unlockStatus == errSecSuccess {
-                        print("[CertificateManager] 🔑 Reusing existing temp Keychain")
-                        tempKeychain = kc
-                        return kc
-                    }
-                }
-                
-                // Keychain exists but can't be used - delete and recreate
-                print("[CertificateManager] ⚠️ Existing Keychain unusable, recreating...")
-                let deleteProcess = Process()
-                deleteProcess.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-                deleteProcess.arguments = ["delete-keychain", path]
-                deleteProcess.standardOutput = FileHandle.nullDevice
-                deleteProcess.standardError = FileHandle.nullDevice
-                try? deleteProcess.run()
-                deleteProcess.waitUntilExit()
-                try? FileManager.default.removeItem(atPath: path)
-            }
-            
-            // Create new keychain using security CLI with empty password
-            let createProcess = Process()
-            createProcess.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-            createProcess.arguments = ["create-keychain", "-p", "", path]
-            createProcess.standardOutput = FileHandle.nullDevice
-            createProcess.standardError = FileHandle.nullDevice
-            
-            try createProcess.run()
-            createProcess.waitUntilExit()
-            
-            if createProcess.terminationStatus != 0 {
-                throw NSError(domain: "CertificateManager", code: Int(createProcess.terminationStatus),
-                    userInfo: [NSLocalizedDescriptionKey: "security create-keychain failed"])
-            }
-            
-            // Disable auto-lock (set timeout to 0 = no lock)
-            let settingsProcess = Process()
-            settingsProcess.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-            settingsProcess.arguments = ["set-keychain-settings", "-t", "0", "-u", path]
-            settingsProcess.standardOutput = FileHandle.nullDevice
-            settingsProcess.standardError = FileHandle.nullDevice
-            try? settingsProcess.run()
-            settingsProcess.waitUntilExit()
-            
-            // Unlock the keychain
-            let unlockProcess = Process()
-            unlockProcess.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-            unlockProcess.arguments = ["unlock-keychain", "-p", "", path]
-            unlockProcess.standardOutput = FileHandle.nullDevice
-            unlockProcess.standardError = FileHandle.nullDevice
-            try? unlockProcess.run()
-            unlockProcess.waitUntilExit()
-            
-            // Open with Security framework for SecItemCopyMatching
-            var keychain: SecKeychain?
-            let openStatus = SecKeychainOpen(path, &keychain)
-            if openStatus != errSecSuccess {
-                throw NSError(domain: "CertificateManager", code: Int(openStatus),
-                    userInfo: [NSLocalizedDescriptionKey: "SecKeychainOpen failed: \(openStatus)"])
-            }
-            
-            guard let kc = keychain else {
-                throw NSError(domain: "CertificateManager", code: -1,
-                    userInfo: [NSLocalizedDescriptionKey: "Keychain is nil"])
-            }
-            
-            // Final unlock with Security framework
-            SecKeychainUnlock(kc, 0, "", true)
-            
-            tempKeychain = kc
-            print("[CertificateManager] 🔐 Created new temp Keychain via CLI (no password, no lock)")
-            return kc
         }
         
         func forceRegenerateRootCA() async throws {
@@ -249,8 +157,6 @@ final class CertificateManager: ObservableObject {
                 "-config", config
             ])
             
-            print("[CertificateManager] ✅ Root CA Regenerated (Actor)")
-            
             // Invalidate caches
             identityCache.removeAll()
         }
@@ -260,7 +166,6 @@ final class CertificateManager: ObservableObject {
             if fileManager.fileExists(atPath: caCertPath.path) && fileManager.fileExists(atPath: caKeyPath.path) {
                 return
             }
-            print("[CertificateManager] ⚠️ Root CA missing, regenerating inside Actor...")
             try await forceRegenerateRootCA()
         }
 
@@ -369,79 +274,33 @@ final class CertificateManager: ObservableObject {
         }
         
         private func loadIdentity(from p12Path: String, label: String) -> SecIdentity? {
-            // APPROACH: Don't use Keychain at all. Load PKCS12 directly into memory.
-            // SecPKCS12Import on macOS actually DOES add to Keychain internally,
-            // but we can import without access control by using kSecImportToMemoryOnly (iOS only).
-            // 
-            // For macOS, we need to parse the PKCS12 ourselves or accept the Keychain behavior.
-            // The trick is to use SecPKCS12Import with a temporary keychain that's already unlocked.
-            
             guard let p12Data = try? Data(contentsOf: URL(fileURLWithPath: p12Path)) else {
-                print("[CertificateManager] ❌ Cannot read P12 file")
                 return nil
             }
             
-            // Try the standard import with a permissive access control
-            // Create an "allow all" access control so no prompts are triggered
-            var access: SecAccess?
-            let accessStatus = SecAccessCreate("Ares MITM Key" as CFString, nil, &access)
-            
             var items: CFArray?
-            var options: [String: Any] = [
+            let options: [String: Any] = [
                 kSecImportExportPassphrase as String: "ares"
             ]
-            
-            // Add permissive access if successfully created
-            if accessStatus == errSecSuccess, let acc = access {
-                options[kSecImportExportAccess as String] = acc
-            }
             
             let status = SecPKCS12Import(p12Data as CFData, options as CFDictionary, &items)
             
             if status == errSecSuccess,
-               let itemsArray = items as? [[String: Any]],
-               let firstItem = itemsArray.first,
-               let identity = firstItem[kSecImportItemIdentity as String] {
-                // Success! The import worked
-                return (identity as! SecIdentity)
-            }
-            
-            // If SecPKCS12Import failed, try alternative: use a temp keychain as default
-            print("[CertificateManager] ⚠️ SecPKCS12Import failed (\(status)), trying temp keychain approach")
-            
-            do {
-                let keychain = try getOrCreateTempKeychain()
-                
-                // Save original default keychain
-                var originalDefault: SecKeychain?
-                SecKeychainCopyDefault(&originalDefault)
-                
-                // Set temp keychain as default (SecPKCS12Import uses default)
-                SecKeychainSetDefault(keychain)
-                
-                // Now try import again - it should go to our temp keychain
-                var items2: CFArray?
-                let status2 = SecPKCS12Import(p12Data as CFData, options as CFDictionary, &items2)
-                
-                // Restore original default
-                if let orig = originalDefault {
-                    SecKeychainSetDefault(orig)
+               let items,
+               CFArrayGetCount(items) > 0,
+               let item = CFArrayGetValueAtIndex(items, 0) {
+                let dictionary = unsafeBitCast(item, to: CFDictionary.self)
+                let identityKey = Unmanaged.passUnretained(kSecImportItemIdentity).toOpaque()
+                if let identityValue = CFDictionaryGetValue(dictionary, identityKey) {
+                    let identity = unsafeBitCast(identityValue, to: SecIdentity.self)
+                    var certificate: SecCertificate?
+                    if SecIdentityCopyCertificate(identity, &certificate) == errSecSuccess {
+                        return identity
+                    }
                 }
-                
-                if status2 == errSecSuccess,
-                   let itemsArray = items2 as? [[String: Any]],
-                   let firstItem = itemsArray.first,
-                   let identity = firstItem[kSecImportItemIdentity as String] {
-                    return (identity as! SecIdentity)
-                }
-                
-                print("[CertificateManager] ❌ Both import methods failed: \(status2)")
-                return nil
-                
-            } catch {
-                print("[CertificateManager] ❌ Failed: \(error)")
-                return nil
             }
+
+            return nil
         }
         
         private func runOpenSSL(_ arguments: [String]) async throws {
@@ -464,9 +323,6 @@ final class CertificateManager: ObservableObject {
                 
                 if process.terminationStatus != 0 {
                     let errorStr = String(data: errorData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Unknown OpenSSL Error"
-                    // Log the actual error
-                    print("[CertificateManager] ❌ OpenSSL CLI Failed. Cmd: openssl \(arguments.joined(separator: " "))\nSTDERR: \(errorStr)")
-                    
                     throw NSError(domain: "OpenSSL", code: Int(process.terminationStatus), 
                                 userInfo: [NSLocalizedDescriptionKey: "OpenSSL Failed: \(errorStr). Args: \(arguments)"])
                 }
@@ -496,8 +352,6 @@ final class CertificateManager: ObservableObject {
             
             if process.terminationStatus != 0 {
                 let errorStr = String(data: errorData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Unknown OpenSSL Error"
-                print("[CertificateManager] ❌ OpenSSL CLI Failed (Outer). Cmd: openssl \(arguments.joined(separator: " "))\nSTDERR: \(errorStr)")
-                
                 throw NSError(domain: "OpenSSL", code: Int(process.terminationStatus), 
                             userInfo: [NSLocalizedDescriptionKey: "OpenSSL Failed: \(errorStr). Args: \(arguments)"])
             }
@@ -564,5 +418,3 @@ final class CertificateManager: ObservableObject {
         await MainActor.run { checkRootCA() }
     }
 }
-
-

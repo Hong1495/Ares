@@ -21,12 +21,15 @@ actor ClashServiceActor {
     
     // MARK: - Configuration
     private var configDir: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("Ares/clash")
+        Self.applicationSupportDirectory()
+            .appendingPathComponent("Ares")
+            .appendingPathComponent("clash")
     }
     
     private var binaryPath: String {
-        Bundle.main.path(forResource: "clash-meta", ofType: nil) ?? "/usr/local/bin/clash-meta"
+        get async {
+            await CoreManager.shared.activeBinaryPath()
+        }
     }
     
     // MARK: - Initialization
@@ -35,19 +38,26 @@ actor ClashServiceActor {
             await createConfigDirIfNeeded()
         }
     }
+
+    private static func applicationSupportDirectory() -> URL {
+        if let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            return url
+        }
+        return URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
+    }
     
     // MARK: - Public Methods
     
     /// Start Clash process
     /// - Parameter isRestart: If true, bypasses "already running" check
-    func start(isRestart: Bool = false) async {
+    func start(isRestart: Bool = false) async -> Bool {
         let startTime = CFAbsoluteTimeGetCurrent()
         addLog("[ClashServiceActor] 🚀 Starting Clash...")
         
         // Check if already running
         if !isRestart && isRunning {
             addLog("[ClashServiceActor] ⚠️ Already running")
-            return
+            return true
         }
         
         // Clean up any zombie processes
@@ -55,7 +65,7 @@ actor ClashServiceActor {
         let cleanupSuccess = await cleanupOldProcesses()
         if !cleanupSuccess {
             addLog("[ClashServiceActor] ❌ Startup aborted: Failed to free ports")
-            return
+            return false
         }
         
         // Build config
@@ -65,13 +75,20 @@ actor ClashServiceActor {
             try await ConfigService.shared.buildConfig(tunEnabled: tunEnabled)
         } catch {
             addLog("[ClashServiceActor] ❌ Config build failed: \(error)")
-            return
+            await MainActor.run {
+                ClashViewModel.shared.markStartFailed("Config build failed")
+            }
+            return false
         }
         
         // Check binary exists
-        guard FileManager.default.fileExists(atPath: binaryPath) else {
-            addLog("[ClashServiceActor] ❌ Binary not found at: \(binaryPath)")
-            return
+        let activeBinaryPath = await binaryPath
+        guard FileManager.default.fileExists(atPath: activeBinaryPath) else {
+            addLog("[ClashServiceActor] ❌ Binary not found at: \(activeBinaryPath)")
+            await MainActor.run {
+                ClashViewModel.shared.markStartFailed("Core binary missing")
+            }
+            return false
         }
         
         addLog("[ClashServiceActor] ✅ Binary found: clash-meta")
@@ -97,13 +114,16 @@ actor ClashServiceActor {
                      // For now, let it try startWithTUN, it will likely fail with sudo error if not installed
                 }
             }
-            await startWithTUN()
+            let started = await startWithTUN()
+            let endTime = CFAbsoluteTimeGetCurrent()
+            addLog(String(format: "[ClashServiceActor] ⏱️ Total startup time: %.2fs", endTime - startTime))
+            return started
         } else {
-            await startNormal()
+            let started = await startNormal()
+            let endTime = CFAbsoluteTimeGetCurrent()
+            addLog(String(format: "[ClashServiceActor] ⏱️ Total startup time: %.2fs", endTime - startTime))
+            return started
         }
-        
-        let endTime = CFAbsoluteTimeGetCurrent()
-        addLog(String(format: "[ClashServiceActor] ⏱️ Total startup time: %.2fs", endTime - startTime))
     }
     
     /// Stop Clash process
@@ -126,6 +146,10 @@ actor ClashServiceActor {
                 proc.interrupt() // On macOS process.interrupt often sends SIGINT, and there is no direct SIGKILL via Process
                 // We'll fall back to pkill -9 below for a guaranteed kill
             }
+        }
+        else if let pid = currentProcessPID {
+            addLog("[ClashServiceActor] 📍 Tracked PID \(pid) no longer attached to Process instance")
+            _ = await processManager.killProcess(pid)
         }
         
         if let pid = currentProcessPID {
@@ -168,7 +192,7 @@ actor ClashServiceActor {
         return await ConfigService.shared.getConfigDir(tunEnabled: tun)
     }
     
-    private func startWithTUN() async {
+    private func startWithTUN() async -> Bool {
         let tunConfigDir = await getConfigDir(tun: true)
         
         // Ensure MMDB exists in TUN dir (copy from bundle or user dir if needed)
@@ -195,7 +219,8 @@ actor ClashServiceActor {
         let sudoPath = "/usr/bin/sudo"
         
         // Use -d to specify working directory
-        let arguments = ["-n", binaryPath, "-d", tunConfigDir.path]
+        let activeBinaryPath = await binaryPath
+        let arguments = ["-n", activeBinaryPath, "-d", tunConfigDir.path]
         
         addLog("[ClashServiceActor] Starting with sudo...")
         
@@ -213,13 +238,16 @@ actor ClashServiceActor {
             try proc.run()
             process = proc
             pipe = outputPipe
+            currentProcessPID = proc.processIdentifier
             
             // Drain pipe in background to avoid process freeze
             setupOutputObserver(pipe: outputPipe)
             
             addLog("[ClashServiceActor] ✅ Clash launched with TUN (PID: \(proc.processIdentifier))")
             isRunning = true
-            await notifyRunningState(true)
+            await MainActor.run {
+                ClashViewModel.shared.markProcessLaunched()
+            }
             
             // Background port verification (informational only)
             Task {
@@ -231,13 +259,18 @@ actor ClashServiceActor {
                     addLog("[ClashServiceActor] 🟢 Port \(ClashPorts.apiTun) is now listening")
                 }
             }
+            return true
         } catch {
             addLog("[ClashServiceActor] ❌ TUN start failed: \(error)")
             logger.error("TUN start failed: \(error)")
+            await MainActor.run {
+                ClashViewModel.shared.markStartFailed("TUN start failed")
+            }
+            return false
         }
     }
     
-    private func startNormal() async {
+    private func startNormal() async -> Bool {
         let userConfigDir = await getConfigDir(tun: false)
         
         // Ensure MMDB exists in User dir (copy from TUN dir if needed)
@@ -258,7 +291,8 @@ actor ClashServiceActor {
         }
         
         let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: binaryPath)
+        let activeBinaryPath = await binaryPath
+        proc.executableURL = URL(fileURLWithPath: activeBinaryPath)
         proc.arguments = ["-d", userConfigDir.path]
         
         let outputPipe = Pipe()
@@ -269,12 +303,15 @@ actor ClashServiceActor {
             try proc.run()
             process = proc
             pipe = outputPipe
+            currentProcessPID = proc.processIdentifier
             
             // Drain pipe in background
             setupOutputObserver(pipe: outputPipe)
             
             isRunning = true
-            await notifyRunningState(true)
+            await MainActor.run {
+                ClashViewModel.shared.markProcessLaunched()
+            }
             addLog("[ClashServiceActor] ✅ Clash launched (Normal)")
             logger.info("Clash started successfully")
             
@@ -285,9 +322,14 @@ actor ClashServiceActor {
                     addLog("[ClashServiceActor] ⚠️ Port \(ClashPorts.apiNormal) check timeout - core may still be initializing")
                 }
             }
+            return true
         } catch {
             addLog("[ClashServiceActor] ❌ Failed to start: \(error)")
             logger.error("Failed to start clash: \(error)")
+            await MainActor.run {
+                ClashViewModel.shared.markStartFailed("Core start failed")
+            }
+            return false
         }
     }
     
@@ -333,16 +375,6 @@ actor ClashServiceActor {
             }
         }
         
-        // Also kill by name aggressively
-        await processManager.killAllProcesses(matching: "clash-meta")
-        
-        // Final aggressive sweep with sudo pkill -9
-        let aggressiveKill = Process()
-        aggressiveKill.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
-        aggressiveKill.arguments = ["-n", "/usr/bin/pkill", "-9", "-f", "clash-meta"]
-        try? aggressiveKill.run()
-        aggressiveKill.waitUntilExit()
-        
         if killedAny {
             try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s initial wait
         }
@@ -369,8 +401,6 @@ actor ClashServiceActor {
         }
         
         addLog("[ClashServiceActor] ⚠️ Cleanup timeout: Ports might still be busy")
-        // Force kill one last time just in case
-        await processManager.killAllProcesses(matching: "clash-meta")
         try? await Task.sleep(nanoseconds: 1_000_000_000)
         
         // Final check
@@ -465,8 +495,6 @@ actor ClashServiceActor {
             if let output = String(data: data, encoding: .utf8) {
                 let lines = output.components(separatedBy: .newlines)
                 for line in lines where !line.isEmpty {
-                    // Also print to console for easier debugging
-                    print("[ClashCore] \(line)")
                     self?.addLog("[Core] \(line)")
                 }
             }

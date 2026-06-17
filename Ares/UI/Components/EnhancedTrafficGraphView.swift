@@ -5,6 +5,7 @@ import Combine
 /// Enhanced Real-time Traffic Graph using SwiftUI Charts
 struct EnhancedTrafficGraphView: View {
     @StateObject private var viewModel = TrafficGraphViewModel()
+    @EnvironmentObject private var appState: AppState
     var showHeader: Bool = true
 
     var body: some View {
@@ -55,7 +56,8 @@ struct EnhancedTrafficGraphView: View {
             DualSmoothGraphView(
                 uploadData: uploadData,
                 downloadData: downloadData,
-                visibleDuration: 60
+                visibleDuration: 60,
+                appState: appState
             )
             .frame(height: showHeader ? 180 : 80)
             .padding(.vertical, showHeader ? 12 : 4)
@@ -63,7 +65,7 @@ struct EnhancedTrafficGraphView: View {
         }
         .padding(showHeader ? 16 : 4)
         .background(showHeader ? Color(nsColor: .controlBackgroundColor) : Color.clear)
-        .cornerRadius(showHeader ? 12 : 0)
+        .cornerRadius(showHeader ? 8 : 0)
         .task {
             await Task.yield()
             viewModel.startMonitoring()
@@ -71,7 +73,7 @@ struct EnhancedTrafficGraphView: View {
         .onDisappear {
             viewModel.stopMonitoring()
         }
-        .onChange(of: scenePhase) { newPhase in
+        .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     viewModel.startMonitoring()

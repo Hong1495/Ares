@@ -64,8 +64,8 @@ class ProfileService: ObservableObject {
 
             Task { @MainActor in
                 ClashViewModel.shared.addLog("[ProfileService] ✅ Loaded \(self.profiles.count) profiles")
-                if let active = self.activeProfile {
-                    ClashViewModel.shared.addLog("[ProfileService] 🔹 Active Profile: \(active.name)")
+                if self.activeProfile != nil {
+                    ClashViewModel.shared.addLog("[ProfileService] 🔹 Active profile restored", level: .debug)
                 } else {
                     ClashViewModel.shared.addLog("[ProfileService] ⚠️ No active profile selected")
                 }
@@ -74,7 +74,6 @@ class ProfileService: ObservableObject {
             Task { @MainActor in
                 ClashViewModel.shared.addLog("[ProfileService] ❌ Failed to load profiles: \(error)")
             }
-            print("[ProfileService] Failed to load profiles: \(error)")
         }
     }
 
@@ -88,10 +87,10 @@ class ProfileService: ObservableObject {
             if let activeID = activeProfileID {
                 UserDefaults.standard.set(activeID.uuidString, forKey: DefaultsKeys.activeProfileID)
             }
-
-            print("[ProfileService] Saved \(profiles.count) profiles, active: \(activeProfileID?.uuidString ?? "none")")
         } catch {
-            print("[ProfileService] Failed to save profiles: \(error)")
+            Task { @MainActor in
+                ClashViewModel.shared.addLog("[ProfileService] Failed to save profiles: \(error)", level: .debug)
+            }
         }
     }
 
@@ -114,7 +113,7 @@ class ProfileService: ObservableObject {
         saveProfiles()
 
         Task { @MainActor in
-            ClashViewModel.shared.addLog("[ProfileService] ✅ Added remote profile: \(name)")
+            ClashViewModel.shared.addLog("[ProfileService] ✅ Added remote profile")
 
             // If this is the active profile, reload Clash
             if shouldActivate {
@@ -143,7 +142,7 @@ class ProfileService: ObservableObject {
         saveProfiles()
 
         Task { @MainActor in
-            ClashViewModel.shared.addLog("[ProfileService] ✅ Added local profile: \(name)")
+            ClashViewModel.shared.addLog("[ProfileService] ✅ Added local profile")
 
             // If this is the active profile, reload Clash
             if shouldActivate {
@@ -160,7 +159,6 @@ class ProfileService: ObservableObject {
         }
 
         let finalUrl = appendCompatibilityFlags(to: url)
-        print("[ProfileService] Downloading profile from: \(finalUrl)")
 
         // Unified User-Agent for maximum compatibility
         let userAgent = "ClashMeta/1.31.0 Enforce (Ares; macOS)"
@@ -187,7 +185,6 @@ class ProfileService: ObservableObject {
 
                 // Check if content needs conversion (Base64 -> YAML)
                 if let converted = SubscriptionConverter.convert(content: content) {
-                    print("[ProfileService] 🔄 Converted Base64 subscription to YAML")
                     // Use converted content
                     try converted.write(to: destination, atomically: true, encoding: .utf8)
 
@@ -195,7 +192,6 @@ class ProfileService: ObservableObject {
                     profile.path = destination
                     profile.lastUpdated = Date()
 
-                    print("[ProfileService] Profile updated: \(profile.name)")
                     return
                 }
             }
@@ -207,8 +203,6 @@ class ProfileService: ObservableObject {
         // Update profile
         profile.path = destination
         profile.lastUpdated = Date()
-
-        print("[ProfileService] Profile updated: \(profile.name)")
     }
 
     /// Update a remote profile by re-downloading
@@ -219,12 +213,11 @@ class ProfileService: ObservableObject {
             throw NSError(domain: "ProfileService", code: 3, userInfo: [NSLocalizedDescriptionKey: "Profile not found or not remote"])
         }
 
-        let profileName = profiles[index].name
         let isActive = activeProfileID == id
 
         let finalUrl = appendCompatibilityFlags(to: url)
         await MainActor.run {
-            ClashViewModel.shared.addLog("[ProfileService] 🔄 Updating profile: \(profileName)")
+            ClashViewModel.shared.addLog("[ProfileService] 🔄 Updating profile")
         }
 
         // Unified User-Agent for maximum compatibility
@@ -277,7 +270,7 @@ class ProfileService: ObservableObject {
         saveProfiles()
 
         await MainActor.run {
-            ClashViewModel.shared.addLog("[ProfileService] ✅ Updated profile: \(profileName)")
+            ClashViewModel.shared.addLog("[ProfileService] ✅ Updated profile")
         }
 
         // If this is the active profile, reload Clash to apply changes
@@ -309,7 +302,7 @@ class ProfileService: ObservableObject {
         saveProfiles()
 
         Task { @MainActor in
-            ClashViewModel.shared.addLog("[ProfileService] ✏️ Edited profile: \(name)")
+            ClashViewModel.shared.addLog("[ProfileService] ✏️ Edited profile")
         }
     }
 
@@ -337,9 +330,8 @@ class ProfileService: ObservableObject {
         profiles[index].lastUpdated = Date()
         saveProfiles()
 
-        let profileName = profiles[index].name
         Task { @MainActor in
-            ClashViewModel.shared.addLog("[ProfileService] 📝 Raw content updated for profile: \(profileName)")
+            ClashViewModel.shared.addLog("[ProfileService] 📝 Raw profile content updated")
 
             // If this is the active profile, reload Clash
             if self.activeProfileID == id {
@@ -372,12 +364,12 @@ class ProfileService: ObservableObject {
         saveProfiles()
 
         Task { @MainActor in
-            ClashViewModel.shared.addLog("[ProfileService] 🗑️ Deleted profile: \(profile.name)")
+            ClashViewModel.shared.addLog("[ProfileService] 🗑️ Deleted profile")
 
             // If we deleted the active profile, we need to reload Clash
             if wasActive {
-                if let newActive = profiles.first {
-                    ClashViewModel.shared.addLog("[ProfileService] 🔄 Switching to profile: \(newActive.name)")
+                if profiles.first != nil {
+                    ClashViewModel.shared.addLog("[ProfileService] 🔄 Switching to next profile")
                     await reloadClashWithCurrentProfile()
                 } else {
                     // No profiles left, stop Clash
@@ -398,7 +390,7 @@ class ProfileService: ObservableObject {
     func setActiveProfile(id: UUID) {
         guard activeProfileID != id else { return } // No-op if already active
         guard !isSwitchingProfile else {
-            print("[ProfileService] ⚠️ Profile switch already in progress, ignoring request")
+            ClashViewModel.shared.addLog("[ProfileService] ⚠️ Profile switch already in progress", level: .debug)
             return
         }
 
@@ -409,11 +401,8 @@ class ProfileService: ObservableObject {
         activeProfileID = id
         saveProfiles()
 
-        // Find the new profile name for logging
-        let profileName = profiles.first(where: { $0.id == id })?.name ?? "Unknown"
-
         Task { @MainActor in
-            ClashViewModel.shared.addLog("[ProfileService] 🔄 Switching to profile: \(profileName)")
+            ClashViewModel.shared.addLog("[ProfileService] 🔄 Switching profile")
 
             // Rebuild config and restart Clash
             await reloadClashWithCurrentProfile()
@@ -489,7 +478,7 @@ class ProfileService: ObservableObject {
     private func parseSubscriptionInfo(from response: HTTPURLResponse) -> SubscriptionInfo? {
         if let userInfo = response.value(forHTTPHeaderField: "subscription-userinfo") {
             Task { @MainActor in
-                ClashViewModel.shared.addLog("[ProfileService] 📡 Subscription Info Header: \(userInfo)")
+                ClashViewModel.shared.addLog("[ProfileService] 📡 Subscription info detected", level: .debug)
             }
             return parseSubscriptionInfo(fromString: userInfo)
         }
@@ -574,7 +563,6 @@ class ProfileService: ObservableObject {
                 queryItems.append(URLQueryItem(name: "flag", value: "clashmeta"))
                 components?.queryItems = queryItems
                 if let newUrl = components?.url {
-                    print("[ProfileService] 🛠 Auto-appended flag=clashmeta to URL")
                     return newUrl
                 }
             }

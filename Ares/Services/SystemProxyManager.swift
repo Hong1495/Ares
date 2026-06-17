@@ -4,6 +4,21 @@ import SystemConfiguration
 /// System proxy configuration manager
 class SystemProxyManager {
     static let shared = SystemProxyManager()
+
+    struct ProxySnapshot: Codable {
+        var webEnabled: Bool
+        var secureWebEnabled: Bool
+        var socksEnabled: Bool
+        var webServer: String
+        var webPort: String
+        var secureWebServer: String
+        var secureWebPort: String
+        var socksServer: String
+        var socksPort: String
+        var bypassDomains: [String]
+    }
+
+    private let snapshotKey = "Ares.systemProxySnapshot.v1"
     
     private init() {}
     
@@ -12,30 +27,25 @@ class SystemProxyManager {
     /// Set system proxy using networksetup command
     /// Uses password-less sudo if available, otherwise prompts for password
     func setSystemProxy(enabled: Bool, httpPort: Int = ClashPorts.defaultMixed, socksPort: Int = ClashPorts.defaultSocks, bypassRules: String = "") async -> Bool {
-        print("[SystemProxy] \(enabled ? "Enabling" : "Disabling") system proxy via networksetup...")
-        
         let bypassArray = bypassRules.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         
         // CRITICAL: Run ENTIRE operation on background thread (including getNetworkServicesSync)
         return await Task.detached {
             let services = await self.getNetworkServices()
             guard !services.isEmpty else {
-                print("[SystemProxy] No network services found")
                 return false
+            }
+
+            let targetServices = await self.targetServices(from: services)
+
+            if enabled {
+                await self.saveSnapshotIfNeeded(for: targetServices)
+            } else if await self.restoreSnapshot(for: targetServices) {
+                return true
             }
             
             // --- 1. Try Direct Sudo (Password-less) ---
             if await PrivilegeService.shared.checkPrivileges() {
-                print("[SystemProxy] ⚡️ Using password-less sudo...")
-                
-                // Smart Filtering: Only apply to active/relevant interfaces to avoid overhead
-                let priorityServices = ["Wi-Fi", "Ethernet", "USB 10/100/1000 LAN"]
-                let activeServices = services.filter { service in
-                    priorityServices.contains { service.contains($0) }
-                }
-                
-                let targetServices = activeServices.isEmpty ? services : activeServices
-                
                 for service in targetServices {
                     var commandsToRun: [[String]] = []
                     
@@ -66,44 +76,44 @@ class SystemProxyManager {
                     }
                 }
                 
-                print("[SystemProxy] ✅ System proxy updated (Sudoers)")
+                if !enabled {
+                    await self.clearSnapshot()
+                }
+
                 return true
             }
         
             // --- 2. Fallback to AppleScript (Password Prompt) ---
-            print("[SystemProxy] 🔐 Requesting administrator privileges...")
-            
             var commands: [String] = []
-            for service in services {
+            for service in targetServices {
                 if enabled {
                     // Enable proxies
-                    commands.append("networksetup -setwebproxy '\(service)' 127.0.0.1 \(httpPort)")
-                    commands.append("networksetup -setsecurewebproxy '\(service)' 127.0.0.1 \(httpPort)")
-                    commands.append("networksetup -setsocksfirewallproxy '\(service)' 127.0.0.1 \(socksPort)")
-                    commands.append("networksetup -setwebproxystate '\(service)' on")
-                    commands.append("networksetup -setsecurewebproxystate '\(service)' on")
-                    commands.append("networksetup -setsocksfirewallproxystate '\(service)' on")
-                    
+                    commands.append(Self.shellCommand(["/usr/sbin/networksetup", "-setwebproxy", service, "127.0.0.1", "\(httpPort)"]))
+                    commands.append(Self.shellCommand(["/usr/sbin/networksetup", "-setsecurewebproxy", service, "127.0.0.1", "\(httpPort)"]))
+                    commands.append(Self.shellCommand(["/usr/sbin/networksetup", "-setsocksfirewallproxy", service, "127.0.0.1", "\(socksPort)"]))
+                    commands.append(Self.shellCommand(["/usr/sbin/networksetup", "-setwebproxystate", service, "on"]))
+                    commands.append(Self.shellCommand(["/usr/sbin/networksetup", "-setsecurewebproxystate", service, "on"]))
+                    commands.append(Self.shellCommand(["/usr/sbin/networksetup", "-setsocksfirewallproxystate", service, "on"]))
+
                     // Apply bypass rules
                     if !bypassArray.isEmpty {
-                        let bypassStr = bypassArray.map { "'\($0)'" }.joined(separator: " ")
-                        commands.append("networksetup -setproxybypassdomains '\(service)' \(bypassStr)")
+                        commands.append(Self.shellCommand(["/usr/sbin/networksetup", "-setproxybypassdomains", service] + bypassArray))
                     }
                 } else {
                     // Disable proxies
-                    commands.append("networksetup -setwebproxystate '\(service)' off")
-                    commands.append("networksetup -setsecurewebproxystate '\(service)' off")
-                    commands.append("networksetup -setsocksfirewallproxystate '\(service)' off")
+                    commands.append(Self.shellCommand(["/usr/sbin/networksetup", "-setwebproxystate", service, "off"]))
+                    commands.append(Self.shellCommand(["/usr/sbin/networksetup", "-setsecurewebproxystate", service, "off"]))
+                    commands.append(Self.shellCommand(["/usr/sbin/networksetup", "-setsocksfirewallproxystate", service, "off"]))
                 }
             }
-            
+
             let shellCommands = commands.joined(separator: " && ")
+            let escapedShellCommands = AppleScriptEscaper.stringLiteral(shellCommands)
             let script = """
-            do shell script "\(shellCommands)" with administrator privileges
+            do shell script "\(escapedShellCommands)" with administrator privileges
             """
             
             guard let appleScript = NSAppleScript(source: script) else {
-                print("[SystemProxy] Failed to create AppleScript")
                 return false
             }
             
@@ -111,17 +121,30 @@ class SystemProxyManager {
             appleScript.executeAndReturnError(&error)
             
             if let error = error {
-                print("[SystemProxy] Error: \(error)")
+                let message = String(describing: error)
+                Task { @MainActor in
+                    ClashViewModel.shared.addLog("[SystemProxy] AppleScript proxy update failed: \(message)", level: .debug)
+                }
                 return false
             }
-            
-            print("[SystemProxy] ✅ System proxy \(enabled ? "enabled" : "disabled")")
+
+            if !enabled {
+                await self.clearSnapshot()
+            }
             return true
         }.value
     }
     
     private static var cachedServices: [String] = []
     private static var lastCacheUpdate: Date = .distantPast
+
+    nonisolated static func shellQuoted(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    nonisolated static func shellCommand(_ arguments: [String]) -> String {
+        arguments.map(shellQuoted).joined(separator: " ")
+    }
     
     /// Get list of network services (Wi-Fi, Ethernet, etc.)
     nonisolated private func getNetworkServices() async -> [String] {
@@ -154,11 +177,173 @@ class SystemProxyManager {
                 }
                 return services
             }
-        } catch {
-            print("[SystemProxy] Failed to get network services: \(error)")
-        }
+        } catch {}
         
         return await MainActor.run { Self.cachedServices.isEmpty ? ["Wi-Fi", "Ethernet"] : Self.cachedServices }
+    }
+
+    private func targetServices(from services: [String]) async -> [String] {
+        let priorityServices = ["Wi-Fi", "Ethernet", "USB 10/100/1000 LAN"]
+        let activeServices = services.filter { service in
+            priorityServices.contains { service.contains($0) }
+        }
+        return activeServices.isEmpty ? services : activeServices
+    }
+
+    private func saveSnapshotIfNeeded(for services: [String]) async {
+        if UserDefaults.standard.data(forKey: snapshotKey) != nil { return }
+
+        var snapshots: [String: ProxySnapshot] = [:]
+        for service in services {
+            snapshots[service] = await readSnapshot(for: service)
+        }
+
+        if let data = try? JSONEncoder().encode(snapshots) {
+            UserDefaults.standard.set(data, forKey: snapshotKey)
+        }
+    }
+
+    private func clearSnapshot() async {
+        UserDefaults.standard.removeObject(forKey: snapshotKey)
+    }
+
+    private func restoreSnapshot(for services: [String]) async -> Bool {
+        guard let data = UserDefaults.standard.data(forKey: snapshotKey),
+              let snapshots = try? JSONDecoder().decode([String: ProxySnapshot].self, from: data) else {
+            return false
+        }
+
+        var allSucceeded = true
+        for service in services {
+            guard let snapshot = snapshots[service] else { continue }
+            let commands = restoreCommands(for: service, snapshot: snapshot)
+            for args in commands {
+                let task = Process()
+                task.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
+                task.arguments = ["-n", "/usr/sbin/networksetup"] + args
+                do {
+                    try task.run()
+                    task.waitUntilExit()
+                    if task.terminationStatus != 0 { allSucceeded = false }
+                } catch {
+                    allSucceeded = false
+                }
+            }
+        }
+
+        if allSucceeded {
+            await clearSnapshot()
+        }
+        return allSucceeded
+    }
+
+    private func readSnapshot(for service: String) async -> ProxySnapshot {
+        async let web = readProxy(service: service, kind: "-getwebproxy")
+        async let secure = readProxy(service: service, kind: "-getsecurewebproxy")
+        async let socks = readProxy(service: service, kind: "-getsocksfirewallproxy")
+        async let bypass = readBypassDomains(service: service)
+
+        let webResult = await web
+        let secureResult = await secure
+        let socksResult = await socks
+
+        return ProxySnapshot(
+            webEnabled: webResult.enabled,
+            secureWebEnabled: secureResult.enabled,
+            socksEnabled: socksResult.enabled,
+            webServer: webResult.server,
+            webPort: webResult.port,
+            secureWebServer: secureResult.server,
+            secureWebPort: secureResult.port,
+            socksServer: socksResult.server,
+            socksPort: socksResult.port,
+            bypassDomains: await bypass
+        )
+    }
+
+    private func readProxy(service: String, kind: String) async -> (enabled: Bool, server: String, port: String) {
+        let output = runNetworksetup([kind, service])
+        var enabled = false
+        var server = ""
+        var port = "0"
+
+        for line in output.components(separatedBy: .newlines) {
+            let parts = line.components(separatedBy: ":")
+            guard parts.count >= 2 else { continue }
+            let key = parts[0].trimmingCharacters(in: .whitespaces).lowercased()
+            let value = parts.dropFirst().joined(separator: ":").trimmingCharacters(in: .whitespaces)
+            if key == "enabled" {
+                enabled = value.lowercased() == "yes"
+            } else if key == "server" {
+                server = value
+            } else if key == "port" {
+                port = value
+            }
+        }
+
+        return (enabled, server, port)
+    }
+
+    private func readBypassDomains(service: String) async -> [String] {
+        let output = runNetworksetup(["-getproxybypassdomains", service])
+        return output.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && !$0.localizedCaseInsensitiveContains("There aren't any bypass domains") }
+    }
+
+    private func runNetworksetup(_ args: [String]) -> String {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/sbin/networksetup")
+        task.arguments = args
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = Pipe()
+        do {
+            try task.run()
+            task.waitUntilExit()
+            return String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        } catch {
+            return ""
+        }
+    }
+
+    private func runSudoNetworksetupSync(_ args: [String]) -> Bool {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
+        task.arguments = ["-n", "/usr/sbin/networksetup"] + args
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+
+        do {
+            try task.run()
+            task.waitUntilExit()
+            return task.terminationStatus == 0
+        } catch {
+            return false
+        }
+    }
+
+    private func restoreCommands(for service: String, snapshot: ProxySnapshot) -> [[String]] {
+        var commands: [[String]] = []
+        if !snapshot.webServer.isEmpty, snapshot.webPort != "0" {
+            commands.append(["-setwebproxy", service, snapshot.webServer, snapshot.webPort])
+        }
+        if !snapshot.secureWebServer.isEmpty, snapshot.secureWebPort != "0" {
+            commands.append(["-setsecurewebproxy", service, snapshot.secureWebServer, snapshot.secureWebPort])
+        }
+        if !snapshot.socksServer.isEmpty, snapshot.socksPort != "0" {
+            commands.append(["-setsocksfirewallproxy", service, snapshot.socksServer, snapshot.socksPort])
+        }
+
+        commands.append(["-setwebproxystate", service, snapshot.webEnabled ? "on" : "off"])
+        commands.append(["-setsecurewebproxystate", service, snapshot.secureWebEnabled ? "on" : "off"])
+        commands.append(["-setsocksfirewallproxystate", service, snapshot.socksEnabled ? "on" : "off"])
+
+        if !snapshot.bypassDomains.isEmpty {
+            commands.append(["-setproxybypassdomains", service] + snapshot.bypassDomains)
+        }
+
+        return commands
     }
     
     /// Check if system proxy is currently enabled
@@ -191,10 +376,12 @@ class SystemProxyManager {
     /// Synchronously disable all system proxies (for app termination)
     /// This method blocks and should ONLY be called during applicationWillTerminate
     func disableAllProxiesSync() {
-        print("[SystemProxy] 🛑 Synchronous cleanup - disabling all proxies...")
-        
         let priorityServices = ["Wi-Fi", "Ethernet", "USB 10/100/1000 LAN"]
-        
+
+        if restoreSnapshotSync(for: priorityServices) {
+            return
+        }
+
         for service in priorityServices {
             let commands: [[String]] = [
                 ["-setwebproxystate", service, "off"],
@@ -203,17 +390,35 @@ class SystemProxyManager {
             ]
             
             for args in commands {
-                let task = Process()
-                task.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
-                task.arguments = ["-n", "/usr/sbin/networksetup"] + args
-                task.standardOutput = FileHandle.nullDevice
-                task.standardError = FileHandle.nullDevice
-                
-                try? task.run()
-                task.waitUntilExit()
+                _ = runSudoNetworksetupSync(args)
             }
         }
-        
-        print("[SystemProxy] ✅ All proxies disabled")
+    }
+
+    private func restoreSnapshotSync(for services: [String]) -> Bool {
+        guard let data = UserDefaults.standard.data(forKey: snapshotKey),
+              let snapshots = try? JSONDecoder().decode([String: ProxySnapshot].self, from: data) else {
+            return false
+        }
+
+        var restoredAnyService = false
+        var allSucceeded = true
+
+        for service in services {
+            guard let snapshot = snapshots[service] else { continue }
+            restoredAnyService = true
+            for args in restoreCommands(for: service, snapshot: snapshot) {
+                if !runSudoNetworksetupSync(args) {
+                    allSucceeded = false
+                }
+            }
+        }
+
+        if restoredAnyService && allSucceeded {
+            UserDefaults.standard.removeObject(forKey: snapshotKey)
+            return true
+        }
+
+        return false
     }
 }

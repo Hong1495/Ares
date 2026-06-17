@@ -3,7 +3,7 @@ import Combine
 
 /// Represents a traffic session for a specific application.
 /// It persists even after the application exits or connections are closed.
-struct AppSession: Identifiable, Hashable, Sendable {
+nonisolated struct AppSession: Identifiable, Hashable, Sendable {
     let id: String              // Process Path (Aggregated Main Bundle) or "Unknown"
     let name: String            // Application Name
     let iconPath: String?       // Path to retrieve icon
@@ -39,7 +39,7 @@ struct AppSession: Identifiable, Hashable, Sendable {
 }
 
 /// Generic Group Node for non-App grouping (e.g. Proxy, Host)
-struct ActivityGroup: Identifiable, Hashable, Sendable {
+nonisolated struct ActivityGroup: Identifiable, Hashable, Sendable {
     let id: String              // Unique ID (e.g. Proxy Name or Host)
     let title: String           // Display Title
     let icon: String            // SF Symbol Name
@@ -54,7 +54,7 @@ struct ActivityGroup: Identifiable, Hashable, Sendable {
 }
 
 /// Polymorphic Node for Hierarchical Table
-enum ActivityNode: Identifiable, Hashable, Sendable {
+nonisolated enum ActivityNode: Identifiable, Hashable, Sendable {
     case app(AppSession)
     case group(ActivityGroup)
     case connection(Connection)

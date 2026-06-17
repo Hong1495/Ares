@@ -4,11 +4,11 @@ import Foundation
 extension AppState {
     /// Toggle TUN mode (UI-facing, returns INSTANTLY)
     func toggleTUN() {
-        print("[AppState] ⚡️ ENTERED toggleTUN()")
+        clashViewModel.addLog("[TUN] Toggle requested", level: .debug)
 
         // 1. Double-guard: Check both local and ViewModel toggle state
         guard !isTUNToggling && !clashViewModel.isToggling else {
-            print("[AppState] 🚫 Toggle rejected - already in progress")
+            clashViewModel.addLog("[TUN] Toggle rejected - already in progress", level: .warning)
             return
         }
 
@@ -33,22 +33,30 @@ extension AppState {
         Task.detached { [weak self] in
             guard let self = self else { return }
 
-            await self.performTUNToggleWork(newState: newTUN)
+            let succeeded = await self.performTUNToggleWork(newState: newTUN)
 
             // 4. Cleanup on Main Thread
             await MainActor.run {
+                if !succeeded {
+                    self.tunEnabled = oldTUN
+                    UserDefaults.standard.set(oldTUN, forKey: DefaultsKeys.tunEnabled)
+                    self.clashController.updatePort(tunEnabled: oldTUN)
+                    self.clashViewModel.addLog("[TUN] ❌ Mode switch failed, reverted to \(oldTUN ? "TUN" : "Normal") mode")
+                }
                 self.isTUNToggling = false
                 self.clashViewModel.isToggling = false
                 self.objectWillChange.send()
-                self.clashViewModel.addLog("[TUN] ✅ Mode switch completed")
+                if succeeded {
+                    self.clashViewModel.addLog("[TUN] ✅ Mode switch completed")
+                }
             }
         }
     }
 
     /// Perform actual TUN toggle work in background (nonisolated)
-    nonisolated private func performTUNToggleWork(newState: Bool) async {
-        let (viewModel, controller) = await MainActor.run {
-            (ClashViewModel.shared, ClashController.shared)
+    nonisolated private func performTUNToggleWork(newState: Bool) async -> Bool {
+        let viewModel = await MainActor.run {
+            ClashViewModel.shared
         }
 
         await MainActor.run {
@@ -60,6 +68,12 @@ extension AppState {
         if !hasPrivileges {
             _ = await PrivilegeService.shared.installSudoers()
         }
+        guard await PrivilegeService.shared.checkPrivileges() else {
+            await MainActor.run {
+                viewModel.addLog("[TUN] ❌ Administrator privileges unavailable")
+            }
+            return false
+        }
 
         // 2. Stop old process thoroughly
         await viewModel.stopCore(intendedRestart: true)
@@ -67,12 +81,15 @@ extension AppState {
         // 3. Start with new TUN config
         await viewModel.startCore(isRestart: true)
 
-        // 4. ELEGANT: Dynamic Readiness Check (Poll API until responsive)
-        let isReady = await controller.waitForAPIReady(timeout: 5.0)
+        // 4. startCore only reports running after Clash API is ready.
+        let isReady = await MainActor.run {
+            viewModel.runtimeState.isAPIReady
+        }
         if !isReady {
             await MainActor.run {
-                viewModel.addLog("[TUN] ⚠️ Clash API failed to respond within timeout")
+                viewModel.addLog("[TUN] ⚠️ Clash API is not ready after restart")
             }
+            return false
         } else {
             await MainActor.run {
                 viewModel.addLog("[TUN] ⚡️ Clash API is ready")
@@ -81,12 +98,18 @@ extension AppState {
 
         // 5. Update system proxy if needed
         let proxyEnabled = await MainActor.run { AppState.shared.systemProxyEnabled }
-        if proxyEnabled {
+        if proxyEnabled && isReady {
             await AppState.shared.enableSystemProxy()
+        } else if proxyEnabled {
+            await MainActor.run {
+                viewModel.addLog("[TUN] ⚠️ System proxy restore skipped because Clash API is not ready")
+            }
+            return false
         }
 
         // 6. Final verification - non-blocking but ensures state is correct
         try? await self.verifyTUNStatus()
+        return true
     }
 
     /// Verify TUN status from Clash API

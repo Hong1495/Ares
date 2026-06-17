@@ -277,19 +277,16 @@ struct SimpleProxyGroupCard: View {
                                 delay: clashController.proxyNodes[itemName]?.delay,
                                 isTesting: testingNodes.contains(itemName),
                                 onSelect: {
-                                    print("[ProxiesView] 🔵 Clicked: \(itemName) in group: \(group.name)")
                                     Task {
                                         do {
-                                            print("[ProxiesView] 📡 Calling API select...")
                                             try await clashController.selectProxy(
                                                 group: group.name,
                                                 proxy: itemName
                                             )
-                                            print("[ProxiesView] ✅ Selection successful")
                                             // Refresh proxy data to update UI
                                             try? await clashController.fetchProxiesData()
                                         } catch {
-                                            print("[ProxiesView] ❌ Selection error: \(error)")
+                                            ClashViewModel.shared.addLog("[Proxies] Failed to select \(itemName): \(error.localizedDescription)", level: .warning)
                                         }
                                     }
                                 },
@@ -409,7 +406,6 @@ struct SimpleProxyButton: View {
         )
         .contentShape(Rectangle())
         .onTapGesture {
-            print("[SimpleProxyButton] onTapGesture triggered for: \(name)")
             onSelect()
         }
     }

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Connection model
-struct Connection: Identifiable, Sendable, Hashable {
+nonisolated struct Connection: Identifiable, Sendable, Hashable {
     let id: String
     let metadata: ConnectionMetadata
     let upload: Int64
@@ -51,7 +51,7 @@ struct Connection: Identifiable, Sendable, Hashable {
     }
 }
 
-struct ConnectionMetadata: Codable, Sendable {
+nonisolated struct ConnectionMetadata: Codable, Sendable {
     let network: String
     let type: String
     let sourceIP: String

@@ -4,23 +4,23 @@ import Combine
 extension ClashController {
     func setupLifecycleObserver() {
         // Reactive Lifecycle: Only start monitoring when ClashService reports it is running
-        statusSubscription = ClashViewModel.shared.$isRunning
+        statusSubscription = ClashViewModel.shared.$runtimeState
             .combineLatest(ClashViewModel.shared.$isToggling)
             .receive(on: RunLoop.main)
-            .sink { [weak self] isRunning, isToggling in
-                if isRunning && !isToggling {
+            .sink { [weak self] runtimeState, isToggling in
+                if runtimeState == .running && !isToggling {
                     self?.consecutiveFailures = 0
                     // Add a tiny cool-down to ensure TCP ports are fully open by the kernel
                     Task {
                         try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s
-                        if let self = self, ClashViewModel.shared.isRunning, !ClashViewModel.shared.isToggling {
+                        if let self = self, ClashViewModel.shared.runtimeState == .running, !ClashViewModel.shared.isToggling {
                             ClashViewModel.shared.addLog("[ClashController] 🟢 Core stable, activating monitors...")
                             if AppState.shared.isForeground {
                                 self.startMonitors()
                             }
                         }
                     }
-                } else {
+                } else if !runtimeState.isAPIReady || isToggling {
                     if isToggling {
                         ClashViewModel.shared.addLog("[ClashController] 🟡 Toggling in progress, silencing monitors...")
                     }
@@ -80,7 +80,7 @@ extension ClashController {
     /// This is more elegant than a fixed Task.sleep().
     func waitForAPIReady(timeout: TimeInterval = 5.0) async -> Bool {
         let start = Date()
-        let url = URL(string: "\(baseURL)/version")!
+        guard let url = URL(string: "\(baseURL)/version") else { return false }
 
         while Date().timeIntervalSince(start) < timeout {
             do {

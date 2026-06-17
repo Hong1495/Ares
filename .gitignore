@@ -2,3 +2,6 @@
 build/
 *.app/
 *.log
+*.xcuserstate
+xcuserdata/
+DerivedData/

@@ -19,7 +19,6 @@ struct SettingsView: View {
     @AppStorage(DefaultsKeys.logLevel) private var logLevel = "info"
 
     // TUN Mode
-    @AppStorage(DefaultsKeys.tunEnabled) private var tunEnabled = false
     @AppStorage(DefaultsKeys.tunStack) private var tunStack = "system"
     @AppStorage(DefaultsKeys.tunMTU) private var tunMTU = 1400
     @AppStorage(DefaultsKeys.tunDevice) private var tunDevice = ""
@@ -40,6 +39,8 @@ struct SettingsView: View {
     @AppStorage(DefaultsKeys.mitmPorts) private var mitmPorts = "80, 443, 8080, 8443"
     @AppStorage(DefaultsKeys.mitmHosts) private var mitmHosts = ""  // Empty = intercept all hosts
     @AppStorage(DefaultsKeys.tlsFingerprint) private var tlsFingerprint = "none"
+
+    private var tunEnabled: Bool { appState.tunEnabled }
 
     var body: some View {
         Form {
@@ -128,10 +129,13 @@ struct SettingsView: View {
 
             // Unified TUN Mode Info
             Section {
-                Toggle(isOn: $tunEnabled) {
-                    Text("Enable TUN Support")
-                        .fontWeight(.medium)
+                Toggle(isOn: Binding(
+                    get: { tunEnabled },
+                    set: { _ in appState.toggleTUN() }
+                )) {
+                    Text("Enable TUN Support").fontWeight(.medium)
                 }
+                .disabled(clashViewModel.isToggling)
 
                 Picker("Network Stack", selection: $tunStack) {
                     Text("Mixed (Recommended)").tag("mixed")
@@ -164,7 +168,7 @@ struct SettingsView: View {
                     Text("Auto Route")
                         .fontWeight(.medium)
                 }
-                    .disabled(!tunEnabled)
+                .disabled(!tunEnabled)
 
                 Toggle(isOn: $tunAutoDetectInterface) {
                     Text("Auto Detect Interface")
@@ -223,7 +227,9 @@ struct SettingsView: View {
                             localRulesRestartTask = Task {
                                 try? await Task.sleep(nanoseconds: 1_500_000_000)
                                 if Task.isCancelled { return }
-                                await clashViewModel.restart()
+                                if clashViewModel.isRunning {
+                                    await clashViewModel.restart()
+                                }
                             }
                         }
 
@@ -373,7 +379,9 @@ struct SettingsView: View {
                 .pickerStyle(.menu)
                 .onChange(of: tlsFingerprint) { _, _ in
                     Task {
-                        await clashViewModel.restart()
+                        if clashViewModel.isRunning {
+                            await clashViewModel.restart()
+                        }
                     }
                 }
 
@@ -422,7 +430,7 @@ struct SettingsView: View {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let cacheDir = appSupport.appendingPathComponent("Ares/cache")
         try? FileManager.default.removeItem(at: cacheDir)
-        print("[Settings] Cache cleared")
+        clashViewModel.addLog("[Settings] Cache cleared", level: .debug)
     }
 
     private func resetSettings() {

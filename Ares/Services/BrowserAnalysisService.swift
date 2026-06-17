@@ -5,7 +5,7 @@ import Combine
 // MARK: - 1. Sendable Data Models (Global Scope)
 // Ensure all models are Sendable for Swift 6 high-concurrency mode
 
-struct RequestHit: Identifiable, Codable, Equatable, Sendable {
+nonisolated struct RequestHit: Identifiable, Codable, Equatable, Sendable {
     var id = UUID()
     let timestamp: Date
     let statusCode: Int?
@@ -25,7 +25,7 @@ struct RequestHit: Identifiable, Codable, Equatable, Sendable {
     }
 }
 
-struct BrowserRequest: Identifiable, Codable, Equatable, Sendable {
+nonisolated struct BrowserRequest: Identifiable, Codable, Equatable, Sendable {
     let id: String
     let url: String
     let method: String
@@ -117,7 +117,7 @@ struct BrowserRequest: Identifiable, Codable, Equatable, Sendable {
     }
 }
 
-struct BrowserTab: Identifiable, Codable, Equatable, Sendable {
+nonisolated struct BrowserTab: Identifiable, Codable, Equatable, Sendable {
     let id: String
     var url: String
     var title: String
@@ -129,7 +129,7 @@ struct BrowserTab: Identifiable, Codable, Equatable, Sendable {
     }
 }
 
-struct PayloadWrapper: Codable, Sendable {
+nonisolated struct PayloadWrapper: Codable, Sendable {
     let tabId: String?
     let request: BrowserRequest?
     let tabRemoved: Bool?
@@ -214,11 +214,8 @@ final class TelemetryWorker: @unchecked Sendable {
     func start() {
         // Cancel existing listener if any to prevent port conflicts
         if listener != nil {
-            print("[TeleWorker] ⚠️ Stopping existing listener before restart...")
             listener?.cancel()
             listener = nil
-            // Small delay to allow port to be released
-            Thread.sleep(forTimeInterval: 0.1)
         }
 
         do {
@@ -230,7 +227,6 @@ final class TelemetryWorker: @unchecked Sendable {
                 Task { @MainActor in
                     BrowserAnalysisService.shared.isListening = (state == .ready)
                 }
-                print("[TeleWorker] 📡 State: \(state)")
             }
 
             listener?.newConnectionHandler = { [weak self] conn in
@@ -241,9 +237,10 @@ final class TelemetryWorker: @unchecked Sendable {
             }
 
             listener?.start(queue: .global(qos: .utility))
-            print("[TeleWorker] 🚀 Listener started on port 10086")
         } catch {
-            print("[TeleWorker] ❌ Failed to start listener: \(error)")
+            Task { @MainActor in
+                ClashViewModel.shared.addLog("[TeleWorker] Failed to start listener: \(error)", level: .debug)
+            }
         }
     }
 
@@ -290,19 +287,6 @@ final class TelemetryWorker: @unchecked Sendable {
 
         // 1. Try Batched (Array)
         if let updates = try? Self.sharedDecoder.decode([PayloadWrapper].self, from: data) {
-            // Debug: Log received request methods
-            for update in updates {
-                if let req = update.request {
-                    // Highlight body capture requests
-                    if req.id.hasPrefix("body-") {
-                        // let hasReqBody = req.requestBody != nil
-                        // let hasResBody = req.responseBody != nil
-                        // print("[TeleWorker] 📦 BODY CAPTURE: \(req.method) \(req.url.prefix(40))... reqBody:\(hasReqBody) resBody:\(hasResBody)")
-                    } else {
-                        // print("[TeleWorker] 📥 Received: \(req.method) \(req.url.prefix(60))...")
-                    }
-                }
-            }
             Task { @MainActor in
                 BrowserAnalysisService.shared.handleBatchedUpdates(updates)
             }
@@ -311,11 +295,6 @@ final class TelemetryWorker: @unchecked Sendable {
 
         // 2. Try Single (Object)
         if let wrapper = try? Self.sharedDecoder.decode(PayloadWrapper.self, from: data) {
-            /*
-            if let req = wrapper.request {
-                // print("[TeleWorker] 📥 Received: \(req.method) \(req.url.prefix(60))...")
-            }
-            */
             Task { @MainActor in
                 BrowserAnalysisService.shared.handleBatchedUpdates([wrapper])
             }
@@ -323,12 +302,6 @@ final class TelemetryWorker: @unchecked Sendable {
         }
 
         return false // Data not yet complete or malformed
-    }
-
-    private func logFailure(_ data: Data) {
-        if let s = String(data: data, encoding: .utf8) {
-            print("[TeleWorker] ❌ Decoding failed. Snippet: \(s.prefix(200))")
-        }
     }
 
     private func sendACK(_ conn: NWConnection) {
@@ -351,7 +324,6 @@ final class TelemetryWorker: @unchecked Sendable {
         Task { @MainActor in
             BrowserAnalysisService.shared.isListening = false
         }
-        print("[TeleWorker] 🛑 Listener stopped")
     }
 }
 
@@ -367,8 +339,6 @@ actor BrowserAnalyzer {
     private let staleThreshold: TimeInterval = 600 // 10 mins
 
     func process(activeTabs: [BrowserTab], wrappers: [PayloadWrapper]) -> [BrowserTab] {
-        var needsSort = false
-
         // 1. Sync internal map if needed (first run or reset)
         if tabMap.isEmpty && !activeTabs.isEmpty {
             for tab in activeTabs {
@@ -380,13 +350,10 @@ actor BrowserAnalyzer {
         for w in wrappers {
             if let req = w.request, let tid = w.tabId {
                 addRequestToTab(tabId: tid, request: req)
-                needsSort = true
             } else if let tab = w.id != nil ? w.asTab() : nil {
                 updateTab(tab)
-                needsSort = true
             } else if let tid = w.tabId, w.tabRemoved == true {
                 removeTab(id: tid)
-                needsSort = true
             }
         }
 
@@ -426,7 +393,6 @@ actor BrowserAnalyzer {
 
         // 1. Precise ID Matching
         if let ri = tab.requests.firstIndex(where: { $0.id == request.id }) {
-            // print("[BrowserAnalyzer] ✅ Found matching request by ID: \(request.id)")
             merge(request, into: &tab.requests[ri])
         }
         // 2. Heuristic Body Matching
@@ -545,7 +511,6 @@ class BrowserAnalysisService: ObservableObject {
         NotificationCenter.default.publisher(for: .appDidGoSilent)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                print("[BrowserAnalysis] 🌙 Received Silence Signal - HARD STOP")
                 self?.stopListening()
             }
             .store(in: &cancellables)
@@ -553,7 +518,6 @@ class BrowserAnalysisService: ObservableObject {
         NotificationCenter.default.publisher(for: .appDidWakeUp)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                print("[BrowserAnalysis] ☀️ Received Wake Signal - RESTART")
                 self?.startListening()
             }
             .store(in: &cancellables)

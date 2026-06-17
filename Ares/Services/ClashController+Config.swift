@@ -14,7 +14,7 @@ extension ClashController {
 
         let (_, _) = try await URLSession.shared.data(for: request)
 
-        print("[ClashController] Set mode to \(mode.rawValue)")
+        ClashViewModel.shared.addLog("[ClashController] Set mode to \(mode.rawValue)", level: .debug)
     }
 
     /// Get current Clash mode

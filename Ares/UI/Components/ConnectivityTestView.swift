@@ -208,11 +208,8 @@ class ConnectivityDelegate: NSObject, URLSessionDelegate {
 
                 var error: CFError?
                 if SecTrustEvaluateWithError(serverTrust, &error) {
-                    print("[Connectivity] ✅ Trust evaluation succeeded for internal CA")
                     completionHandler(.useCredential, URLCredential(trust: serverTrust))
                     return
-                } else {
-                     print("[Connectivity] ❌ Trust evaluation failed: \(error?.localizedDescription ?? "Unknown error")")
                 }
             }
         }
@@ -222,4 +219,3 @@ class ConnectivityDelegate: NSObject, URLSessionDelegate {
         completionHandler(.performDefaultHandling, nil)
     }
 }
-

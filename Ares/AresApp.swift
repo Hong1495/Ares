@@ -19,7 +19,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Handle Silent Start
         let silent = UserDefaults.standard.bool(forKey: DefaultsKeys.silentStart)
         if silent {
-            print("[AppDelegate] 🤫 Silent start enabled - hiding application")
+            ClashViewModel.shared.addLog("[AppDelegate] Silent start enabled - hiding application", level: .debug)
             // Hide the entire application from foreground
             DispatchQueue.main.async {
                 NSApp.hide(nil)
@@ -29,28 +29,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         // Force cleanup on exit
-        print("🛑 App Terminating - Cleaning up...")
+        ClashViewModel.shared.addLog("[AppDelegate] App terminating - cleaning up", level: .debug)
 
         // 1. CRITICAL: Disable system proxy FIRST to prevent network outage
         // This must happen BEFORE we kill Clash, otherwise macOS traffic
         // will try to connect to a dead port (127.0.0.1:7890)
         if UserDefaults.standard.bool(forKey: DefaultsKeys.systemProxyEnabled) {
-            print("🔌 Disabling system proxy...")
+            ClashViewModel.shared.addLog("[AppDelegate] Restoring system proxy", level: .debug)
             SystemProxyManager.shared.disableAllProxiesSync()
             // NOTE: Keep systemProxyEnabled = true so proxy auto-restarts on next launch
             // User's preference is preserved, only runtime state is cleaned up
         }
 
-        // 2. Kill Clash process
-        // Synchronous cleanup using sudo pkill directly
-        // We use a direct Process call to avoid async/Task issues during termination
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
-        task.arguments = ["-n", "/usr/bin/pkill", "-9", "-f", "clash-meta"]
-        try? task.run()
-        task.waitUntilExit()
-
-        print("✅ Cleanup complete")
+        ClashViewModel.shared.addLog("[AppDelegate] Cleanup complete", level: .debug)
     }
 
     /// Called when user clicks Dock icon while app is running
@@ -64,16 +55,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func checkAndRecoverState() async {
         await Task.yield()
-        print("🏥 Performing Startup Health Check...")
+        ClashViewModel.shared.addLog("[AppDelegate] Performing startup health check", level: .debug)
 
         // 0. Initialize State first (Loads Prefs, Check Privileges)
         await AppState.shared.initialize()
+        await ClashViewModel.shared.refreshCoreVersion()
+        Task {
+            await ClashViewModel.shared.checkCoreUpdates()
+        }
 
         // 1. Start Clash with retry capability (Gated)
         if ClashViewModel.shared.isRunning {
-            print("ℹ️ Clash is already running, skipping explicit start")
+            ClashViewModel.shared.addLog("[AppDelegate] Clash is already running, skipping explicit start", level: .debug)
         } else {
-            print("🚀 Starting Clash...")
+            ClashViewModel.shared.addLog("[AppDelegate] Starting Clash", level: .debug)
             await ClashViewModel.shared.start()
         }
 
@@ -83,7 +78,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 3. Restore System Proxy state if enabled (NON-BLOCKING)
         // Run proxy setup in background to not delay app startup
         if AppState.shared.systemProxyEnabled {
-            print("🔄 Restoring System Proxy state...")
+            ClashViewModel.shared.addLog("[AppDelegate] Restoring system proxy state", level: .debug)
             Task.detached {
                 await AppState.shared.enableSystemProxy()
             }
@@ -188,8 +183,8 @@ struct AresApp: App {
                     WindowAccessor.openWindow = openWindow
                 }
                 .preferredColorScheme(themeService.theme == "dark" ? .dark : (themeService.theme == "light" ? .light : nil))
-                .onChange(of: scenePhase) { newPhase in
-                    print("[App] 🎬 Scene Phase changed to: \(newPhase)")
+                .onChange(of: scenePhase) { _, newPhase in
+                    clashViewModel.addLog("[App] Scene phase changed to: \(newPhase)", level: .debug)
                     if newPhase == .active {
                         appState.wakeUp()
                     } else if newPhase == .background {

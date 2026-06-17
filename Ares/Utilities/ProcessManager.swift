@@ -69,7 +69,6 @@ actor ProcessManager {
             let result = try await run(executable: command, arguments: args)
             return result.output.trimmingCharacters(in: .whitespacesAndNewlines)
         } catch {
-            print("[ProcessManager] Error running \(command): \(error)")
             return ""
         }
     }
@@ -113,7 +112,6 @@ actor ProcessManager {
         if userKill.isEmpty { return true } // Empty usually means success for kill command
 
         // If user kill failed/printed error, try sudo kill
-        print("[ProcessManager] User kill failed for \(pid), trying sudo...")
         let result = try? await run(executable: "/usr/bin/sudo", arguments: ["-n", "/bin/kill", "-9", "\(pid)"])
         return result?.exitCode == 0
     }

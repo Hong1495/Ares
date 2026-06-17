@@ -105,7 +105,7 @@ extension ClashController {
                     }
 
                     let cf = await self.consecutiveFailures
-                    let maxRetry = await self.MAX_RETRY_FAILURES
+                    let maxRetry = self.MAX_RETRY_FAILURES
                     if cf >= maxRetry { break }
 
                     try? await Task.sleep(nanoseconds: 1_000_000_000) // 1.0s wait

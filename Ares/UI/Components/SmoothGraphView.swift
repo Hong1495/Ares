@@ -27,7 +27,7 @@ struct SmoothSparklineView: View {
 
     @ObservedObject var appState: AppState
 
-    init(data: [(Date, Double)], color: Color, maxDataPoints: Int, animate: Bool = true, appState: AppState = .shared) {
+    init(data: [(Date, Double)], color: Color, maxDataPoints: Int, animate: Bool = true, appState: AppState) {
         self.data = data
         self.color = color
         self.maxDataPoints = maxDataPoints
@@ -56,7 +56,6 @@ struct SmoothSparklineView: View {
             let width = size.width
             let height = size.height
 
-            let endT = now
             let startT = now - visibleDuration
 
             // Filter visible data
@@ -91,9 +90,10 @@ struct SmoothSparklineView: View {
             context.stroke(path, with: .color(color), lineWidth: 1.5)
 
             // Fill
+            guard let firstPoint = renderData.first, let lastPoint = renderData.last else { return }
             var fillPath = path
-            fillPath.addLine(to: CGPoint(x: xPos(renderData.last!.0), y: height))
-            fillPath.addLine(to: CGPoint(x: xPos(renderData.first!.0), y: height))
+            fillPath.addLine(to: CGPoint(x: xPos(lastPoint.0), y: height))
+            fillPath.addLine(to: CGPoint(x: xPos(firstPoint.0), y: height))
             fillPath.closeSubpath()
 
             let gradient = Gradient(stops: [
@@ -115,7 +115,7 @@ struct DualSmoothGraphView: View {
 
     @ObservedObject var appState: AppState
 
-    init(uploadData: [(Date, Double)], downloadData: [(Date, Double)], visibleDuration: TimeInterval = 60, appState: AppState = .shared) {
+    init(uploadData: [(Date, Double)], downloadData: [(Date, Double)], visibleDuration: TimeInterval = 60, appState: AppState) {
         self.uploadData = uploadData
         self.downloadData = downloadData
         self.visibleDuration = visibleDuration
@@ -145,7 +145,6 @@ struct DualSmoothGraphView: View {
             let height = size.height
 
             // Time Window
-            let endT = now
             let startT = now - visibleDuration
 
             // Pre-calc Y scale (Max of both up/down in the visible range)
@@ -169,7 +168,7 @@ struct DualSmoothGraphView: View {
             // Draw Function
             func drawLine(data: [(Date, Double)], color: Color) {
                 var path = Path()
-                guard let first = data.first else { return }
+                guard !data.isEmpty else { return }
 
                 // Optimisation: Only draw points near visible range
                 // We include one point before startT to ensure line enters from left smoothly
@@ -191,9 +190,10 @@ struct DualSmoothGraphView: View {
                 context.stroke(path, with: .color(color), lineWidth: 2)
 
                 // Fill (Gradient)
+                guard let firstPoint = renderData.first, let lastPoint = renderData.last else { return }
                 var fillPath = path
-                fillPath.addLine(to: CGPoint(x: xPos(renderData.last!.0), y: height))
-                fillPath.addLine(to: CGPoint(x: xPos(renderData.first!.0), y: height))
+                fillPath.addLine(to: CGPoint(x: xPos(lastPoint.0), y: height))
+                fillPath.addLine(to: CGPoint(x: xPos(firstPoint.0), y: height))
                 fillPath.closeSubpath()
 
                 let gradient = Gradient(stops: [

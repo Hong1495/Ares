@@ -8,10 +8,8 @@ struct MainView: View {
             List(selection: Binding(
                 get: { appState.selection },
                 set: { newValue in
-                    DispatchQueue.main.async {
-                        if let val = newValue {
-                            appState.selection = val
-                        }
+                    if let val = newValue {
+                        appState.selection = val
                     }
                 }
             )) {

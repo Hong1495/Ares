@@ -10,11 +10,9 @@ class PrivilegeService {
     /// Check if we have password-less sudo access (Async)
     func checkPrivileges() async -> Bool {
         // Run blocking checks on background thread
+        let clashPath = await CoreManager.shared.activeBinaryPath()
         return await Task.detached(priority: .userInitiated) {
-            // checking "true" will fail because we didn't whitelist /usr/bin/true
-            guard let clashPath = Bundle.main.path(forResource: "clash-meta", ofType: nil) else {
-                return false
-            }
+            guard FileManager.default.isExecutableFile(atPath: clashPath) else { return false }
 
             let pkillPath = "/usr/bin/pkill"
 
@@ -82,10 +80,9 @@ class PrivilegeService {
     /// Returns true if paths are consistent, false if stale/mismatched.
     /// This detects migration issues (e.g. M1→M4, rebuild with new DerivedData path).
     func verifySudoersPathConsistency() async -> Bool {
+        let currentClashPath = await CoreManager.shared.activeBinaryPath()
         return await Task.detached(priority: .userInitiated) {
-            guard let currentClashPath = Bundle.main.path(forResource: "clash-meta", ofType: nil) else {
-                return false
-            }
+            guard FileManager.default.isExecutableFile(atPath: currentClashPath) else { return false }
 
             let sudoersPath = "/etc/sudoers.d/ares_rules_v3"
 
@@ -126,8 +123,8 @@ class PrivilegeService {
                 return false
             }
 
-            // Check if the current clash-meta path is present in the sudoers file
-            return content.contains(currentClashPath)
+            // Check if the current clash-meta path is present in sudoers syntax.
+            return content.contains(SudoersEscaper.commandPath(currentClashPath))
         }.value
     }
 
@@ -172,18 +169,20 @@ class PrivilegeService {
         try? FileManager.default.createDirectory(at: scriptPath.deletingLastPathComponent(), withIntermediateDirectories: true)
 
         // Get current username
-        let username = NSUserName()
+        let username = SudoersEscaper.user(NSUserName())
 
-        // Path to clash-meta
-        guard let clashPath = Bundle.main.path(forResource: "clash-meta", ofType: nil) else {
+        // Path to active mihomo/clash-meta
+        let clashPath = await CoreManager.shared.activeBinaryPath()
+        guard FileManager.default.isExecutableFile(atPath: clashPath) else {
             await MainActor.run { ClashViewModel.shared.addLog("[Privilege] ❌ Clash binary not found") }
             return false
         }
 
         // Determine correct path for networksetup
-        let networksetupPath = "/usr/sbin/networksetup"
-        let pkillPath = "/usr/bin/pkill"
-        let lsofPath = "/usr/sbin/lsof"
+        let networksetupPath = SudoersEscaper.commandPath("/usr/sbin/networksetup")
+        let clashSudoersPath = SudoersEscaper.commandPath(clashPath)
+        let pkillPath = SudoersEscaper.commandPath("/usr/bin/pkill")
+        let lsofPath = SudoersEscaper.commandPath("/usr/sbin/lsof")
 
         let scriptContent = """
         #!/bin/bash
@@ -202,12 +201,17 @@ class PrivilegeService {
         fi
 
         # Create sudoers content
-        echo "# Ares Proxy Rules" > "/tmp/ares_rules"
-        echo "\(username) ALL=(root) NOPASSWD: \(networksetupPath)" >> "/tmp/ares_rules"
-        echo "\(username) ALL=(root) NOPASSWD: \(clashPath)" >> "/tmp/ares_rules"
-        echo "\(username) ALL=(root) NOPASSWD: /bin/kill" >> "/tmp/ares_rules"
-        echo "\(username) ALL=(root) NOPASSWD: \(pkillPath)" >> "/tmp/ares_rules"
-        echo "\(username) ALL=(root) NOPASSWD: \(lsofPath)" >> "/tmp/ares_rules"
+        cat > "/tmp/ares_rules" <<'ARES_SUDOERS'
+        # Ares Proxy Rules
+        \(username) ALL=(root) NOPASSWD: \(networksetupPath)
+        \(username) ALL=(root) NOPASSWD: \(clashSudoersPath)
+        \(username) ALL=(root) NOPASSWD: /bin/kill
+        \(username) ALL=(root) NOPASSWD: \(pkillPath)
+        \(username) ALL=(root) NOPASSWD: \(lsofPath)
+        ARES_SUDOERS
+
+        # Validate before installing to avoid breaking sudoers include parsing
+        /usr/sbin/visudo -cf "/tmp/ares_rules" >/dev/null
 
         # Move to /etc/sudoers.d (requires root)
         mv "/tmp/ares_rules" "$SUDOERS_FILE"
@@ -222,8 +226,9 @@ class PrivilegeService {
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath.path)
 
             // Run installer with osascript (password prompt once)
+            let escapedScriptPath = AppleScriptEscaper.stringLiteral(scriptPath.path)
             let script = """
-            do shell script "'\(scriptPath.path)'" with administrator privileges
+            do shell script "'\(escapedScriptPath)'" with administrator privileges
             """
 
             guard let appleScript = NSAppleScript(source: script) else {

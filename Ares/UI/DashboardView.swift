@@ -4,11 +4,14 @@ struct DashboardView: View {
     @EnvironmentObject var clashViewModel: ClashViewModel
     @EnvironmentObject var clashController: ClashController
     @EnvironmentObject var appState: AppState
+    @State private var showAdvancedDashboard = false
 
 
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: 16) {
+                RuntimeOverviewCard()
+
                 // Row 1: Proxy Service, Advanced mode, Proxy Mode
                 Row1Grid()
 
@@ -18,11 +21,27 @@ struct DashboardView: View {
                 // Row 3: Network Traffic (Graph)
                 EnhancedTrafficGraphView()
 
-                // Row 4: Subscription, DNS, Bypass Rules
-                Row4Grid()
+                DisclosureGroup(isExpanded: $showAdvancedDashboard) {
+                    VStack(spacing: 16) {
+                        // Row 4: Subscription, DNS, Bypass Rules
+                        Row4Grid()
 
-                // Row 5: MITM Config, Clash Core, System
-                Row5Grid()
+                        // Row 5: MITM Config, Clash Core, System
+                        Row5Grid()
+                    }
+                    .padding(.top, 12)
+                } label: {
+                    HStack {
+                        Label("Advanced Diagnostics", systemImage: "slider.horizontal.3")
+                            .font(.headline.weight(.medium))
+                        Spacer()
+                        Text(showAdvancedDashboard ? "Hide" : "Show")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(16)
+                .cardStyle()
             }
             .padding()
         }
@@ -31,10 +50,16 @@ struct DashboardView: View {
     }
 }
 
+private enum DashboardGrid {
+    static let columns = [
+        GridItem(.adaptive(minimum: 260, maximum: 420), spacing: 16)
+    ]
+}
+
 // Row 1: Proxy Service, Advanced mode, Proxy Mode
 private struct Row1Grid: View {
     private var columns: [GridItem] {
-        [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+        DashboardGrid.columns
     }
 
     var body: some View {
@@ -49,7 +74,7 @@ private struct Row1Grid: View {
 // Row 2: Current Proxy, IP Address, Connectivity
 private struct Row2Grid: View {
     private var columns: [GridItem] {
-        [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+        DashboardGrid.columns
     }
 
     var body: some View {
@@ -64,7 +89,7 @@ private struct Row2Grid: View {
 // Row 4: Subscription, DNS, Bypass Rules
 private struct Row4Grid: View {
     private var columns: [GridItem] {
-        [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+        DashboardGrid.columns
     }
 
     var body: some View {
@@ -79,7 +104,7 @@ private struct Row4Grid: View {
 // Row 5: MITM Config, Clash Core, System
 private struct Row5Grid: View {
     private var columns: [GridItem] {
-        [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+        DashboardGrid.columns
     }
 
     var body: some View {
@@ -96,6 +121,102 @@ private struct Row5Grid: View {
 
 // MARK: - Subviews
 
+
+struct RuntimeOverviewCard: View {
+    @EnvironmentObject var clashViewModel: ClashViewModel
+    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var clashController: ClashController
+
+    private let columns = [
+        GridItem(.adaptive(minimum: 180), spacing: 12)
+    ]
+
+    var body: some View {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+            statusBlock(
+                title: "Core",
+                value: clashViewModel.runtimeState.title,
+                detail: coreDetail,
+                icon: "cpu",
+                color: runtimeColor
+            )
+
+            statusBlock(
+                title: "System Proxy",
+                value: appState.systemProxyEnabled ? "Enabled" : "Off",
+                detail: proxyDetail,
+                icon: "network",
+                color: appState.systemProxyEnabled ? .green : .secondary
+            )
+
+            statusBlock(
+                title: "TUN",
+                value: appState.tunEnabled ? "Enabled" : "Off",
+                detail: "API :\(clashController.currentPort)",
+                icon: "point.3.connected.trianglepath.dotted",
+                color: appState.tunEnabled ? .blue : .secondary
+            )
+
+            statusBlock(
+                title: "Exit IP",
+                value: appState.publicIP,
+                detail: appState.countryCode ?? "Unknown",
+                icon: "location",
+                color: .orange
+            )
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardStyle()
+    }
+
+    private var runtimeColor: Color {
+        switch clashViewModel.runtimeState {
+        case .running, .apiReady: return .green
+        case .launching, .processRunning, .stopping: return .orange
+        case .failed: return .red
+        case .stopped: return .secondary
+        }
+    }
+
+    private var coreDetail: String {
+        if clashViewModel.isCoreUpdateAvailable, let latest = clashViewModel.latestCoreRelease {
+            return "\(clashViewModel.coreVersionInfo.displayVersion) -> \(latest.version)"
+        }
+        return clashViewModel.coreVersionInfo.displayVersion
+    }
+
+    private var proxyDetail: String {
+        let httpPort = appState.tunEnabled ? ClashPorts.tunMixed : ClashPorts.defaultMixed
+        let socksPort = appState.tunEnabled ? ClashPorts.tunSocks : ClashPorts.defaultSocks
+        return appState.systemProxyEnabled ? "HTTP :\(httpPort), SOCKS :\(socksPort)" : "No system routing"
+    }
+
+    private func statusBlock(title: String, value: String, detail: String, icon: String, color: Color) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(color)
+                .frame(width: 24, height: 24)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(value)
+                    .font(.system(size: 14, weight: .semibold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(detail)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
 
 struct ProxyServiceCard: View {
     @EnvironmentObject var clashViewModel: ClashViewModel
@@ -129,16 +250,16 @@ struct ProxyServiceCard: View {
                         .font(.body)
                     Spacer()
                     Toggle("", isOn: Binding(
-                        get: { clashViewModel.isRunning && appState.systemProxyEnabled },
+                        get: { clashViewModel.runtimeState.isAPIReady && appState.systemProxyEnabled },
                         set: { enabled in
                             Task {
                                 if enabled {
                                     // Start Clash first
                                     await clashViewModel.start()
-                                    // Wait a bit for Clash to be ready
-                                    try? await Task.sleep(nanoseconds: 500_000_000)
                                     // Then enable system proxy
-                                    await appState.toggleSystemProxy()
+                                    if clashViewModel.runtimeState.isAPIReady {
+                                        await appState.toggleSystemProxy()
+                                    }
                                 } else {
                                     // Disable system proxy first
                                     if appState.systemProxyEnabled {
@@ -155,8 +276,8 @@ struct ProxyServiceCard: View {
                     .disabled(clashViewModel.isToggling)
                 }
 
-                let statusText = clashViewModel.isRunning ?
-                    (appState.systemProxyEnabled ? "Proxy enabled (port \(ClashPorts.defaultMixed))" : "Clash running (Proxy OFF)") :
+                let statusText = clashViewModel.runtimeState.isActive ?
+                    (appState.systemProxyEnabled ? "Proxy enabled" : "\(clashViewModel.runtimeState.title) (Proxy OFF)") :
                     "Proxy disabled"
 
                 Text(statusText)
@@ -244,5 +365,3 @@ struct ProxyModeCard: View {
         }
     }
 }
-
-

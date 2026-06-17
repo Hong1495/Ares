@@ -4,7 +4,9 @@ extension ClashController {
     /// Fetch and parse proxies from Clash API
     func fetchProxiesData() async throws {
         // Removed noisy log: ClashService.shared.addLog("[ClashController] 📡 Fetching proxy data...")
-        let url = URL(string: "\(baseURL)/proxies")!
+        guard let url = URL(string: "\(baseURL)/proxies") else {
+            throw NSError(domain: "ClashController", code: -10, userInfo: [NSLocalizedDescriptionKey: "Invalid Clash API URL"])
+        }
 
         let (data, _) = try await URLSession.shared.data(from: url)
 
@@ -58,7 +60,10 @@ extension ClashController {
         ClashViewModel.shared.addLog("[ClashController] 🎯 Selecting proxy: \(proxy) in group: \(group)")
 
         // Pre-flight check: Ensure Clash API is reachable
-        let versionURL = URL(string: "\(baseURL)/version")!
+        guard let versionURL = URL(string: "\(baseURL)/version") else {
+            ClashViewModel.shared.addLog("[ClashController] ❌ Invalid Clash API URL")
+            return
+        }
         do {
             let (_, vResp) = try await URLSession.shared.data(from: versionURL)
             if let httpResp = vResp as? HTTPURLResponse, httpResp.statusCode != 200 {

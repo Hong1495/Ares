@@ -6,7 +6,7 @@ extension AppState {
     /// Global "Wake Up" - Called when App enters Foreground
     func wakeUp() {
         if isForeground && didSendInitialWake { return }
-        print("[AppState] ☀️ Waking up services...")
+        clashViewModel.addLog("[AppState] Waking up services", level: .debug)
         isForeground = true
         animationsEnabled = true
         didSendInitialWake = true
@@ -28,7 +28,7 @@ extension AppState {
     /// Global "Go Silent" - Called when App enters Background
     func goSilent() {
         guard isForeground else { return }
-        print("[AppState] 🌙 Going silent (Background)...")
+        clashViewModel.addLog("[AppState] Going silent", level: .debug)
         isForeground = false
         animationsEnabled = false
 

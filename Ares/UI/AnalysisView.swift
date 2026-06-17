@@ -154,8 +154,8 @@ struct AnalysisView: View {
                         Text("No Methods")
                     } else if selectedMethods.count == httpMethods.count {
                         Text("All Methods")
-                    } else if selectedMethods.count == 1 {
-                        Text(selectedMethods.first!)
+                    } else if selectedMethods.count == 1, let method = selectedMethods.first {
+                        Text(method)
                     } else {
                         Text("\(selectedMethods.count) Methods")
                     }
@@ -223,8 +223,8 @@ struct AnalysisView: View {
                         Text("No Types")
                     } else if selectedTypes.count == resourceTypes.count {
                         Text("All Types")
-                    } else if selectedTypes.count == 1 {
-                        Text(selectedTypes.first!)
+                    } else if selectedTypes.count == 1, let type = selectedTypes.first {
+                        Text(type)
                     } else {
                         Text("\(selectedTypes.count) Types")
                     }
@@ -521,5 +521,4 @@ struct DetailContent: View {
         return formatter.string(from: date)
     }
 }
-
 

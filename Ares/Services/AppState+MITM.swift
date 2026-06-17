@@ -13,8 +13,6 @@ extension AppState {
         }
         isMITMToggling = true
 
-        print("[AppState] switch MITM mode")
-
         let isRunning = NetworkMITMService.shared.isRunning
         let newState = !isRunning
 
