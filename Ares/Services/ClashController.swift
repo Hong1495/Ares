@@ -58,8 +58,8 @@ class ClashController: ObservableObject {
     // Topology Data
     @Published var activeChains: [ConnectionChain] = []
 
-    /// Current primary latency for display
-    var primaryLatency: Int? {
+    /// Resolved primary node name (without latency lookup)
+    var primaryNodeName: String? {
         let allGroups = proxyGroups
         var activeGroupName: String? = nil
 
@@ -76,8 +76,13 @@ class ClashController: ObservableObject {
               let finalNode = group.resolveCurrentPath(groups: allGroups).last else {
             return nil
         }
+        return finalNode
+    }
 
-        return proxyNodes[finalNode]?.delay
+    /// Current primary latency for display
+    var primaryLatency: Int? {
+        guard let name = primaryNodeName else { return nil }
+        return proxyNodes[name]?.delay
     }
 
     var statusSubscription: AnyCancellable?

@@ -1,10 +1,12 @@
 import SwiftUI
 import AppKit
+import Combine
 
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var lifecycleObservers: [NSObjectProtocol] = []
     private var workspaceObservers: [NSObjectProtocol] = []
+    private var isTerminatingAfterCleanup = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // App started
@@ -27,19 +29,27 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard !isTerminatingAfterCleanup else { return .terminateNow }
+
+        isTerminatingAfterCleanup = true
+        Task { @MainActor in
+            await AppTerminationCoordinator.shared.prepareForTermination()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         // Force cleanup on exit
         ClashViewModel.shared.addLog("[AppDelegate] App terminating - cleaning up", level: .debug)
 
-        // 1. CRITICAL: Disable system proxy FIRST to prevent network outage
+        // CRITICAL: Disable system proxy FIRST to prevent network outage
         // This must happen BEFORE we kill Clash, otherwise macOS traffic
-        // will try to connect to a dead port (127.0.0.1:7890)
-        if UserDefaults.standard.bool(forKey: DefaultsKeys.systemProxyEnabled) {
-            ClashViewModel.shared.addLog("[AppDelegate] Restoring system proxy", level: .debug)
-            SystemProxyManager.shared.disableAllProxiesSync()
-            // NOTE: Keep systemProxyEnabled = true so proxy auto-restarts on next launch
-            // User's preference is preserved, only runtime state is cleaned up
-        }
+        // will try to connect to a dead local port.
+        SystemProxyManager.shared.disableAllProxiesSync()
+        // NOTE: Keep systemProxyEnabled = true so proxy auto-restarts on next launch.
+        // User's preference is preserved, only runtime state is cleaned up.
 
         ClashViewModel.shared.addLog("[AppDelegate] Cleanup complete", level: .debug)
     }
@@ -121,6 +131,42 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+@MainActor
+final class AppTerminationCoordinator {
+    static let shared = AppTerminationCoordinator()
+
+    private var isCleaningUp = false
+
+    private init() {}
+
+    func requestQuit() {
+        NSApp.terminate(nil)
+    }
+
+    func prepareForTermination() async {
+        guard !isCleaningUp else { return }
+        isCleaningUp = true
+        defer { isCleaningUp = false }
+
+        ClashViewModel.shared.addLog("[AppTermination] Preparing safe shutdown", level: .debug)
+
+        SystemProxyManager.shared.disableAllProxiesSync()
+
+        if NetworkMITMService.shared.isRunning {
+            await NetworkMITMService.shared.stop()
+        }
+
+        if ClashViewModel.shared.isRunning || ClashViewModel.shared.runtimeState.isActive {
+            await ClashViewModel.shared.stop()
+        }
+
+        AppState.shared.systemProxyEnabled = false
+        AppState.shared.objectWillChange.send()
+
+        ClashViewModel.shared.addLog("[AppTermination] Safe shutdown complete", level: .debug)
+    }
+}
+
 /// Global accessor for the SwiftUI openWindow action.
 /// Captured from MainView's onAppear so it can be used from MenuBarView.
 @MainActor
@@ -165,6 +211,7 @@ struct AresApp: App {
     private let clashController = ClashController.shared
     @StateObject private var appState = AppState.shared
     @StateObject private var themeService = ThemeService.shared
+    @StateObject private var menuBarState = MenuBarIconProvider.shared
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openWindow) private var openWindow
 
@@ -212,10 +259,125 @@ struct AresApp: App {
             MenuBarView(appState: appState, clashViewModel: clashViewModel)
                 .environmentObject(clashController)
         } label: {
-            let proxyStatus = appState.systemProxyEnabled ? "1" : "0"
-            let tunStatus = appState.tunEnabled ? "1" : "0"
-            Image("Ares_Menu_\(proxyStatus)\(tunStatus)")
+            Image(nsImage: menuBarState.icon)
+                .renderingMode(.original)
         }
         .menuBarExtraStyle(.window)
+    }
+}
+
+// MARK: - Menu Bar Icon Provider
+
+@MainActor
+final class MenuBarIconProvider: ObservableObject {
+    static let shared = MenuBarIconProvider()
+
+    @Published var icon: NSImage = NSImage(size: NSSize(width: 22, height: 22))
+
+    private var pollingTask: Task<Void, Never>?
+    private var phase = 0
+    private var cachedMs: Int? = nil
+    private var cachedRunning = false
+    private var cachedPhase = 0
+    private var lastTestTime: Date = .distantPast
+
+    private init() {
+        icon = Self.render(ms: nil, isRunning: false, phase: 0)
+        startPolling()
+    }
+
+    private func startPolling() {
+        pollingTask?.cancel()
+        pollingTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self = self else { break }
+                let vm = ClashViewModel.shared
+                let ctrl = ClashController.shared
+                let running = vm.isRunning
+
+                if running {
+                    // advance animation phase
+                    phase = (phase + 1) % 3
+
+                    // test latency every 5s
+                    let now = Date()
+                    if now.timeIntervalSince(lastTestTime) >= 5 {
+                        if let name = ctrl.primaryNodeName {
+                            _ = try? await ctrl.testProxyDelay(name: name, timeout: 2000)
+                        }
+                        lastTestTime = now
+                    }
+                }
+
+                let ms = ctrl.primaryLatency
+                let p = running ? phase : 0
+
+                // only re-render on actual change
+                if ms != cachedMs || running != cachedRunning || p != cachedPhase {
+                    cachedMs = ms
+                    cachedRunning = running
+                    cachedPhase = p
+                    icon = Self.render(ms: ms, isRunning: running, phase: p)
+                }
+
+                try? await Task.sleep(nanoseconds: 400_000_000)
+            }
+        }
+    }
+
+    private static func render(ms: Int?, isRunning: Bool, phase: Int) -> NSImage {
+        let text = ms.map { "\($0) ms" } ?? "-- ms"
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 11.5, weight: .bold)
+        ]
+        let textSize = text.size(withAttributes: attrs)
+        let dotSize: CGFloat = 7
+        let dotX: CGFloat = 1
+        let textGap: CGFloat = 6
+        let trailingPadding: CGFloat = 2
+        let size = NSSize(width: ceil(dotX + dotSize + textGap + textSize.width + trailingPadding), height: 22)
+        let image = NSImage(size: size)
+        image.isTemplate = false
+
+        image.lockFocus()
+        defer { image.unlockFocus() }
+
+        let menuBarForeground = NSColor.white.withAlphaComponent(0.92)
+        let menuBarSecondary = NSColor.white.withAlphaComponent(0.45)
+        let statusColor: NSColor = {
+            guard isRunning else { return .tertiaryLabelColor }
+            guard let ms = ms else { return NSColor(red: 0.1, green: 0.55, blue: 1.0, alpha: 1) }
+            if ms < 200 { return NSColor(red: 0.0, green: 0.9, blue: 0.28, alpha: 1) }
+            if ms < 500 { return NSColor(red: 1.0, green: 0.72, blue: 0.0, alpha: 1) }
+            return NSColor(red: 1.0, green: 0.18, blue: 0.12, alpha: 1)
+        }()
+
+        // --- status dot ---
+        let dotsTotalW = dotSize
+        let dotsX = dotX
+        let dotsY: CGFloat = (size.height - dotSize) / 2
+
+        let rect = NSRect(x: dotsX, y: dotsY, width: dotSize, height: dotSize)
+        let path = NSBezierPath(ovalIn: rect)
+        let fill: NSColor
+        if isRunning {
+            fill = phase == 0 ? statusColor : menuBarForeground
+        } else {
+            fill = menuBarSecondary.withAlphaComponent(0.35)
+        }
+        fill.setFill()
+        path.fill()
+
+        // --- latency text ---
+        let textX = dotsX + dotsTotalW + textGap
+        let textColor: NSColor = ms == nil ? menuBarSecondary : menuBarForeground
+        let drawAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 11.5, weight: .bold),
+            .foregroundColor: textColor
+        ]
+        let textY = (size.height - textSize.height) / 2
+        text.draw(at: NSPoint(x: textX, y: textY), withAttributes: drawAttrs)
+
+        return image
     }
 }

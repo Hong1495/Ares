@@ -142,7 +142,7 @@ struct MenuBarView: View {
 
                 Spacer()
 
-                Button(action: { NSApp.terminate(nil) }) {
+                Button(action: { AppTerminationCoordinator.shared.requestQuit() }) {
                     Image(systemName: "power")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(.red)
@@ -167,8 +167,8 @@ struct MenuBarView: View {
     }
 
     private func latencyColor(_ ms: Int) -> Color {
-        if ms < 100 { return .green }
-        if ms < 300 { return .yellow }
+        if ms < 200 { return .green }
+        if ms < 500 { return .orange }
         return .red
     }
 

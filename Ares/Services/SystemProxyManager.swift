@@ -376,11 +376,10 @@ class SystemProxyManager {
     /// Synchronously disable all system proxies (for app termination)
     /// This method blocks and should ONLY be called during applicationWillTerminate
     func disableAllProxiesSync() {
-        let priorityServices = ["Wi-Fi", "Ethernet", "USB 10/100/1000 LAN"]
+        let services = getNetworkServicesSync()
+        let priorityServices = services
 
-        if restoreSnapshotSync(for: priorityServices) {
-            return
-        }
+        _ = restoreSnapshotSync(for: priorityServices)
 
         for service in priorityServices {
             let commands: [[String]] = [
@@ -393,6 +392,42 @@ class SystemProxyManager {
                 _ = runSudoNetworksetupSync(args)
             }
         }
+    }
+
+    private func getNetworkServicesSync() -> [String] {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/sbin/networksetup")
+        task.arguments = ["-listallnetworkservices"]
+
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = FileHandle.nullDevice
+
+        do {
+            try task.run()
+            task.waitUntilExit()
+
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            if let output = String(data: data, encoding: .utf8) {
+                let services = output.components(separatedBy: .newlines)
+                    .dropFirst()
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty && !$0.hasPrefix("*") }
+                if !services.isEmpty {
+                    return Array(services)
+                }
+            }
+        } catch {}
+
+        return ["Wi-Fi", "Ethernet", "USB 10/100/1000 LAN"]
+    }
+
+    private func targetServicesSync(from services: [String]) -> [String] {
+        let priorityServices = ["Wi-Fi", "Ethernet", "USB 10/100/1000 LAN"]
+        let activeServices = services.filter { service in
+            priorityServices.contains { service.contains($0) }
+        }
+        return activeServices.isEmpty ? services : activeServices
     }
 
     private func restoreSnapshotSync(for services: [String]) -> Bool {
