@@ -5,3 +5,10 @@
 *.xcuserstate
 xcuserdata/
 DerivedData/
+*.ipa
+*.dSYM.zip
+*.p12
+*.pem
+*.crt
+.env
+.env.local
