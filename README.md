@@ -22,7 +22,7 @@ A modern macOS proxy client powered by [mihomo](https://github.com/MetaCubeX/mih
 No Apple Developer account required.
 
 ```bash
-git clone https://github.com/sakyahong/Ares.git
+git clone https://github.com/Hong1495/Ares.git
 cd Ares
 
 # Build (Debug, unsigned)
