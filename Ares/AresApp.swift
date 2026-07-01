@@ -259,10 +259,38 @@ struct AresApp: App {
             MenuBarView(appState: appState, clashViewModel: clashViewModel)
                 .environmentObject(clashController)
         } label: {
-            Image(nsImage: menuBarState.icon)
-                .renderingMode(.original)
+            MenuBarStatusLabel(state: menuBarState)
         }
         .menuBarExtraStyle(.window)
+    }
+}
+
+private struct MenuBarStatusLabel: View {
+    @ObservedObject var state: MenuBarIconProvider
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 4) {
+            dotView
+
+            Text(state.latencyText)
+                .font(.system(size: 11.5, weight: .bold, design: .monospaced))
+                .foregroundStyle(.primary)
+        }
+        .fixedSize()
+    }
+
+    @ViewBuilder
+    private var dotView: some View {
+        if state.isRunning && state.phase != 0 {
+            Image(nsImage: state.dotImage)
+                .renderingMode(.original)
+                .frame(width: 7, height: 11, alignment: .center)
+        } else {
+            Image(nsImage: MenuBarIconProvider.standardDotImage)
+                .renderingMode(.template)
+                .foregroundColor(.primary.opacity(state.isRunning ? 0.9 : 0.35))
+                .frame(width: 7, height: 11, alignment: .center)
+        }
     }
 }
 
@@ -271,11 +299,16 @@ struct AresApp: App {
 @MainActor
 final class MenuBarIconProvider: ObservableObject {
     static let shared = MenuBarIconProvider()
+    static let standardDotImage = renderStandardDot()
 
     @Published var icon: NSImage = NSImage(size: NSSize(width: 22, height: 22))
+    @Published var dotImage: NSImage = NSImage(size: NSSize(width: 7, height: 11))
+    @Published var latencyText = "-- ms"
+    @Published var isRunning = false
+    @Published var phase = 0
+    @Published var statusColor = Color(red: 0.1, green: 0.55, blue: 1.0)
 
     private var pollingTask: Task<Void, Never>?
-    private var phase = 0
     private var cachedMs: Int? = nil
     private var cachedRunning = false
     private var cachedPhase = 0
@@ -283,6 +316,7 @@ final class MenuBarIconProvider: ObservableObject {
 
     private init() {
         icon = Self.render(ms: nil, isRunning: false, phase: 0)
+        dotImage = Self.renderDot(ms: nil, isRunning: false, phase: 0)
         startPolling()
     }
 
@@ -297,7 +331,7 @@ final class MenuBarIconProvider: ObservableObject {
 
                 if running {
                     // advance animation phase
-                    phase = (phase + 1) % 3
+                    phase = (phase + 1) % 4
 
                     // test latency every 5s
                     let now = Date()
@@ -317,12 +351,63 @@ final class MenuBarIconProvider: ObservableObject {
                     cachedMs = ms
                     cachedRunning = running
                     cachedPhase = p
+                    isRunning = running
+                    latencyText = ms.map { "\($0) ms" } ?? "-- ms"
+                    statusColor = Self.statusColor(ms: ms)
                     icon = Self.render(ms: ms, isRunning: running, phase: p)
+                    dotImage = Self.renderDot(ms: ms, isRunning: running, phase: p)
                 }
 
                 try? await Task.sleep(nanoseconds: 400_000_000)
             }
         }
+    }
+
+    private static func renderDot(ms: Int?, isRunning: Bool, phase: Int) -> NSImage {
+        let size = NSSize(width: 7, height: 11)
+        let dotSize: CGFloat = 5.5
+        let image = NSImage(size: size)
+        image.isTemplate = false
+
+        image.lockFocus()
+        defer { image.unlockFocus() }
+
+        let fill: NSColor
+        if isRunning {
+            fill = phase == 0 ? NSColor.white.withAlphaComponent(0.9) : statusNSColor(ms: ms)
+        } else {
+            fill = NSColor.white.withAlphaComponent(0.35)
+        }
+
+        fill.setFill()
+        let rect = NSRect(
+            x: (size.width - dotSize) / 2,
+            y: (size.height - dotSize) / 2,
+            width: dotSize,
+            height: dotSize
+        )
+        NSBezierPath(ovalIn: rect).fill()
+        return image
+    }
+
+    private static func renderStandardDot() -> NSImage {
+        let size = NSSize(width: 7, height: 11)
+        let dotSize: CGFloat = 5.5
+        let image = NSImage(size: size)
+        image.isTemplate = true
+
+        image.lockFocus()
+        defer { image.unlockFocus() }
+
+        NSColor.black.setFill()
+        let rect = NSRect(
+            x: (size.width - dotSize) / 2,
+            y: (size.height - dotSize) / 2,
+            width: dotSize,
+            height: dotSize
+        )
+        NSBezierPath(ovalIn: rect).fill()
+        return image
     }
 
     private static func render(ms: Int?, isRunning: Bool, phase: Int) -> NSImage {
@@ -344,13 +429,7 @@ final class MenuBarIconProvider: ObservableObject {
 
         let menuBarForeground = NSColor.white.withAlphaComponent(0.92)
         let menuBarSecondary = NSColor.white.withAlphaComponent(0.45)
-        let statusColor: NSColor = {
-            guard isRunning else { return .tertiaryLabelColor }
-            guard let ms = ms else { return NSColor(red: 0.1, green: 0.55, blue: 1.0, alpha: 1) }
-            if ms < 200 { return NSColor(red: 0.0, green: 0.9, blue: 0.28, alpha: 1) }
-            if ms < 500 { return NSColor(red: 1.0, green: 0.72, blue: 0.0, alpha: 1) }
-            return NSColor(red: 1.0, green: 0.18, blue: 0.12, alpha: 1)
-        }()
+        let statusColor = statusNSColor(ms: ms)
 
         // --- status dot ---
         let dotsTotalW = dotSize
@@ -379,5 +458,19 @@ final class MenuBarIconProvider: ObservableObject {
         text.draw(at: NSPoint(x: textX, y: textY), withAttributes: drawAttrs)
 
         return image
+    }
+
+    private static func statusColor(ms: Int?) -> Color {
+        guard let ms = ms else { return Color(red: 0.1, green: 0.55, blue: 1.0) }
+        if ms < 200 { return Color(red: 0.0, green: 0.9, blue: 0.28) }
+        if ms < 500 { return Color(red: 1.0, green: 0.72, blue: 0.0) }
+        return Color(red: 1.0, green: 0.18, blue: 0.12)
+    }
+
+    private static func statusNSColor(ms: Int?) -> NSColor {
+        guard let ms = ms else { return NSColor(red: 0.1, green: 0.55, blue: 1.0, alpha: 1) }
+        if ms < 200 { return NSColor(red: 0.0, green: 0.9, blue: 0.28, alpha: 1) }
+        if ms < 500 { return NSColor(red: 1.0, green: 0.72, blue: 0.0, alpha: 1) }
+        return NSColor(red: 1.0, green: 0.18, blue: 0.12, alpha: 1)
     }
 }
