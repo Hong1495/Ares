@@ -34,8 +34,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         isTerminatingAfterCleanup = true
         Task { @MainActor in
-            await AppTerminationCoordinator.shared.prepareForTermination()
-            sender.reply(toApplicationShouldTerminate: true)
+            let isSafeToTerminate = await AppTerminationCoordinator.shared.prepareForTermination()
+            if !isSafeToTerminate {
+                isTerminatingAfterCleanup = false
+                let alert = NSAlert()
+                alert.alertStyle = .critical
+                alert.messageText = "Unable to restore network settings"
+                alert.informativeText = "Ares is still running to keep the local proxy available. Disable System Proxy and try quitting again."
+                alert.addButton(withTitle: "OK")
+                alert.runModal()
+            }
+            sender.reply(toApplicationShouldTerminate: isSafeToTerminate)
         }
         return .terminateLater
     }
@@ -143,14 +152,17 @@ final class AppTerminationCoordinator {
         NSApp.terminate(nil)
     }
 
-    func prepareForTermination() async {
-        guard !isCleaningUp else { return }
+    func prepareForTermination() async -> Bool {
+        guard !isCleaningUp else { return false }
         isCleaningUp = true
         defer { isCleaningUp = false }
 
         ClashViewModel.shared.addLog("[AppTermination] Preparing safe shutdown", level: .debug)
 
-        SystemProxyManager.shared.disableAllProxiesSync()
+        guard SystemProxyManager.shared.disableAllProxiesSync() else {
+            ClashViewModel.shared.addLog("[AppTermination] Failed to restore system proxy; keeping core alive", level: .error)
+            return false
+        }
 
         if NetworkMITMService.shared.isRunning {
             await NetworkMITMService.shared.stop()
@@ -164,6 +176,7 @@ final class AppTerminationCoordinator {
         AppState.shared.objectWillChange.send()
 
         ClashViewModel.shared.addLog("[AppTermination] Safe shutdown complete", level: .debug)
+        return true
     }
 }
 

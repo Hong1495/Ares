@@ -213,6 +213,11 @@ class SystemProxyManager {
             return false
         }
 
+        guard !snapshots.values.contains(where: snapshotUsesAresProxy) else {
+            await clearSnapshot()
+            return false
+        }
+
         var allSucceeded = true
         for service in services {
             guard let snapshot = snapshots[service] else { continue }
@@ -375,12 +380,15 @@ class SystemProxyManager {
     
     /// Synchronously disable all system proxies (for app termination)
     /// This method blocks and should ONLY be called during applicationWillTerminate
-    func disableAllProxiesSync() {
-        let services = getNetworkServicesSync()
-        let priorityServices = services
+    @discardableResult
+    func disableAllProxiesSync() -> Bool {
+        let priorityServices = targetServicesSync(from: getNetworkServicesSync())
 
-        _ = restoreSnapshotSync(for: priorityServices)
+        if restoreSnapshotSync(for: priorityServices) {
+            return true
+        }
 
+        var allSucceeded = true
         for service in priorityServices {
             let commands: [[String]] = [
                 ["-setwebproxystate", service, "off"],
@@ -389,9 +397,13 @@ class SystemProxyManager {
             ]
             
             for args in commands {
-                _ = runSudoNetworksetupSync(args)
+                if !runSudoNetworksetupSync(args) {
+                    allSucceeded = false
+                }
             }
         }
+
+        return allSucceeded && proxiesAreDisabledSync(for: priorityServices)
     }
 
     private func getNetworkServicesSync() -> [String] {
@@ -430,9 +442,54 @@ class SystemProxyManager {
         return activeServices.isEmpty ? services : activeServices
     }
 
+    private func proxiesAreDisabledSync(for services: [String]) -> Bool {
+        let proxyKinds = ["-getwebproxy", "-getsecurewebproxy", "-getsocksfirewallproxy"]
+        return services.allSatisfy { service in
+            proxyKinds.allSatisfy { kind in
+                let output = runNetworksetup([kind, service])
+                return output.components(separatedBy: .newlines).contains { line in
+                    line.trimmingCharacters(in: .whitespacesAndNewlines)
+                        .localizedCaseInsensitiveCompare("Enabled: No") == .orderedSame
+                }
+            }
+        }
+    }
+
+    private func snapshotUsesAresProxy(_ snapshot: ProxySnapshot) -> Bool {
+        let defaults = UserDefaults.standard
+        let configuredMixedPort = defaults.string(forKey: DefaultsKeys.mixedPort) ?? "\(ClashPorts.defaultMixed)"
+        let configuredSocksPort = defaults.string(forKey: DefaultsKeys.socksPort) ?? "\(ClashPorts.defaultSocks)"
+        let aresPorts: Set<String> = [
+            configuredMixedPort,
+            configuredSocksPort,
+            "\(ClashPorts.defaultMixed)",
+            "\(ClashPorts.defaultSocks)",
+            "\(ClashPorts.tunMixed)",
+            "\(ClashPorts.tunSocks)"
+        ]
+        let loopbackHosts: Set<String> = ["127.0.0.1", "localhost", "::1"]
+
+        let webIsAres = snapshot.webEnabled
+            && loopbackHosts.contains(snapshot.webServer.lowercased())
+            && aresPorts.contains(snapshot.webPort)
+        let secureWebIsAres = snapshot.secureWebEnabled
+            && loopbackHosts.contains(snapshot.secureWebServer.lowercased())
+            && aresPorts.contains(snapshot.secureWebPort)
+        let socksIsAres = snapshot.socksEnabled
+            && loopbackHosts.contains(snapshot.socksServer.lowercased())
+            && aresPorts.contains(snapshot.socksPort)
+
+        return webIsAres || secureWebIsAres || socksIsAres
+    }
+
     private func restoreSnapshotSync(for services: [String]) -> Bool {
         guard let data = UserDefaults.standard.data(forKey: snapshotKey),
               let snapshots = try? JSONDecoder().decode([String: ProxySnapshot].self, from: data) else {
+            return false
+        }
+
+        guard !snapshots.values.contains(where: snapshotUsesAresProxy) else {
+            UserDefaults.standard.removeObject(forKey: snapshotKey)
             return false
         }
 

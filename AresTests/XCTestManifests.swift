@@ -42,6 +42,7 @@ extension AppleScriptEscaperTests {
 extension SystemProxyTerminationSourceTests {
     static let allTests = [
         ("testTerminationCleanupRestoresSnapshotBeforeDisabling", testTerminationCleanupRestoresSnapshotBeforeDisabling),
+        ("testTerminationRefusesToStopCoreWhenProxyCleanupFails", testTerminationRefusesToStopCoreWhenProxyCleanupFails),
     ]
 }
 
