@@ -23,6 +23,15 @@ final class SettingsViewSourceTests: XCTestCase {
         XCTAssertFalse(source.contains("Divider().frame(height: 44)"))
     }
 
+    func testAppRunsAsMenuBarAgent() throws {
+        let projectSource = try String(contentsOf: projectRoot.appendingPathComponent("Ares.xcodeproj/project.pbxproj"))
+        let appSource = try String(contentsOf: projectRoot.appendingPathComponent("Ares/AresApp.swift"))
+        let setting = "INFOPLIST_KEY_LSUIElement = YES;"
+
+        XCTAssertEqual(projectSource.components(separatedBy: setting).count - 1, 2)
+        XCTAssertTrue(appSource.contains("ProcessInfo.processInfo.disableAutomaticTermination"))
+    }
+
     func testAppSourcesDoNotUseConsolePrint() throws {
         let aresRoot = projectRoot.appendingPathComponent("Ares")
         let enumerator = FileManager.default.enumerator(

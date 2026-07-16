@@ -24,6 +24,7 @@ extension SubscriptionConverterTests {
 extension SettingsViewSourceTests {
     static let allTests = [
         ("testSettingsTUNToggleUsesRuntimeSwitch", testSettingsTUNToggleUsesRuntimeSwitch),
+        ("testAppRunsAsMenuBarAgent", testAppRunsAsMenuBarAgent),
     ]
 }
 

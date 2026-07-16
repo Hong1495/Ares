@@ -9,6 +9,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var isTerminatingAfterCleanup = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        ProcessInfo.processInfo.disableAutomaticTermination("Ares menu bar network service is active")
+
         // App started
         Task {
             // Initial health check and sync on launch
