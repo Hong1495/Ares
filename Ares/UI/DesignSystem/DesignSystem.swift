@@ -287,7 +287,7 @@ struct DSStatusPill: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 3.5)
         .background(Capsule().fill(status.color.opacity(0.12)))
-        
+
     }
 }
 
@@ -371,4 +371,3 @@ struct DSKeyValueRow: View {
         }
     }
 }
-
