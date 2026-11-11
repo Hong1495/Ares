@@ -11,7 +11,7 @@ struct StatusIcon: View {
 
             if let code = req.statusCode {
                 Text("\(code)")
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .font(DS.Typography.caption.monospaced().weight(.medium))
                     .foregroundStyle(code >= 400 ? .red : .secondary)
             }
         }
@@ -31,7 +31,7 @@ struct TypeBadge: View {
 
     var body: some View {
         Text(type.uppercased())
-            .font(.system(size: 8, weight: .bold))
+            .font(DS.Typography.caption.weight(.semibold))
             .padding(.horizontal, 4)
             .padding(.vertical, 2)
             .background(Color.secondary.opacity(0.15))

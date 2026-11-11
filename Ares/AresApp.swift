@@ -17,6 +17,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             await checkAndRecoverState()
         }
 
+        AppUpdateService.shared.start()
         registerLifecycleObservers()
         registerWorkspaceObservers()
 
@@ -32,6 +33,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if AppTerminationCoordinator.shared.updateShutdownPrepared { return .terminateNow }
         guard !isTerminatingAfterCleanup else { return .terminateNow }
 
         isTerminatingAfterCleanup = true
@@ -39,6 +41,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let isSafeToTerminate = await AppTerminationCoordinator.shared.prepareForTermination()
             if !isSafeToTerminate {
                 isTerminatingAfterCleanup = false
+                NSApp.activate(ignoringOtherApps: true)
+                NSApp.requestUserAttention(.criticalRequest)
                 let alert = NSAlert()
                 alert.alertStyle = .critical
                 alert.messageText = "Unable to restore network settings"
@@ -150,12 +154,14 @@ final class AppTerminationCoordinator {
 
     private init() {}
 
+    var updateShutdownPrepared = false
+
     func requestQuit() {
         NSApp.terminate(nil)
     }
 
     func prepareForTermination() async -> Bool {
-        guard !isCleaningUp else { return false }
+        guard !isCleaningUp, !ClashViewModel.shared.isToggling, AppState.shared.operationStatus == nil else { return false }
         isCleaningUp = true
         defer { isCleaningUp = false }
 
@@ -166,12 +172,9 @@ final class AppTerminationCoordinator {
             return false
         }
 
+        guard await ClashViewModel.shared.stopCore() else { return false }
         if NetworkMITMService.shared.isRunning {
             await NetworkMITMService.shared.stop()
-        }
-
-        if ClashViewModel.shared.isRunning || ClashViewModel.shared.runtimeState.isActive {
-            await ClashViewModel.shared.stop()
         }
 
         AppState.shared.systemProxyEnabled = false
@@ -188,7 +191,10 @@ final class AppTerminationCoordinator {
 enum WindowAccessor {
     static var openWindow: OpenWindowAction?
 
-    static func showMainWindow(selection: AppState.NavigationItem?) {
+    static func showMainWindow(
+        selection: AppState.NavigationItem?,
+        openWindow action: OpenWindowAction? = nil
+    ) {
         if let selection = selection {
             AppState.shared.selection = selection
         }
@@ -211,7 +217,9 @@ enum WindowAccessor {
                 window.makeKeyAndOrderFront(nil)
             } else {
                 // Window was closed (destroyed by SwiftUI) — create a new one
-                openWindow?(id: "main")
+                if let openWindowAction = action ?? openWindow {
+                    openWindowAction(id: "main")
+                }
             }
         }
     }
@@ -257,6 +265,9 @@ struct AresApp: App {
         .commands {
             // Disable "New Window" to enforce single window behavior
             CommandGroup(replacing: .newItem) { }
+            CommandGroup(after: .appInfo) {
+                AppUpdateMenuCommand()
+            }
         }
         .handlesExternalEvents(matching: Set(arrayLiteral: "main"))
 
@@ -487,5 +498,13 @@ final class MenuBarIconProvider: ObservableObject {
         if ms < 200 { return NSColor(red: 0.0, green: 0.9, blue: 0.28, alpha: 1) }
         if ms < 500 { return NSColor(red: 1.0, green: 0.72, blue: 0.0, alpha: 1) }
         return NSColor(red: 1.0, green: 0.18, blue: 0.12, alpha: 1)
+    }
+}
+
+private struct AppUpdateMenuCommand: View {
+    @ObservedObject private var updates = AppUpdateService.shared
+    var body: some View {
+        Button("Check for Updates…", action: updates.checkForUpdates)
+            .disabled(!updates.canCheck || !updates.isConfigured)
     }
 }

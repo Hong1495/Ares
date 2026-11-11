@@ -17,7 +17,7 @@ actor ClashServiceActor {
     private var isRunning: Bool = false
     private var process: Process?
     private var pipe: Pipe?
-    private var currentProcessPID: Int32?
+    private var lifecycleBusy = false
     
     // MARK: - Configuration
     private var configDir: URL {
@@ -51,20 +51,24 @@ actor ClashServiceActor {
     /// Start Clash process
     /// - Parameter isRestart: If true, bypasses "already running" check
     func start(isRestart: Bool = false) async -> Bool {
+        guard !lifecycleBusy else { return false }
+        lifecycleBusy = true
+        defer { lifecycleBusy = false }
         let startTime = CFAbsoluteTimeGetCurrent()
         addLog("[ClashServiceActor] 🚀 Starting Clash...")
         
         // Check if already running
-        if !isRestart && isRunning {
+        if process?.isRunning == true {
             addLog("[ClashServiceActor] ⚠️ Already running")
-            return true
+            return !isRestart
         }
         
-        // Clean up any zombie processes
-        addLog("[ClashServiceActor] 🧹 Cleaning up old processes...")
+        isRunning = false
+        // Check for conflicts without modifying other processes
+        addLog("[ClashServiceActor] Checking required ports...")
         let cleanupSuccess = await cleanupOldProcesses()
         if !cleanupSuccess {
-            addLog("[ClashServiceActor] ❌ Startup aborted: Failed to free ports")
+            addLog("[ClashServiceActor] ❌ Startup aborted: Required ports are occupied")
             return false
         }
         
@@ -111,7 +115,7 @@ actor ClashServiceActor {
                 let installed = await PrivilegeService.shared.installSudoers()
                 if !installed {
                      addLog("[ClashServiceActor] ❌ Failed to acquire TUN privileges. Fallback to Normal mode?")
-                     // For now, let it try startWithTUN, it will likely fail with sudo error if not installed
+                     return false
                 }
             }
             let started = await startWithTUN()
@@ -128,55 +132,31 @@ actor ClashServiceActor {
     
     /// Stop Clash process
     /// - Parameter intendedRestart: If true, preserves state for hot restart
-    func stop(intendedRestart: Bool = false) async {
-        addLog("[ClashServiceActor] 🛑 Stopping Clash...")
-        
-        // Mark as not running immediately
-        isRunning = false
-        await notifyRunningState(false)
-        
-        // Terminate tracked process if exists
+    @discardableResult
+    func stop(intendedRestart: Bool = false) async -> Bool {
+        guard !lifecycleBusy else { return false }
+        lifecycleBusy = true
+        defer { lifecycleBusy = false }
+        // Only the Process created by this instance is eligible for signalling.
+        // sudo forwards TERM to its supervised command; never discover kill targets by port.
         if let proc = process, proc.isRunning {
-            addLog("[ClashServiceActor] 📍 Terminating tracked process (SIGTERM)...")
             proc.terminate()
-            // Wait briefly for SIGTERM to work
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            if proc.isRunning {
-                addLog("[ClashServiceActor] 📍 Tracked process still alive, sending SIGKILL...")
-                proc.interrupt() // On macOS process.interrupt often sends SIGINT, and there is no direct SIGKILL via Process
-                // We'll fall back to pkill -9 below for a guaranteed kill
+            for _ in 0..<50 {
+                if !proc.isRunning { break }
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            guard !proc.isRunning else {
+                addLog("[Core] Stop failed: the owned process did not exit; restart cancelled")
+                return false
             }
         }
-        else if let pid = currentProcessPID {
-            addLog("[ClashServiceActor] 📍 Tracked PID \(pid) no longer attached to Process instance")
-            _ = await processManager.killProcess(pid)
-        }
-        
-        if let pid = currentProcessPID {
-            addLog("[ClashServiceActor] 📍 Clearing tracked PID: \(pid)")
-            currentProcessPID = nil
-        }
-        
-        // Kill all clash-meta processes
-        addLog("[ClashServiceActor] 🧹 Starting port-based cleanup...")
-        let cleanupSuccess = await performPortCleanup()
-        
-        if !cleanupSuccess {
-            addLog("[ClashServiceActor] ❌ Cleanup failed - ports still busy")
-        }
-        
-        addLog("[ClashServiceActor] ✅ Cleanup completed")
-        
         process = nil
+        pipe?.fileHandleForReading.readabilityHandler = nil
         pipe = nil
-        
-        if !intendedRestart {
-            addLog("[ClashServiceActor] ✅ Stopped")
-        } else {
-            addLog("[ClashServiceActor] ✅ Stopped (preparing for restart)")
-        }
+        isRunning = false
+        return true
     }
-    
+
     // MARK: - Private Methods
     
     private func createConfigDirIfNeeded() async {
@@ -238,7 +218,6 @@ actor ClashServiceActor {
             try proc.run()
             process = proc
             pipe = outputPipe
-            currentProcessPID = proc.processIdentifier
             
             // Drain pipe in background to avoid process freeze
             setupOutputObserver(pipe: outputPipe)
@@ -303,7 +282,6 @@ actor ClashServiceActor {
             try proc.run()
             process = proc
             pipe = outputPipe
-            currentProcessPID = proc.processIdentifier
             
             // Drain pipe in background
             setupOutputObserver(pipe: outputPipe)
@@ -347,139 +325,31 @@ actor ClashServiceActor {
     }
     
     private func cleanupOldProcesses() async -> Bool {
-        // Get actual configured ports dynamically
+        let tun = await MainActor.run { AppState.shared.tunEnabled }
         let defaults = UserDefaults.standard
-        let normalMixedPort = Int(defaults.string(forKey: DefaultsKeys.mixedPort) ?? "\(ClashPorts.defaultMixed)") ?? ClashPorts.defaultMixed
-        let normalSocksPort = Int(defaults.string(forKey: DefaultsKeys.socksPort) ?? "\(ClashPorts.defaultSocks)") ?? ClashPorts.defaultSocks
-        let normalHttpPort = Int(defaults.string(forKey: DefaultsKeys.httpPort) ?? "\(ClashPorts.defaultHttp)") ?? ClashPorts.defaultHttp
-        
-        // Clean up both Normal and TUN mode ports to be thorough
-        let portsToClean = [
-            normalMixedPort, normalSocksPort, normalHttpPort, ClashPorts.apiNormal,  // Normal mode
-            ClashPorts.tunMixed, ClashPorts.tunSocks, ClashPorts.tunHttp, ClashPorts.apiTun  // TUN mode (fixed)
+        let ports = tun ? [ClashPorts.tunMixed, ClashPorts.tunSocks, ClashPorts.tunHttp, ClashPorts.apiTun] : [
+            Int(defaults.string(forKey: DefaultsKeys.mixedPort) ?? "") ?? ClashPorts.defaultMixed,
+            Int(defaults.string(forKey: DefaultsKeys.socksPort) ?? "") ?? ClashPorts.defaultSocks,
+            Int(defaults.string(forKey: DefaultsKeys.httpPort) ?? "") ?? ClashPorts.defaultHttp,
+            ClashPorts.apiNormal
         ]
-        
-        var killedAny = false
-        
-        for port in portsToClean {
+        for port in Set(ports) where port > 0 {
             let pids = await processManager.getPIDsUsingPort(port)
             if !pids.isEmpty {
-                killedAny = true
-                addLog("[ClashServiceActor] ⚠️ Found processes on port \(port): \(pids)")
-                for pid in pids {
-                    let success = await processManager.killProcess(pid)
-                    if !success {
-                        addLog("[ClashServiceActor] ⚠️ Failed to kill PID \(pid) (may require sudo)")
-                    }
-                }
-            }
-        }
-        
-        if killedAny {
-            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s initial wait
-        }
-        
-        // Wait for ports to release (Verified Loop) - Increased to 10s
-        let deadline = Date().timeIntervalSince1970 + 10.0
-        while Date().timeIntervalSince1970 < deadline {
-            var allFreed = true
-            for port in portsToClean {
-                let pids = await processManager.getPIDsUsingPort(port)
-                if !pids.isEmpty {
-                    allFreed = false
-                    // Retry kill inside loop
-                     for pid in pids {
-                        _ = await processManager.killProcess(pid)
-                    }
-                    break
-                }
-            }
-            if allFreed {
-                return true
-            }
-            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s check interval
-        }
-        
-        addLog("[ClashServiceActor] ⚠️ Cleanup timeout: Ports might still be busy")
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
-        
-        // Final check
-        for port in portsToClean {
-            let pids = await processManager.getPIDsUsingPort(port)
-            if !pids.isEmpty {
-                addLog("[ClashServiceActor] ❌ Port \(port) still occupied by: \(pids)")
+                addLog("[Core] Port \(port) is occupied by \(pids). No process was stopped.")
+                await MainActor.run { ClashViewModel.shared.markStartFailed("Port \(port) is already in use") }
                 return false
             }
         }
         return true
     }
-    
-    private func performPortCleanup() async -> Bool {
-        // Get actual configured ports dynamically
-        let defaults = UserDefaults.standard
-        let normalMixedPort = Int(defaults.string(forKey: DefaultsKeys.mixedPort) ?? "\(ClashPorts.defaultMixed)") ?? ClashPorts.defaultMixed
-        let normalSocksPort = Int(defaults.string(forKey: DefaultsKeys.socksPort) ?? "\(ClashPorts.defaultSocks)") ?? ClashPorts.defaultSocks
-        let normalHttpPort = Int(defaults.string(forKey: DefaultsKeys.httpPort) ?? "\(ClashPorts.defaultHttp)") ?? ClashPorts.defaultHttp
-        
-        let portsToCheck = [
-            normalMixedPort, normalSocksPort, normalHttpPort, ClashPorts.apiNormal,  // Normal mode
-            ClashPorts.tunMixed, ClashPorts.tunSocks, ClashPorts.tunHttp, ClashPorts.apiTun  // TUN mode (fixed)
-        ]
-        
-        // Kill by port
-        for port in portsToCheck {
-            let pids = await processManager.getPIDsUsingPort(port)
-            if !pids.isEmpty {
-                addLog("[ClashServiceActor] 🔫 Port \(port) held by PIDs: \(pids) - killing...")
-                for pid in pids {
-                    _ = await processManager.killProcess(pid)
-                }
-            }
-        }
-        
-        // Verify ports released
-        for attempt in 1...5 { // Reduced from 10
-            var busyPorts: [Int] = []
-            for port in portsToCheck {
-                let pids = await processManager.getPIDsUsingPort(port)
-                if !pids.isEmpty {
-                    busyPorts.append(port)
-                }
-            }
-            
-            if busyPorts.isEmpty {
-                // Port cleanup verified
-                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
-                return true
-            } else {
-                addLog("[ClashServiceActor] ⏳ Attempt \(attempt)/5: Busy ports: \(busyPorts)")
-                try? await Task.sleep(nanoseconds: 200_000_000) // 0.2s wait before retry
-            }
-        }
-        
-        addLog("[ClashServiceActor] ⚠️ FAILED: Some ports still busy")
-        return false
-    }
-    
-    private func getPIDsForClashMeta() async -> [Int32] {
-        let output = await processManager.runSimple("/usr/bin/pgrep", args: ["-n", "clash-meta"])
-        return output.components(separatedBy: .newlines)
-            .compactMap { Int32($0.trimmingCharacters(in: .whitespaces)) }
-    }
-    
+
     // MARK: - UI Notification
     
     /// Add log message (non-blocking, updates UI on MainActor)
     nonisolated func addLog(_ message: String) {
         Task { @MainActor in
             ClashViewModel.shared.addLog(message)
-        }
-    }
-    
-    /// Notify UI of running state change
-    private func notifyRunningState(_ running: Bool) async {
-        await MainActor.run {
-            ClashViewModel.shared.updateRunningState(running)
         }
     }
     

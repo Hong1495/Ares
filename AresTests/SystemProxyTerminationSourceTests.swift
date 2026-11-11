@@ -7,14 +7,11 @@ final class SystemProxyTerminationSourceTests: XCTestCase {
             .deletingLastPathComponent()
             .appendingPathComponent("Ares/Services/SystemProxyManager.swift"))
 
-        XCTAssertTrue(source.contains("restoreSnapshotSync(for: priorityServices)"))
-        XCTAssertTrue(source.contains("""
-        if restoreSnapshotSync(for: priorityServices) {
-                    return true
-                }
-        """))
-        XCTAssertTrue(source.contains("proxiesAreDisabledSync(for: priorityServices)"))
-        XCTAssertTrue(source.contains("snapshots.values.contains(where: snapshotUsesAresProxy)"))
+        XCTAssertTrue(source.contains("return restoreSnapshotSync(for: getNetworkServicesSync())"))
+        XCTAssertTrue(source.contains("guard UserDefaults.standard.data(forKey: snapshotKey) != nil else { return true }"))
+        XCTAssertTrue(source.contains("equivalent(actual, snapshot)"))
+        XCTAssertFalse(source.contains("snapshotUsesAresProxy"))
+        XCTAssertFalse(source.contains("proxiesAreDisabledSync"))
     }
 
     func testTerminationRefusesToStopCoreWhenProxyCleanupFails() throws {
@@ -24,7 +21,7 @@ final class SystemProxyTerminationSourceTests: XCTestCase {
             .appendingPathComponent("Ares/AresApp.swift"))
 
         let cleanupGuard = try XCTUnwrap(source.range(of: "guard SystemProxyManager.shared.disableAllProxiesSync() else"))
-        let stopCore = try XCTUnwrap(source.range(of: "await ClashViewModel.shared.stop()"))
+        let stopCore = try XCTUnwrap(source.range(of: "await ClashViewModel.shared.stopCore()"))
         XCTAssertLessThan(cleanupGuard.lowerBound, stopCore.lowerBound)
         XCTAssertTrue(source.contains("sender.reply(toApplicationShouldTerminate: isSafeToTerminate)"))
     }

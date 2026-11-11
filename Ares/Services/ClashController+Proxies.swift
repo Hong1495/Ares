@@ -3,18 +3,20 @@ import Foundation
 extension ClashController {
     /// Fetch and parse proxies from Clash API
     func fetchProxiesData() async throws {
+        let generation = runtimeGeneration
         // Removed noisy log: ClashService.shared.addLog("[ClashController] 📡 Fetching proxy data...")
         guard let url = URL(string: "\(baseURL)/proxies") else {
             throw NSError(domain: "ClashController", code: -10, userInfo: [NSLocalizedDescriptionKey: "Invalid Clash API URL"])
         }
 
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await URLSession.shared.data(for: URLRequest(url: url, timeoutInterval: 10))
+        try CoreAPIContract.requireSuccess(response)
 
         // Parse in background to avoid blocking Main Actor
-        let (groups, nodes) = await Task.detached(priority: .userInitiated) {
+        let (groups, nodes) = try await Task.detached(priority: .userInitiated) {
             guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
                   let proxiesDict = json["proxies"] as? [String: [String: Any]] else {
-                return ([], [:]) as ([ProxyGroup], [String: ProxyNode])
+                throw URLError(.cannotParseResponse)
             }
 
             var groups: [ProxyGroup] = []
@@ -24,7 +26,7 @@ extension ClashController {
                 if let type = proxyData["type"] as? String {
                     // Check if it's a node (has history or delay)
                     if let history = proxyData["history"] as? [[String: Any]] {
-                        let delay = history.first?["delay"] as? Int
+                        let delay = history.last?["delay"] as? Int
                         let node = ProxyNode(
                             name: name,
                             type: type,
@@ -50,6 +52,7 @@ extension ClashController {
             return (groups, nodes)
         }.value
 
+        guard generation == runtimeGeneration else { throw CancellationError() }
         // Update UI state
         self.proxyGroups = groups
         self.proxyNodes = nodes
@@ -57,32 +60,15 @@ extension ClashController {
 
     /// Select a proxy in a group
     func selectProxy(group: String, proxy: String) async throws {
+        guard selectingProxyGroups.insert(group).inserted else {
+            throw NSError(domain: "CoreAPI", code: -3, userInfo: [NSLocalizedDescriptionKey: "A selection is already in progress for this group"])
+        }
+        defer { selectingProxyGroups.remove(group) }
         ClashViewModel.shared.addLog("[ClashController] 🎯 Selecting proxy: \(proxy) in group: \(group)")
 
-        // Pre-flight check: Ensure Clash API is reachable
-        guard let versionURL = URL(string: "\(baseURL)/version") else {
-            ClashViewModel.shared.addLog("[ClashController] ❌ Invalid Clash API URL")
-            return
-        }
-        do {
-            let (_, vResp) = try await URLSession.shared.data(from: versionURL)
-            if let httpResp = vResp as? HTTPURLResponse, httpResp.statusCode != 200 {
-                ClashViewModel.shared.addLog("[ClashController] ❌ Clash API not healthy (HTTP \(httpResp.statusCode)). Is Clash running?")
-                return
-            }
-        } catch {
-            ClashViewModel.shared.addLog("[ClashController] ❌ Clash API unreachable at \(baseURL). Is Clash running?")
-            return
-        }
+        let url = try CoreAPIContract.proxyURL(base: baseURL, name: group)
 
-        // URL encode the group name (contains Chinese/emoji)
-        guard let encodedGroup = group.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
-              let url = URL(string: "\(baseURL)/proxies/\(encodedGroup)") else {
-            ClashViewModel.shared.addLog("[ClashController] ❌ Failed to encode group: \(group)")
-            return
-        }
-
-        var request = URLRequest(url: url)
+        var request = URLRequest(url: url, timeoutInterval: 10)
         request.httpMethod = "PUT"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
@@ -91,30 +77,16 @@ extension ClashController {
 
         let (_, response) = try await URLSession.shared.data(for: request)
 
-        if let httpResponse = response as? HTTPURLResponse {
-            if httpResponse.statusCode == 204 {
-                ClashViewModel.shared.addLog("[ClashController] ✅ Proxy selected successfully")
-            } else {
-                ClashViewModel.shared.addLog("[ClashController] ⚠️ HTTP \(httpResponse.statusCode)")
-            }
-        }
+        try CoreAPIContract.requireSuccess(response)
     }
 
     /// Test proxy delay
     func testProxyDelay(name: String, timeout: Int = 5000) async throws -> Int {
-        guard let encodedName = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
-              let url = URL(string: "\(baseURL)/proxies/\(encodedName)/delay?timeout=\(timeout)&url=http://www.gstatic.com/generate_204") else {
-            ClashViewModel.shared.addLog("[ClashController] ❌ Invalid proxy name for test: \(name)")
-            throw NSError(domain: "ClashController", code: -1)
-        }
+        let url = try CoreAPIContract.proxyURL(base: baseURL, name: name, delay: true, timeout: timeout)
 
         do {
-            let (data, response) = try await URLSession.shared.data(from: url)
-
-            if let httpResp = response as? HTTPURLResponse, httpResp.statusCode >= 400 {
-                ClashViewModel.shared.addLog("[ClashController] ⚠️ Test failed for \(name): HTTP \(httpResp.statusCode)")
-                throw NSError(domain: "ClashController", code: httpResp.statusCode)
-            }
+            let (data, response) = try await URLSession.shared.data(for: URLRequest(url: url, timeoutInterval: Double(timeout) / 1000 + 2))
+            try CoreAPIContract.requireSuccess(response)
 
             guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
                   let delay = json["delay"] as? Int else {

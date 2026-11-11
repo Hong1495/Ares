@@ -4,364 +4,177 @@ struct DashboardView: View {
     @EnvironmentObject var clashViewModel: ClashViewModel
     @EnvironmentObject var clashController: ClashController
     @EnvironmentObject var appState: AppState
-    @State private var showAdvancedDashboard = false
-
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(spacing: 16) {
-                RuntimeOverviewCard()
-
-                // Row 1: Proxy Service, Advanced mode, Proxy Mode
-                Row1Grid()
-
-                // Row 2: Current Proxy, IP Address, Connectivity
-                Row2Grid()
-
-                // Row 3: Network Traffic (Graph)
-                EnhancedTrafficGraphView()
-
-                DisclosureGroup(isExpanded: $showAdvancedDashboard) {
-                    VStack(spacing: 16) {
-                        // Row 4: Subscription, DNS, Bypass Rules
-                        Row4Grid()
-
-                        // Row 5: MITM Config, Clash Core, System
-                        Row5Grid()
-                    }
-                    .padding(.top, 12)
-                } label: {
-                    HStack {
-                        Label("Advanced Diagnostics", systemImage: "slider.horizontal.3")
-                            .font(.headline.weight(.medium))
-                        Spacer()
-                        Text(showAdvancedDashboard ? "Hide" : "Show")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(16)
-                .cardStyle()
+        VStack(spacing: 0) {
+            StatusBanner().padding(.horizontal, 28)
+            DashboardComposition(
+                runtime: clashViewModel.runtimeState.title,
+                version: clashViewModel.coreVersionInfo.displayVersion,
+                status: runtimeStatus,
+                api: "HTTP :\(appState.tunEnabled ? ClashPorts.tunMixed : ClashPorts.defaultMixed) · SOCKS :\(appState.tunEnabled ? ClashPorts.tunSocks : ClashPorts.defaultSocks) · API :\(clashController.currentPort)"
+            ) {
+                TrafficCard()
+            } controls: {
+                ControlCenterCard()
+            } details: {
+                CurrentProxyCard()
+                ExitIdentityCard()
+                ConnectivityCard()
+            } advanced: {
+                SubscriptionCard()
+                DNSConfigCard()
+                BypassSettingsCard()
+                MITMConfigCard()
+                ClashInfoCard()
+                SystemInfoCard()
             }
-            .padding()
         }
-        .background(Color(nsColor: .windowBackgroundColor))
         .navigationTitle("Dashboard")
     }
-}
 
-private enum DashboardGrid {
-    static let columns = [
-        GridItem(.adaptive(minimum: 260, maximum: 420), spacing: 16)
-    ]
-}
-
-// Row 1: Proxy Service, Advanced mode, Proxy Mode
-private struct Row1Grid: View {
-    private var columns: [GridItem] {
-        DashboardGrid.columns
-    }
-
-    var body: some View {
-        LazyVGrid(columns: columns, spacing: 16) {
-            ProxyServiceCard()
-            AdvancedModeCard()
-            ProxyModeCard()
-        }
-    }
-}
-
-// Row 2: Current Proxy, IP Address, Connectivity
-private struct Row2Grid: View {
-    private var columns: [GridItem] {
-        DashboardGrid.columns
-    }
-
-    var body: some View {
-        LazyVGrid(columns: columns, spacing: 16) {
-            CurrentProxyCard()
-            IpAddressCard()
-            ConnectivityTestView()
-        }
-    }
-}
-
-// Row 4: Subscription, DNS, Bypass Rules
-private struct Row4Grid: View {
-    private var columns: [GridItem] {
-        DashboardGrid.columns
-    }
-
-    var body: some View {
-        LazyVGrid(columns: columns, spacing: 16) {
-            SubscriptionCard()
-            DNSConfigCard()
-            BypassSettingsCard()
-        }
-    }
-}
-
-// Row 5: MITM Config, Clash Core, System
-private struct Row5Grid: View {
-    private var columns: [GridItem] {
-        DashboardGrid.columns
-    }
-
-    var body: some View {
-        LazyVGrid(columns: columns, spacing: 16) {
-            MITMConfigCard()
-            ClashInfoCard()
-            SystemInfoCard()
-        }
-    }
-}
-
-
-// MARK: - Subviews
-
-// MARK: - Subviews
-
-
-struct RuntimeOverviewCard: View {
-    @EnvironmentObject var clashViewModel: ClashViewModel
-    @EnvironmentObject var appState: AppState
-    @EnvironmentObject var clashController: ClashController
-
-    private let columns = [
-        GridItem(.adaptive(minimum: 180), spacing: 12)
-    ]
-
-    var body: some View {
-        LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
-            statusBlock(
-                title: "Core",
-                value: clashViewModel.runtimeState.title,
-                detail: coreDetail,
-                icon: "cpu",
-                color: runtimeColor
-            )
-
-            statusBlock(
-                title: "System Proxy",
-                value: appState.systemProxyEnabled ? "Enabled" : "Off",
-                detail: proxyDetail,
-                icon: "network",
-                color: appState.systemProxyEnabled ? .green : .secondary
-            )
-
-            statusBlock(
-                title: "TUN",
-                value: appState.tunEnabled ? "Enabled" : "Off",
-                detail: "API :\(clashController.currentPort)",
-                icon: "point.3.connected.trianglepath.dotted",
-                color: appState.tunEnabled ? .blue : .secondary
-            )
-
-            statusBlock(
-                title: "Exit IP",
-                value: appState.publicIP,
-                detail: appState.countryCode ?? "Unknown",
-                icon: "location",
-                color: .orange
-            )
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .cardStyle()
-    }
-
-    private var runtimeColor: Color {
+    private var runtimeStatus: DSStatus {
         switch clashViewModel.runtimeState {
-        case .running, .apiReady: return .green
-        case .launching, .processRunning, .stopping: return .orange
-        case .failed: return .red
-        case .stopped: return .secondary
-        }
-    }
-
-    private var coreDetail: String {
-        if clashViewModel.isCoreUpdateAvailable, let latest = clashViewModel.latestCoreRelease {
-            return "\(clashViewModel.coreVersionInfo.displayVersion) -> \(latest.version)"
-        }
-        return clashViewModel.coreVersionInfo.displayVersion
-    }
-
-    private var proxyDetail: String {
-        let httpPort = appState.tunEnabled ? ClashPorts.tunMixed : ClashPorts.defaultMixed
-        let socksPort = appState.tunEnabled ? ClashPorts.tunSocks : ClashPorts.defaultSocks
-        return appState.systemProxyEnabled ? "HTTP :\(httpPort), SOCKS :\(socksPort)" : "No system routing"
-    }
-
-    private func statusBlock(title: String, value: String, detail: String, icon: String, color: Color) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(color)
-                .frame(width: 24, height: 24)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(value)
-                    .font(.system(size: 14, weight: .semibold))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text(detail)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        case .running, .apiReady: return .good
+        case .launching, .processRunning, .stopping: return .warning
+        case .failed: return .critical
+        case .stopped: return .idle
         }
     }
 }
 
-struct ProxyServiceCard: View {
-    @EnvironmentObject var clashViewModel: ClashViewModel
-    @EnvironmentObject var appState: AppState
+// MARK: - Status banner
+
+private struct StatusBanner: View {
+    @EnvironmentObject private var appState: AppState
 
     var body: some View {
-        VStack(spacing: 0) {
-            // 1. Header Zone
-            HStack(spacing: 12) {
-                Image(systemName: "globe")
-                    .font(.system(size: 18, weight: .light))
-                    .frame(width: 24, height: 24, alignment: .center)
-                    .foregroundStyle(.primary)
-
-                Text("Proxy Service")
-                    .font(.headline.weight(.medium))
-
-                Spacer()
-            }
-            .frame(height: 24)
-            .padding(16)
-
-            Divider()
-                .padding(.horizontal, 16)
-
-            // 2. Content Zone
-            VStack(alignment: .leading, spacing: 12) {
-                 // Combined Clash + System Proxy Toggle
-                HStack {
-                    Text("System Proxy")
-                        .font(.body)
-                    Spacer()
-                    Toggle("", isOn: Binding(
-                        get: { clashViewModel.runtimeState.isAPIReady && appState.systemProxyEnabled },
-                        set: { enabled in
-                            Task {
-                                if enabled {
-                                    // Start Clash first
-                                    await clashViewModel.start()
-                                    // Then enable system proxy
-                                    if clashViewModel.runtimeState.isAPIReady {
-                                        await appState.toggleSystemProxy()
-                                    }
-                                } else {
-                                    // Disable system proxy first
-                                    if appState.systemProxyEnabled {
-                                        await appState.toggleSystemProxy()
-                                    }
-                                    // Then stop Clash
-                                    await clashViewModel.stop()
-                                }
-                            }
-                        }
-                    ))
-                    .toggleStyle(SwitchToggleStyle(tint: .green))
-                    .labelsHidden()
-                    .disabled(clashViewModel.isToggling)
-                }
-
-                let statusText = clashViewModel.runtimeState.isActive ?
-                    (appState.systemProxyEnabled ? "Proxy enabled" : "\(clashViewModel.runtimeState.title) (Proxy OFF)") :
-                    "Proxy disabled"
-
-                Text(statusText)
-                    .font(.footnote)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        if let operation = appState.operationStatus {
+            banner(
+                icon: "arrow.triangle.2.circlepath",
+                text: operation.title,
+                tint: .statusWarn,
+                showsSpinner: true
+            )
+        } else if let error = appState.lastOperationError {
+            banner(icon: "exclamationmark.triangle.fill", text: error, tint: .statusBad, showsSpinner: false)
         }
-        .frame(height: 150)
-        .cardStyle()
+    }
+
+    private func banner(icon: String, text: String, tint: Color, showsSpinner: Bool) -> some View {
+        HStack(spacing: DS.Space.sm) {
+            if showsSpinner {
+                ProgressView().controlSize(.mini)
+            } else {
+                Image(systemName: icon)
+                    .font(DS.Typography.metadata.weight(.semibold))
+            }
+            Text(text)
+                .font(DS.Typography.secondary.weight(.medium))
+                .lineLimit(2)
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, DS.Space.md)
+        .padding(.vertical, DS.Space.sm)
+        .background(RoundedRectangle(cornerRadius: DS.Radius.tile, style: .continuous).fill(tint.opacity(0.1)))
+        .overlay(
+            RoundedRectangle(cornerRadius: DS.Radius.tile, style: .continuous)
+                .strokeBorder(tint.opacity(0.18), lineWidth: DS.hairline)
+        )
+        .transition(.opacity.combined(with: .move(edge: .top)))
     }
 }
 
+// MARK: - Control center
 
-struct ProxyModeCard: View {
-    @EnvironmentObject var appState: AppState
+private struct ControlCenterCard: View {
+    @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var clashViewModel: ClashViewModel
+    @EnvironmentObject private var clashController: ClashController
 
-    var body: some View {
-        VStack(spacing: 0) {
-            // 1. Header Zone
-            HStack(spacing: 12) {
-                Image(systemName: "arrow.triangle.branch")
-                    .font(.system(size: 18, weight: .light))
-                    .frame(width: 24, height: 24, alignment: .center)
-                    .foregroundStyle(.primary)
-
-                Text("Proxy Mode")
-                    .font(.headline.weight(.medium))
-
-                Spacer()
-            }
-            .frame(height: 24)
-            .padding(16)
-
-            Divider()
-                .padding(.horizontal, 16)
-
-            // 2. Content Zone
-            HStack(spacing: 12) {
-                ForEach([ClashConfig.Mode.rule, .global, .direct], id: \.self) { mode in
-                    Button {
-                        Task {
-                            await appState.setMode(mode)
-                        }
-                    } label: {
-                        VStack(spacing: 6) {
-                            Image(systemName: modeIcon(mode))
-                                .font(.title2)
-                            Text(mode.rawValue.capitalized)
-                                .font(.footnote)
-                                .fontWeight(.semibold)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .background(
-                            appState.currentMode == mode ?
-                            LinearGradient(colors: [Color.blue, Color.blue.opacity(0.8)], startPoint: .top, endPoint: .bottom) :
-                            LinearGradient(colors: [Color.gray.opacity(0.1), Color.gray.opacity(0.05)], startPoint: .top, endPoint: .bottom)
-                        )
-                        .foregroundStyle(appState.currentMode == mode ? .white : .primary)
-                        .cornerRadius(8)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(appState.currentMode == mode ? Color.blue : Color.clear, lineWidth: 2)
-                        )
-                        .shadow(color: appState.currentMode == mode ? Color.blue.opacity(0.3) : Color.clear, radius: 4, x: 0, y: 2)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    private var coreStatus: DSStatus {
+        switch clashViewModel.runtimeState {
+        case .running, .apiReady: return .good
+        case .launching, .processRunning, .stopping: return .warning
+        case .failed: return .critical
+        case .stopped: return .idle
         }
-        .frame(height: 150)
-        .cardStyle()
     }
 
-    private func modeIcon(_ mode: ClashConfig.Mode) -> String {
-        switch mode {
-        case .rule: return "list.bullet.indent"
-        case .global: return "map"
-        case .direct: return "arrow.turn.up.right"
+    private var headline: String {
+        if appState.systemProxyEnabled { return "Protected" }
+        if appState.tunEnabled { return "TUN active" }
+        return clashViewModel.runtimeState.title
+    }
+
+    private var subheadline: String {
+        if appState.systemProxyEnabled {
+            return "System traffic is routed through Ares"
         }
+        if appState.tunEnabled {
+            return "All traffic is captured at the network layer"
+        }
+        return "Traffic is not being proxied"
+    }
+
+    var body: some View {
+        OverviewConnectionCard(
+            snapshot: OverviewSnapshot(
+                title: headline, subtitle: subheadline, status: coreStatus,
+                runtime: clashViewModel.runtimeState.title,
+                node: clashController.primaryNodeName ?? "No node selected",
+                latency: clashController.primaryLatency,
+                connections: appState.activeConnectionsCount,
+                download: "", upload: ""
+            ),
+            systemProxy: Binding(get: { appState.systemProxyEnabled }, set: { _ in Task { await appState.toggleSystemProxy() } }),
+            tun: Binding(get: { appState.tunEnabled }, set: { _ in appState.toggleTUN() }),
+            interception: Binding(get: { appState.mitmEnabled }, set: { _ in appState.toggleMITM() }),
+            mode: Binding(
+                get: { [ClashConfig.Mode.rule, .global, .direct].firstIndex(of: appState.currentMode) ?? 0 },
+                set: { index in Task { await appState.setMode([.rule, .global, .direct][index]) } }
+            ),
+            busy: appState.isPerformingNetworkOperation || clashViewModel.isToggling
+        )
+    }
+}
+
+// MARK: - Traffic
+
+private struct TrafficCard: View {
+    @EnvironmentObject private var appState: AppState
+    @StateObject private var model = TrafficGraphViewModel()
+
+    var body: some View {
+        OverviewTrafficCard(
+            points: model.dataPoints.enumerated().map { index, point in
+                OverviewTrafficPoint(id: index, time: point.time, download: Double(point.download), upload: Double(point.upload))
+            },
+            download: Self.formatSpeed(model.currentDownload),
+            upload: Self.formatSpeed(model.currentUpload)
+        )
+        .task {
+            await Task.yield()
+            model.startMonitoring()
+        }
+        .onDisappear { model.stopMonitoring() }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active {
+                model.startMonitoring()
+            } else if newPhase == .background {
+                model.stopMonitoring()
+            }
+        }
+    }
+
+    @Environment(\.scenePhase) private var scenePhase
+
+    static func formatSpeed(_ bytes: Int64) -> String {
+        guard bytes > 0 else { return "0 B/s" }
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useKB, .useMB, .useGB]
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: bytes) + "/s"
     }
 }

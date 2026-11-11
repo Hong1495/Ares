@@ -1,6 +1,60 @@
 import SwiftUI
+import AppKit
+
+// MARK: - Pane model
+
+/// Five-pane split of what used to be one endless Form.
+private enum SettingsPane: String, CaseIterable, Identifiable {
+    case general
+    case network
+    case tun
+    case mitm
+    case rules
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .general: return "General"
+        case .network: return "Network"
+        case .tun: return "TUN"
+        case .mitm: return "MITM"
+        case .rules: return "Rules"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .general: return "gearshape"
+        case .network: return "network"
+        case .tun: return "bolt.shield"
+        case .mitm: return "lock.shield"
+        case .rules: return "list.bullet.rectangle"
+        }
+    }
+}
+
+// MARK: - Row style
+
+/// Label left, control flush right — the alignment `LabeledContent` only gets
+/// for free inside a `Form`, which this screen no longer uses.
+private struct SettingRowStyle: LabeledContentStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: DS.Space.md) {
+            configuration.label
+                .font(DS.Typography.body.weight(.medium))
+            Spacer(minLength: DS.Space.md)
+            configuration.content
+        }
+        .frame(minHeight: 22)
+        .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - View
 
 struct SettingsView: View {
+    @ObservedObject private var appUpdates = AppUpdateService.shared
     @EnvironmentObject var clashViewModel: ClashViewModel
     @EnvironmentObject var appState: AppState
     @AppStorage(DefaultsKeys.autoStart) private var autoStart = false
@@ -17,6 +71,7 @@ struct SettingsView: View {
     @AppStorage(DefaultsKeys.allowLan) private var allowLan = false
     @AppStorage(DefaultsKeys.ipv6) private var ipv6 = false
     @AppStorage(DefaultsKeys.logLevel) private var logLevel = "info"
+    @AppStorage(DefaultsKeys.dnsServers) private var dnsServers = "223.5.5.5, 119.29.29.29"
 
     // TUN Mode
     @AppStorage(DefaultsKeys.tunStack) private var tunStack = "system"
@@ -34,396 +89,571 @@ struct SettingsView: View {
     @AppStorage(DefaultsKeys.localRules) private var localRules = ""
 
     // MITM Settings
-    @AppStorage(DefaultsKeys.mitmEnabled) private var mitmEnabled = false
     @ObservedObject private var certManager = CertificateManager.shared
     @AppStorage(DefaultsKeys.mitmPorts) private var mitmPorts = "80, 443, 8080, 8443"
     @AppStorage(DefaultsKeys.mitmHosts) private var mitmHosts = ""  // Empty = intercept all hosts
     @AppStorage(DefaultsKeys.tlsFingerprint) private var tlsFingerprint = "none"
 
+    @State private var pane: SettingsPane = .general
+
     private var tunEnabled: Bool { appState.tunEnabled }
 
     var body: some View {
-        Form {
-            // General Settings
-            Section("General") {
-                Toggle(isOn: $autoStart) {
-                    Label("Start with macOS", systemImage: "macwindow")
-                        .fontWeight(.medium)
-                }
-                .onChange(of: autoStart) { _, newValue in
-                    Task {
-                        try? LaunchService.shared.setLaunchAtLogin(enabled: newValue)
-                    }
+        VStack(spacing: 0) {
+            DSPageTabs(titles: SettingsPane.allCases.map(\.title), selection: Binding(
+                get: { SettingsPane.allCases.firstIndex(of: pane) ?? 0 },
+                set: { pane = SettingsPane.allCases[$0] }
+            ))
+            .padding(.horizontal, 30)
+            .padding(.bottom, 12)
+            paneDetail
+        }
+        .navigationTitle("Settings")
+        .frame(minWidth: 640)
+        .frame(maxWidth: .infinity)
+        .disabled(appState.isPerformingNetworkOperation)
+    }
+
+    // MARK: - Detail
+
+    private var paneDetail: some View {
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: DS.Space.lg) {
+                switch pane {
+                case .general: generalPane
+                case .network: networkPane
+                case .tun: tunPane
+                case .mitm: mitmPane
+                case .rules: rulesPane
                 }
 
-                Toggle(isOn: $silentStart) {
-                    Label("Silent Start", systemImage: "bell.slash")
-                        .fontWeight(.medium)
-                }
+                Color.clear.frame(height: DS.Space.xs)
+            }
+            .padding(DS.Space.xl)
+            .frame(maxWidth: 820, alignment: .leading)
+            .frame(maxWidth: .infinity)
+        }
+        .scrollIndicators(.never)
+        .background(DS.canvas)
+    }
 
-                Picker(selection: $theme) {
-                    Text("System").tag("system")
-                    Text("Light").tag("light")
-                    Text("Dark").tag("dark")
-                } label: {
-                    Label("Theme", systemImage: "paintpalette")
-                        .fontWeight(.medium)
-                }
-                .onChange(of: theme) { _, newValue in
-                    Task { @MainActor in
-                        ThemeService.shared.theme = newValue
+    // MARK: - General pane
+
+    private var generalPane: some View {
+        VStack(alignment: .leading, spacing: DS.Space.lg) {
+            paneHeader("General", subtitle: "Startup, appearance and diagnostics")
+
+            DSCard {
+                DSCardHeader("Startup & Appearance", icon: "power", subtitle: "Launch behaviour and theme")
+
+                VStack(alignment: .leading, spacing: DS.Space.md) {
+                    settingToggle("Start with macOS", isOn: $autoStart)
+                        .onChange(of: autoStart) { _, newValue in
+                            Task {
+                                try? LaunchService.shared.setLaunchAtLogin(enabled: newValue)
+                            }
+                        }
+
+                    settingToggle("Silent Start", isOn: $silentStart)
+
+                    settingRow("Theme") {
+                        Picker("Theme", selection: $theme) {
+                            Text("System").tag("system")
+                            Text("Light").tag("light")
+                            Text("Dark").tag("dark")
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(width: 150)
+                        .onChange(of: theme) { _, newValue in
+                            Task { @MainActor in
+                                ThemeService.shared.theme = newValue
+                            }
+                        }
                     }
                 }
             }
 
-            // Core Networking
-            Section {
-                LabeledContent {
-                    TextField("", text: $httpPort)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 80)
-                } label: {
-                    Text("HTTP Port")
-                        .fontWeight(.medium)
+            DSCard {
+                DSCardHeader("Logging", icon: "doc.text.magnifyingglass", subtitle: "Core log verbosity")
+
+                VStack(alignment: .leading, spacing: DS.Space.md) {
+                    settingRow("Log Level") {
+                        Picker("Log Level", selection: $logLevel) {
+                            Text("Silent").tag("silent")
+                            Text("Error").tag("error")
+                            Text("Warning").tag("warning")
+                            Text("Info").tag("info")
+                            Text("Debug").tag("debug")
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(width: 150)
+                        .onChange(of: logLevel) { _, newValue in
+                            Task {
+                                try? await ClashController.shared.setLogLevel(newValue)
+                            }
+                        }
+                    }
+                }
+            }
+
+            DSCard {
+                DSCardHeader("Software Update", icon: "arrow.down.circle")
+                settingToggle("Automatically check for updates", isOn: $appUpdates.automaticallyChecks)
+                settingRow("Ares \(appUpdates.currentVersion)") {
+                    Button(appUpdates.availableVersion.map { "Update to \($0)…" } ?? "Check for Updates…") {
+                        appUpdates.checkForUpdates()
+                    }
+                    .disabled(!appUpdates.canCheck || !appUpdates.isConfigured)
+                }
+                if !appUpdates.status.isEmpty { settingNote(appUpdates.status) }
+            }
+
+            // Maintenance is isolated and tinted so it never reads as a normal setting.
+            DSCard {
+                DSCardHeader(
+                    "Maintenance",
+                    icon: "wrench.and.screwdriver",
+                    subtitle: "Destructive actions",
+                    tint: .statusBad
+                )
+
+                HStack(spacing: DS.Space.sm) {
+                    Button("Clear Cache") {
+                        clearCache()
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button("Reset to Defaults") {
+                        resetSettings()
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.statusBad)
+
+                    Spacer(minLength: 0)
                 }
 
-                LabeledContent {
-                    TextField("", text: $socksPort)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 80)
-                } label: {
-                    Text("SOCKS Port")
-                        .fontWeight(.medium)
-                }
+                settingNote("Clearing the cache removes cached rule and subscription data. Resetting restores default ports, rules and appearance, then restarts the core.")
+            }
+        }
+    }
 
-                LabeledContent {
-                    TextField("", text: $mixedPort)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 80)
-                } label: {
-                    Text("Mixed Port")
-                        .fontWeight(.medium)
-                }
+    // MARK: - Network pane
 
-                Toggle(isOn: $allowLan) {
-                    Text("Allow LAN")
-                        .fontWeight(.medium)
-                }
-                Toggle(isOn: $ipv6) {
-                    Text("IPv6 Support")
-                        .fontWeight(.medium)
-                }
-
+    private var networkPane: some View {
+        VStack(alignment: .leading, spacing: DS.Space.lg) {
+            paneHeader("Network", subtitle: "Local proxy ports, DNS and fingerprinting") {
                 Button("Restart Clash Core") {
                     Task {
                         await clashViewModel.restart()
                     }
                 }
                 .buttonStyle(.bordered)
-            } header: {
-                Text("Clash Core")
-            } footer: {
-                Text("Port changes require core restart to take effect")
-                    .font(.footnote)
+                .controlSize(.small)
             }
 
-            // Unified TUN Mode Info
-            Section {
-                Toggle(isOn: Binding(
-                    get: { tunEnabled },
-                    set: { _ in appState.toggleTUN() }
-                )) {
-                    Text("Enable TUN Support").fontWeight(.medium)
-                }
-                .disabled(clashViewModel.isToggling)
+            DSCard {
+                DSCardHeader("Local Ports", icon: "network", subtitle: "Listeners exposed on this machine")
 
-                Picker("Network Stack", selection: $tunStack) {
-                    Text("Mixed (Recommended)").tag("mixed")
-                    Text("System").tag("system")
-                    Text("gVisor").tag("gvisor")
+                VStack(alignment: .leading, spacing: DS.Space.md) {
+                    settingRow("HTTP Port") {
+                        portField($httpPort)
+                    }
+                    settingRow("SOCKS Port") {
+                        portField($socksPort)
+                    }
+                    settingRow("Mixed Port") {
+                        portField($mixedPort)
+                    }
                 }
-                .disabled(!tunEnabled)
 
-                LabeledContent {
-                    TextField("", value: $tunMTU, format: .number)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 80)
-                } label: {
-                    Text("TUN MTU")
-                        .fontWeight(.medium)
-                }
-                .disabled(!tunEnabled)
-
-                LabeledContent {
-                    TextField("Auto", text: $tunDevice)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 120)
-                } label: {
-                    Text("TUN Device")
-                        .fontWeight(.medium)
-                }
-                .disabled(!tunEnabled)
-
-                Toggle(isOn: $tunAutoRoute) {
-                    Text("Auto Route")
-                        .fontWeight(.medium)
-                }
-                .disabled(!tunEnabled)
-
-                Toggle(isOn: $tunAutoDetectInterface) {
-                    Text("Auto Detect Interface")
-                        .fontWeight(.medium)
-                }
-                    .disabled(!tunEnabled)
-            } header: {
-                Label("TUN Mode", systemImage: "bolt.shield")
-                    .fontWeight(.medium)
-            } footer: {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("• Requires administrator privileges")
-                    Text("• Mixed = system TCP + gVisor UDP (best performance)")
-                    Text("• MTU 1400 recommended for proxy protocols")
-                    Text("• Changes require core restart")
-                }
-                .font(.footnote)
-                .fontWeight(.medium)
+                settingNote("Port changes require a core restart to take effect.")
             }
 
-            // System Proxy Bypass
-            Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Bypass Domains")
-                        .fontWeight(.medium)
-                    TextEditor(text: $bypassRules)
-                        .font(.system(.body, design: .monospaced))
-                        .frame(height: 100)
-                        .padding(4)
-                        .background(Color(nsColor: .textBackgroundColor))
-                        .cornerRadius(4)
-                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.gray.opacity(0.2)))
-                        .scrollIndicators(.hidden)
+            DSCard {
+                DSCardHeader("Traffic", icon: "globe", subtitle: "How the core accepts connections")
 
-                    Text("Comma-separated domains/IPs to bypass proxy")
-                        .font(.footnote)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: DS.Space.md) {
+                    settingToggle("Allow LAN", isOn: $allowLan)
+                    settingToggle("IPv6 Support", isOn: $ipv6)
                 }
-                .padding(.vertical, 4)
+            }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Custom Routing Rules")
-                        .fontWeight(.medium)
-                    TextEditor(text: $localRules)
-                        .font(.system(.body, design: .monospaced))
-                        .frame(height: 120)
-                        .padding(4)
-                        .background(Color(nsColor: .textBackgroundColor))
-                        .cornerRadius(4)
-                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.gray.opacity(0.2)))
-                        .scrollIndicators(.hidden)
-                        .onChange(of: localRules) { _, _ in
-                            // Debounce: cancel any pending restart, schedule a new one 1.5s after typing stops.
-                            localRulesRestartTask?.cancel()
-                            localRulesRestartTask = Task {
-                                try? await Task.sleep(nanoseconds: 1_500_000_000)
-                                if Task.isCancelled { return }
+            DSCard {
+                DSCardHeader("DNS", icon: "server.rack", subtitle: "Resolvers used by the core")
+
+                VStack(alignment: .leading, spacing: DS.Space.sm) {
+                    settingRow("DNS Servers") {
+                        TextField("", text: $dnsServers)
+                            .textFieldStyle(.roundedBorder)
+                            .multilineTextAlignment(.trailing)
+                            .font(DS.Typography.secondary.monospaced())
+                            .frame(width: 300)
+                    }
+
+                    settingNote("Comma-separated resolvers, e.g. 223.5.5.5, 119.29.29.29. Requires a core restart.")
+                }
+            }
+
+            DSCard {
+                DSCardHeader("TLS Fingerprint", icon: "hand.raised", subtitle: "Browser impersonation")
+
+                VStack(alignment: .leading, spacing: DS.Space.sm) {
+                    settingRow("Profile") {
+                        Picker("TLS Fingerprint", selection: $tlsFingerprint) {
+                            Text("Disabled (Default)").tag("none")
+                            Text("Chrome (Recommended)").tag("chrome")
+                            Text("Safari (iOS)").tag("ios")
+                            Text("Firefox").tag("firefox")
+                            Text("Randomized").tag("random")
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(width: 190)
+                        .onChange(of: tlsFingerprint) { _, _ in
+                            Task {
                                 if clashViewModel.isRunning {
                                     await clashViewModel.restart()
                                 }
                             }
                         }
-
-                    Text("One rule per line in mihomo syntax, e.g. `DOMAIN-SUFFIX,z.ai,DIRECT`. Injected at the top of `rules:` with the highest priority; survives subscription updates. Applies automatically 1.5s after you stop typing.")
-                        .font(.footnote)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.vertical, 4)
-
-                VStack(alignment: .leading, spacing: 8) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("CA Certificate")
-                            .fontWeight(.medium)
-
-                        HStack {
-                            if certManager.isRootCAInstalled {
-                                Label("Installed", systemImage: "checkmark.shield.fill")
-                                    .foregroundStyle(.green)
-                                    .font(.callout)
-                            } else {
-                                Label("Not Installed", systemImage: "exclamationmark.shield")
-                                    .foregroundStyle(.red)
-                                    .font(.callout)
-                            }
-
-                            Spacer()
-
-                            Button("Install to System") {
-                                Task {
-                                    try? await certManager.installToKeychain()
-                                }
-                            }
-                            .disabled(certManager.isRootCAInstalled)
-                            .controlSize(.small)
-
-                            Button("Export") {
-                                let panel = NSSavePanel()
-                                panel.nameFieldStringValue = "ares-root-ca.crt"
-                                panel.begin { response in
-                                    if response == .OK, let url = panel.url {
-                                        Task {
-                                            try? await certManager.exportRootCA(to: url)
-                                        }
-                                    }
-                                }
-                            }
-                            .controlSize(.small)
-                        }
-                        .padding(8)
-                        .background(Color(nsColor: .controlBackgroundColor))
-                        .cornerRadius(6)
-
-                        Divider()
                     }
 
-                    Text("MITM Intercept Ports")
-                        .fontWeight(.medium)
-                    TextField("Ports", text: $mitmPorts)
-                        .textFieldStyle(.roundedBorder)
-
-                    Text("Comma-separated ports to intercept (e.g. 80, 443, 8888)")
-                        .font(.footnote)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
+                    settingNote("Mimic browser fingerprints to bypass DPI and reduce drops for AI models.")
                 }
-                .padding(.vertical, 4)
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("MITM Host Whitelist")
-                        .fontWeight(.medium)
-                    TextField("Hosts (empty = all)", text: $mitmHosts)
-                        .textFieldStyle(.roundedBorder)
-
-                    Text("Comma-separated hosts/IPs to intercept (e.g. 10.10.25.251, api.example.com)")
-                        .font(.footnote)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.vertical, 4)
-
-
-
-                Button("Apply Proxy Rules") {
-                    Task {
-                        // 0. Refresh MITM Backend whitelist (for display filtering and connection bypass)
-                        await MITMBackend.shared.refreshDisplayWhitelist()
-
-                        // 1. Refresh system proxy with new rules if currently enabled
-                        if appState.systemProxyEnabled {
-                            await appState.toggleSystemProxy() // Off
-                            await appState.toggleSystemProxy() // On with new rules
-                        }
-
-                        // 2. If TUN mode is active, we MUST restart Clash to rebuild config with new MITM domain rules
-                        if tunEnabled {
-                            let wasMITMRunning = NetworkMITMService.shared.isRunning
-
-                            // Stop MITM first to prevent errors during Clash restart
-                            if wasMITMRunning {
-                                await NetworkMITMService.shared.stop()
-                            }
-
-                            await clashViewModel.restart()
-
-                            // Restart MITM if it was running (with safety delay) OR if newly enabled
-                            if wasMITMRunning || mitmEnabled {
-                                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1s wait for Core stability
-                                await NetworkMITMService.shared.start()
-                            }
-                        }
-
-                        clashViewModel.addLog("[Settings] ✅ Proxy rules applied")
-                    }
-                }
-                .buttonStyle(.bordered)
-            }
-
-            // Advanced Features
-            Section("Advanced") {
-
-                LabeledContent {
-                    TextField("", value: $keepAliveInterval, format: .number)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 80)
-                } label: {
-                    Text("Keep-Alive Interval")
-                        .fontWeight(.medium)
-                }
-
-                LabeledContent {
-                    TextField("", value: $udpTimeout, format: .number)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 80)
-                } label: {
-                    Text("UDP Timeout")
-                        .fontWeight(.medium)
-                }
-
-                Picker("TLS Fingerprint", selection: $tlsFingerprint) {
-                    Text("Disabled (Default)").tag("none")
-                    Text("Chrome (Recommended)").tag("chrome")
-                    Text("Safari (iOS)").tag("ios")
-                    Text("Firefox").tag("firefox")
-                    Text("Randomized").tag("random")
-                }
-                .pickerStyle(.menu)
-                .onChange(of: tlsFingerprint) { _, _ in
-                    Task {
-                        if clashViewModel.isRunning {
-                            await clashViewModel.restart()
-                        }
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Mimic browser fingerprints to bypass DPI and reduce drops for AI models.")
-                }
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .padding(.vertical, 4)
-            }
-
-            // Other & Maintenance
-            Section("Other") {
-                Picker("Log Level", selection: $logLevel) {
-                    Text("Silent").tag("silent")
-                    Text("Error").tag("error")
-                    Text("Warning").tag("warning")
-                    Text("Info").tag("info")
-                    Text("Debug").tag("debug")
-                }
-                .onChange(of: logLevel) { _, newValue in
-                    Task {
-                        try? await ClashController.shared.setLogLevel(newValue)
-                    }
-                }
-
-                HStack {
-                    Button("Clear Cache") {
-                        clearCache()
-                    }
-                    Spacer()
-                    Button("Reset to Defaults") {
-                        resetSettings()
-                    }
-                    .foregroundStyle(.red)
-                }
-                .buttonStyle(.bordered)
             }
         }
-        .formStyle(.grouped)
-        .navigationTitle("Settings")
-        .scrollIndicators(.hidden)
+    }
+
+    // MARK: - TUN pane
+
+    private var tunPane: some View {
+        VStack(alignment: .leading, spacing: DS.Space.lg) {
+            paneHeader("TUN", subtitle: "Capture traffic at the network layer")
+
+            DSCard {
+                HStack(spacing: DS.Space.md) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Enable TUN Support")
+                            .font(DS.Typography.body.weight(.semibold))
+                        Text("All traffic is routed through the core without per-app proxy settings.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer(minLength: DS.Space.md)
+
+                    Toggle("", isOn: Binding(
+                        get: { tunEnabled },
+                        set: { _ in appState.toggleTUN() }
+                    ))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .disabled(clashViewModel.isToggling)
+                }
+            }
+
+            DSCard {
+                DSCardHeader("Interface", icon: "bolt.shield", subtitle: "Stack, MTU and routing")
+
+                VStack(alignment: .leading, spacing: DS.Space.md) {
+                    settingRow("Network Stack") {
+                        Picker("Network Stack", selection: $tunStack) {
+                            Text("Mixed (Recommended)").tag("mixed")
+                            Text("System").tag("system")
+                            Text("gVisor").tag("gvisor")
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(width: 200)
+                    }
+                    .disabled(!tunEnabled)
+
+                    settingRow("TUN MTU") {
+                        TextField("", value: $tunMTU, format: .number)
+                            .textFieldStyle(.roundedBorder)
+                            .multilineTextAlignment(.trailing)
+                            .font(DS.Typography.body.monospaced())
+                            .frame(width: 84)
+                    }
+                    .disabled(!tunEnabled)
+
+                    settingRow("TUN Device") {
+                        TextField("Auto", text: $tunDevice)
+                            .textFieldStyle(.roundedBorder)
+                            .multilineTextAlignment(.trailing)
+                            .font(DS.Typography.secondary.monospaced())
+                            .frame(width: 120)
+                    }
+                    .disabled(!tunEnabled)
+
+                    settingToggle("Auto Route", isOn: $tunAutoRoute, isEnabled: tunEnabled)
+                    settingToggle("Auto Detect Interface", isOn: $tunAutoDetectInterface, isEnabled: tunEnabled)
+                }
+
+                settingNote("TUN settings are inert until TUN support is enabled.")
+            }
+
+            DSCard {
+                DSCardHeader("Connection Tuning", icon: "timer", subtitle: "Keep-alive and UDP handling")
+
+                VStack(alignment: .leading, spacing: DS.Space.md) {
+                    settingRow("Keep-Alive Interval") {
+                        TextField("", value: $keepAliveInterval, format: .number)
+                            .textFieldStyle(.roundedBorder)
+                            .multilineTextAlignment(.trailing)
+                            .font(DS.Typography.body.monospaced())
+                            .frame(width: 84)
+                    }
+
+                    settingRow("UDP Timeout") {
+                        TextField("", value: $udpTimeout, format: .number)
+                            .textFieldStyle(.roundedBorder)
+                            .multilineTextAlignment(.trailing)
+                            .font(DS.Typography.body.monospaced())
+                            .frame(width: 84)
+                    }
+                }
+            }
+
+            DSCard {
+                DSCardHeader("Notes", icon: "info.circle", subtitle: "Before you enable TUN")
+
+                VStack(alignment: .leading, spacing: DS.Space.sm) {
+                    DSKeyValueRow(label: "Privileges", value: "Administrator required", monospaced: false)
+                    DSKeyValueRow(label: "Mixed stack", value: "System TCP + gVisor UDP", monospaced: false)
+                    DSKeyValueRow(label: "MTU", value: "1400 recommended", monospaced: false)
+                    DSKeyValueRow(label: "Changes", value: "Core restart required", monospaced: false)
+                }
+            }
+        }
+    }
+
+    // MARK: - MITM pane
+
+    private var mitmPane: some View {
+        VStack(alignment: .leading, spacing: DS.Space.lg) {
+            paneHeader("MITM", subtitle: "TLS interception for request inspection")
+
+            DSCard {
+                DSCardHeader("Certificate Authority", icon: "lock.shield", subtitle: "Root CA used to sign intercepted hosts")
+
+                HStack(spacing: DS.Space.sm) {
+                    DSStatusPill(
+                        text: certManager.isRootCAInstalled ? "Installed" : "Not installed",
+                        status: certManager.isRootCAInstalled ? .good : .critical
+                    )
+
+                    Spacer(minLength: DS.Space.sm)
+
+                    Button("Install to System") {
+                        Task {
+                            try? await certManager.installToKeychain()
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(certManager.isRootCAInstalled)
+
+                    Button("Export") {
+                        exportCertificate()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+
+                settingNote("Interception only works once the Ares root certificate is trusted by the system keychain.")
+            }
+
+            DSCard {
+                DSCardHeader("Interception", icon: "arrow.left.arrow.right", subtitle: "What gets decrypted")
+
+                VStack(alignment: .leading, spacing: DS.Space.sm) {
+                    Text("Intercept Ports")
+                        .font(DS.Typography.body.weight(.medium))
+                    TextField("Ports", text: $mitmPorts)
+                        .textFieldStyle(.roundedBorder)
+                        .font(DS.Typography.secondary.monospaced())
+                    settingNote("Comma-separated ports to intercept, e.g. 80, 443, 8888.")
+                }
+
+                VStack(alignment: .leading, spacing: DS.Space.sm) {
+                    Text("Host Whitelist")
+                        .font(DS.Typography.body.weight(.medium))
+                    TextField("Hosts (empty = all)", text: $mitmHosts)
+                        .textFieldStyle(.roundedBorder)
+                        .font(DS.Typography.secondary.monospaced())
+                    settingNote("Comma-separated hosts and IPs to intercept, e.g. 10.10.25.251, api.example.com. Leave empty to intercept everything.")
+                }
+            }
+        }
+    }
+
+    // MARK: - Rules pane
+
+    private var rulesPane: some View {
+        VStack(alignment: .leading, spacing: DS.Space.lg) {
+            paneHeader("Rules", subtitle: "Bypass list and custom routing") {
+                Button("Apply Proxy Rules") {
+                    applyProxyRules()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+
+            DSCard {
+                DSCardHeader("Bypass Domains", icon: "arrow.uturn.left", subtitle: "Traffic that skips the proxy")
+
+                codeEditor($bypassRules, height: 100)
+
+                settingNote("Comma-separated domains and IP ranges, e.g. localhost, 127.*, 192.168.*.")
+            }
+
+            DSCard {
+                DSCardHeader("Custom Routing Rules", icon: "list.bullet.rectangle", subtitle: "Highest priority, applied to the top of `rules:`")
+
+                codeEditor($localRules, height: 120)
+                    .onChange(of: localRules) { _, _ in
+                        // Debounce: cancel any pending restart, schedule a new one 1.5s after typing stops.
+                        localRulesRestartTask?.cancel()
+                        localRulesRestartTask = Task {
+                            try? await Task.sleep(nanoseconds: 1_500_000_000)
+                            if Task.isCancelled { return }
+                            if clashViewModel.isRunning {
+                                await clashViewModel.restart()
+                            }
+                        }
+                    }
+
+                settingNote("One rule per line in mihomo syntax, e.g. `DOMAIN-SUFFIX,z.ai,DIRECT`. Survives subscription updates and applies automatically 1.5s after you stop typing.")
+            }
+        }
+    }
+
+    // MARK: - Building blocks
+
+    private func paneHeader<Trailing: View>(
+        _ title: String,
+        subtitle: String,
+        @ViewBuilder trailing: () -> Trailing
+    ) -> some View {
+        HStack(spacing: DS.Space.md) {
+            VStack(alignment: .leading, spacing: DS.Space.xxs) {
+                Text(title)
+                    .font(DS.Typography.sectionTitle.weight(.semibold))
+                Text(subtitle)
+                    .font(DS.Typography.metadata)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: DS.Space.md)
+
+            trailing()
+        }
+    }
+
+    private func paneHeader(_ title: String, subtitle: String) -> some View {
+        paneHeader(title, subtitle: subtitle) { EmptyView() }
+    }
+
+    private func settingRow<Control: View>(
+        _ title: String,
+        @ViewBuilder control: () -> Control
+    ) -> some View {
+        LabeledContent {
+            control()
+        } label: {
+            Text(title)
+        }
+        .labeledContentStyle(SettingRowStyle())
+    }
+
+    private func settingToggle(_ title: String, isOn: Binding<Bool>, isEnabled: Bool = true) -> some View {
+        Toggle(isOn: isOn) {
+            Text(title)
+                .font(DS.Typography.body.weight(.medium))
+        }
+        .toggleStyle(.switch)
+        .controlSize(.small)
+        .disabled(!isEnabled)
+    }
+
+    private func settingNote(_ text: String) -> some View {
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func portField(_ text: Binding<String>) -> some View {
+        TextField("", text: text)
+            .textFieldStyle(.roundedBorder)
+            .multilineTextAlignment(.trailing)
+            .font(DS.Typography.body.monospaced())
+            .frame(width: 84)
+    }
+
+    /// Inset editing surface: fill only, no hand-rolled textBackgroundColor + stroke chrome.
+    private func codeEditor(_ text: Binding<String>, height: CGFloat) -> some View {
+        TextEditor(text: text)
+            .font(DS.Typography.secondary.monospaced())
+            .scrollContentBackground(.hidden)
+            .scrollIndicators(.hidden)
+            .padding(DS.Space.sm)
+            .frame(height: height)
+            .background(
+                RoundedRectangle(cornerRadius: DS.Radius.control, style: .continuous)
+                    .fill(Color.primary.opacity(0.045))
+            )
+            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.control, style: .continuous))
+    }
+
+    // MARK: - Actions
+
+    private func exportCertificate() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "ares-root-ca.crt"
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                Task {
+                    try? await certManager.exportRootCA(to: url)
+                }
+            }
+        }
+    }
+
+    private func applyProxyRules() {
+        Task {
+            // 0. Refresh MITM Backend whitelist (for display filtering and connection bypass)
+            await MITMBackend.shared.refreshDisplayWhitelist()
+
+            // 1. Refresh system proxy with new rules if currently enabled
+            if appState.systemProxyEnabled {
+                _ = await appState.enableSystemProxy()
+            }
+
+            // 2. If TUN mode is active, we MUST restart Clash to rebuild config with new MITM domain rules
+            if tunEnabled {
+                let wasMITMRunning = NetworkMITMService.shared.isRunning
+
+                // Stop MITM first to prevent errors during Clash restart
+                if wasMITMRunning {
+                    await NetworkMITMService.shared.stop()
+                }
+
+                await clashViewModel.restart()
+
+                // Restart MITM only when it was actually running before the rebuild.
+                if wasMITMRunning {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000) // 1s wait for Core stability
+                    await NetworkMITMService.shared.start()
+                }
+            }
+
+            clashViewModel.addLog("[Settings] ✅ Proxy rules applied")
+        }
     }
 
     private func clearCache() {
@@ -452,6 +682,7 @@ struct SettingsView: View {
         tunAutoDetectInterface = true
         keepAliveInterval = 15
         udpTimeout = 120
+        dnsServers = "223.5.5.5, 119.29.29.29"
 
         Task {
             await clashViewModel.restart()

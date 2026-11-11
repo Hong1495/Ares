@@ -28,7 +28,7 @@ struct RichContentPreview: View {
                                 .foregroundColor(.secondary)
 
                             Text(cleanBody)
-                                .font(.system(size: 13, design: .monospaced))
+                                .font(DS.Typography.body.monospaced())
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -154,6 +154,6 @@ struct ImagePreview: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(DS.canvas)
     }
 }

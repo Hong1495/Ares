@@ -56,7 +56,7 @@ struct ProfileEditorView: View {
                 }
             }
             .padding()
-            .background(Color(nsColor: .windowBackgroundColor))
+            .background(DS.canvas)
             
             Divider()
             

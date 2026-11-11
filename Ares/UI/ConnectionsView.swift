@@ -27,7 +27,7 @@ struct ConnectionsView: View {
     @StateObject private var viewModel = ConnectionsViewModel()
     @State private var searchText = ""
     @State private var selectedNodeID: ActivityNode.ID? // For Inspector
-    @State private var showInspector: Bool = true
+    @State private var showInspector: Bool = false
 
     // Sort orders
     @State private var sessionSortOrder = [KeyPathComparator(\ActivityNode.sortValue, order: .reverse)]
@@ -35,17 +35,19 @@ struct ConnectionsView: View {
     var body: some View {
         HSplitView {
             // Main Content
-            VStack(spacing: 0) {
+            VStack(spacing: DS.Space.md) {
                 // Toolbar
-                toolbarView
-                    .padding()
-                    .background(Color(nsColor: .windowBackgroundColor))
-
-                Divider()
+                DSCard(padding: DS.Space.md) {
+                    toolbarView
+                }
+                .fixedSize(horizontal: false, vertical: true)
 
                 // Table
                 hierarchicalTable
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .padding(DS.Space.lg)
+            .background(DS.canvas)
             .layoutPriority(1)
             .frame(minWidth: 400)
 
@@ -80,212 +82,260 @@ struct ConnectionsView: View {
     // MARK: - Toolbar
 
     private var toolbarView: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DS.Space.md) {
             // Grouping Picker
             Picker("", selection: $viewModel.groupingMode) {
                 ForEach(GroupingMode.allCases) { mode in
                     Label(mode.rawValue, systemImage: mode.icon).tag(mode)
                 }
             }
+            .labelsHidden()
             .pickerStyle(.segmented)
-            .frame(width: 320)
+            .controlSize(.small)
+            .frame(minWidth: 240, idealWidth: 320)
 
             // Stats Summary
-            HStack(spacing: 16) {
+            HStack(spacing: DS.Space.md) {
+                HStack(spacing: DS.Space.xs) {
+                    Text("\(viewModel.groupedNodes.count)")
+                        .font(DS.Typography.secondary.monospaced().weight(.medium))
+                        .monospacedDigit()
+                        .foregroundStyle(.primary)
+                    Text("items")
+                        .font(DS.Typography.metadata)
+                        .foregroundStyle(.secondary)
+                }
+
                 Divider().frame(height: 14)
 
-                HStack(spacing: 12) {
-                    Text("\(viewModel.groupedNodes.count) items")
-                        .fontWeight(.medium)
-
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.down").foregroundStyle(.blue)
-                        Text(formatBytes(viewModel.totalDownload))
-                    }
-
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.up").foregroundStyle(.orange)
-                        Text(formatBytes(viewModel.totalUpload))
-                    }
+                HStack(spacing: DS.Space.xs) {
+                    Image(systemName: "arrow.down")
+                        .font(DS.Typography.caption.weight(.semibold))
+                        .foregroundStyle(Color.seriesDown)
+                    Text(formatBytes(viewModel.totalDownload))
+                        .font(DS.Typography.secondary.monospaced().weight(.medium))
+                        .monospacedDigit()
+                        .foregroundStyle(.primary)
                 }
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+                .help("Total download")
+
+                Divider().frame(height: 14)
+
+                HStack(spacing: DS.Space.xs) {
+                    Image(systemName: "arrow.up")
+                        .font(DS.Typography.caption.weight(.semibold))
+                        .foregroundStyle(Color.seriesUp)
+                    Text(formatBytes(viewModel.totalUpload))
+                        .font(DS.Typography.secondary.monospaced().weight(.medium))
+                        .monospacedDigit()
+                        .foregroundStyle(.primary)
+                }
+                .help("Total upload")
             }
 
-            Spacer()
+            Spacer(minLength: DS.Space.sm)
 
             // Search
-            HStack {
-                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("Search...", text: $searchText)
-                    .textFieldStyle(.plain)
-            }
-            .padding(6)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .cornerRadius(6)
-            .frame(width: 200)
+            TextField("Search activity", text: $searchText)
+                .textFieldStyle(.roundedBorder)
+                .controlSize(.small)
+                .frame(minWidth: 130, idealWidth: 200, maxWidth: 200)
 
             // Actions
-            HStack(spacing: 0) {
+            HStack(spacing: DS.Space.xs) {
                 Button {
                     viewModel.resetStatistics()
                 } label: {
-                    Image(systemName: "arrow.counterclockwise").fontWeight(.medium)
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(DS.Typography.secondary.weight(.medium))
                 }
+                .buttonStyle(.borderless)
                 .help("Reset Usage Statistics")
-                .buttonStyle(.plain)
-                .padding(.horizontal, 8)
-
-                Divider().frame(height: 12)
 
                 Button {
                     withAnimation { showInspector.toggle() }
                 } label: {
                     Image(systemName: "sidebar.right")
-                        .fontWeight(.medium)
-                        .foregroundStyle(showInspector ? .primary : .secondary)
+                        .font(DS.Typography.secondary.weight(.medium))
+                        .foregroundStyle(showInspector ? AnyShapeStyle(HierarchicalShapeStyle.primary) : AnyShapeStyle(HierarchicalShapeStyle.tertiary))
                 }
+                .buttonStyle(.borderless)
                 .help("Toggle Inspector")
-                .buttonStyle(.plain)
-                .padding(.horizontal, 8)
 
                 Button {
                     exportConnections()
                 } label: {
-                    Image(systemName: "square.and.arrow.up").fontWeight(.medium)
+                    Image(systemName: "square.and.arrow.up")
+                        .font(DS.Typography.secondary.weight(.medium))
                 }
+                .buttonStyle(.borderless)
                 .help("Export Data")
-                .buttonStyle(.plain)
-                .padding(.horizontal, 8)
             }
         }
     }
 
     // MARK: - Hierarchical Table
     private var hierarchicalTable: some View {
-        Table(nodes, children: \.children, selection: $selectedNodeID, sortOrder: $sessionSortOrder) {
-            TableColumn("Process / Host", value: \.title) { node in
-                HStack {
-                    iconView(for: node)
-                        .frame(width: 24, height: 24)
+        Group {
+            if nodes.isEmpty {
+                DSCard(padding: DS.Space.xxl, spacing: 0) {
+                    ContentUnavailableView {
+                        Label(emptyActivityTitle, systemImage: "arrow.left.arrow.right.circle")
+                    } description: {
+                        Text(emptyActivityDescription)
+                    }
+                }
+            } else {
+                DSCard(padding: 0, spacing: 0) {
+                    Table(nodes, children: \.children, selection: $selectedNodeID, sortOrder: $sessionSortOrder) {
+                        TableColumn("Process / Host", value: \.title) { node in
+                            HStack(spacing: DS.Space.sm) {
+                                iconView(for: node)
+                                    .frame(width: 20, height: 20)
+                                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(node.title)
-                            .fontWeight(.medium)
+                                VStack(alignment: .leading, spacing: 1.5) {
+                                    Text(node.title)
+                                        .font(DS.Typography.body.weight(.medium))
+                                        .lineLimit(1)
 
-                        // Subtitles
-                        switch node {
-                        case .app(let session):
-                            if session.activeConnectionCount > 0 {
-                                Text("\(session.activeConnectionCount) active").font(.caption2).foregroundStyle(.green)
-                            } else {
-                                Text("Terminated").font(.caption2).foregroundStyle(.secondary)
+                                    // Subtitles
+                                    switch node {
+                                    case .app(let session):
+                                        if session.activeConnectionCount > 0 {
+                                            HStack(spacing: DS.Space.xs) {
+                                                Circle()
+                                                    .fill(Color.statusGood)
+                                                    .frame(width: 4, height: 4)
+                                                Text("\(session.activeConnectionCount) active")
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        } else {
+                                            Text("Terminated")
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    case .group(let group):
+                                        Text("\(group.activeCount) active")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    case .connection(let conn):
+                                        Text(conn.chainsString)
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+
+                                Spacer(minLength: DS.Space.sm)
+
+                                // Sparkline (Only for Apps currently)
+                                switch node {
+                                case .app(let session):
+                                    if !session.speedHistory.isEmpty {
+                                        SparklineView(data: session.speedHistory, color: .seriesDown)
+                                            .frame(width: 60, height: 22)
+                                    }
+                                default:
+                                    EmptyView()
+                                }
                             }
-                        case .group(let group):
-                            Text("\(group.activeCount) active").font(.caption2).foregroundStyle(.primary)
-                        case .connection(let conn):
-                             Text(conn.chainsString).font(.caption2).foregroundStyle(.secondary)
+                        }
+                        .width(min: 250, ideal: 320)
+
+                        TableColumn("Download", value: \.sortValue) { node in
+                            // Use sortValue for sorting, but we need formatting
+                            switch node {
+                            case .app(let x): trafficCell(bytes: x.totalDownload, speed: x.currentDownloadSpeed, color: .seriesDown, arrow: "arrow.down")
+                            case .group(let x): trafficCell(bytes: x.download, speed: x.downloadSpeed, color: .seriesDown, arrow: "arrow.down")
+                            case .connection(let x): trafficCell(bytes: x.download, speed: x.downloadSpeed, color: .seriesDown, arrow: "arrow.down")
+                            }
+                        }
+                        .width(ideal: 100)
+
+                        TableColumn("Upload") { node in
+                            switch node {
+                            case .app(let x): trafficCell(bytes: x.totalUpload, speed: x.currentUploadSpeed, color: .seriesUp, arrow: "arrow.up")
+                            case .group(let x): trafficCell(bytes: x.upload, speed: x.uploadSpeed, color: .seriesUp, arrow: "arrow.up")
+                            case .connection(let x): trafficCell(bytes: x.upload, speed: x.uploadSpeed, color: .seriesUp, arrow: "arrow.up")
+                            }
+                        }
+                        .width(ideal: 100)
+                    }
+                    .contextMenu(forSelectionType: ActivityNode.ID.self) { selection in
+                        // Context Menu for Selected Items
+                        if selection.count == 1, let id = selection.first, let node = findNode(id: id, nodes: nodes) {
+                            // --- Standard Copy Actions ---
+                            Button("Copy Summary") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(node.title, forType: .string)
+                            }
+
+                            Divider()
+
+                            // --- Detailed Actions ---
+                            if case .connection(let conn) = node {
+                                // Host
+                                if !conn.metadata.host.isEmpty {
+                                    Button("Copy Host") {
+                                        copyToClipboard(conn.metadata.host)
+                                    }
+                                }
+
+                                // IP
+                                Button("Copy Remote IP") {
+                                    copyToClipboard(conn.metadata.destinationIP)
+                                }
+
+                                // Address
+                                Button("Copy Remote Address") {
+                                    copyToClipboard("\(conn.metadata.destinationIP):\(conn.metadata.destinationPort)")
+                                }
+
+                                Button("Copy Source Address") {
+                                    copyToClipboard("\(conn.metadata.sourceIP):\(conn.metadata.sourcePort)")
+                                }
+
+                                // Rule
+                                if !conn.rule.isEmpty {
+                                    Button("Copy Rule") {
+                                        copyToClipboard(conn.rule)
+                                    }
+                                }
+
+                                Divider()
+
+                                Button("Close Connection") {
+                                    Task { await viewModel.closeConnection(id: conn.id) }
+                                }
+                            }
+
+                            if case .app(let session) = node {
+                                Button("Copy Process Path") {
+                                    copyToClipboard(session.id)
+                                }
+
+                                Divider()
+
+                                Button("Force Termination (Aggressive)") {
+                                    viewModel.killProcess(for: session)
+                                }
+                            }
                         }
                     }
-
-                    Spacer()
-
-                    // Sparkline (Only for Apps currently)
-                    switch node {
-                    case .app(let session):
-                        if !session.speedHistory.isEmpty {
-                            SparklineView(data: session.speedHistory, color: .blue)
-                                .frame(width: 60, height: 24)
-                        }
-                    default:
-                        EmptyView()
-                    }
+                    .scrollIndicators(.hidden)
+                    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
                 }
             }
-            .width(min: 250, ideal: 320)
-
-            TableColumn("Download", value: \.sortValue) { node in
-                // Use sortValue for sorting, but we need formatting
-                switch node {
-                case .app(let x): trafficCell(bytes: x.totalDownload, speed: x.currentDownloadSpeed, color: .blue, arrow: "arrow.down")
-                case .group(let x): trafficCell(bytes: x.download, speed: x.downloadSpeed, color: .blue, arrow: "arrow.down")
-                case .connection(let x): trafficCell(bytes: x.download, speed: x.downloadSpeed, color: .blue, arrow: "arrow.down")
-                }
-            }
-            .width(ideal: 100)
-
-            TableColumn("Upload") { node in
-                switch node {
-                case .app(let x): trafficCell(bytes: x.totalUpload, speed: x.currentUploadSpeed, color: .orange, arrow: "arrow.up")
-                case .group(let x): trafficCell(bytes: x.upload, speed: x.uploadSpeed, color: .orange, arrow: "arrow.up")
-                case .connection(let x): trafficCell(bytes: x.upload, speed: x.uploadSpeed, color: .orange, arrow: "arrow.up")
-                }
-            }
-            .width(ideal: 100)
-
         }
-        .contextMenu(forSelectionType: ActivityNode.ID.self) { selection in
-             // Context Menu for Selected Items
-            if selection.count == 1, let id = selection.first, let node = findNode(id: id, nodes: nodes) {
-                 // --- Standard Copy Actions ---
-                 Button("Copy Summary") {
-                     NSPasteboard.general.clearContents()
-                     NSPasteboard.general.setString(node.title, forType: .string)
-                 }
+    }
 
-                 Divider()
+    private var emptyActivityTitle: String {
+        viewModel.groupedNodes.isEmpty ? "No network activity" : "No matching activity"
+    }
 
-                 // --- Detailed Actions ---
-                 if case .connection(let conn) = node {
-                     // Host
-                     if !conn.metadata.host.isEmpty {
-                         Button("Copy Host") {
-                            copyToClipboard(conn.metadata.host)
-                         }
-                     }
-
-                     // IP
-                     Button("Copy Remote IP") {
-                         copyToClipboard(conn.metadata.destinationIP)
-                     }
-
-                     // Address
-                     Button("Copy Remote Address") {
-                         copyToClipboard("\(conn.metadata.destinationIP):\(conn.metadata.destinationPort)")
-                     }
-
-                     Button("Copy Source Address") {
-                         copyToClipboard("\(conn.metadata.sourceIP):\(conn.metadata.sourcePort)")
-                     }
-
-                     // Rule
-                     if !conn.rule.isEmpty {
-                         Button("Copy Rule") {
-                             copyToClipboard(conn.rule)
-                         }
-                     }
-
-                     Divider()
-
-                     Button("Close Connection") {
-                         Task { await viewModel.closeConnection(id: conn.id) }
-                     }
-                 }
-
-                if case .app(let session) = node {
-                    Button("Copy Process Path") {
-                        copyToClipboard(session.id)
-                    }
-
-                    Divider()
-
-                    Button("Force Termination (Aggressive)") {
-                        viewModel.killProcess(for: session)
-                    }
-                }
-             }
-        }
-        .scrollIndicators(.hidden)
+    private var emptyActivityDescription: String {
+        viewModel.groupedNodes.isEmpty ? "Active processes and connections will appear here." : "Change the search field to show activity."
     }
 
     private func copyToClipboard(_ content: String) {
@@ -319,33 +369,39 @@ struct ConnectionsView: View {
                  Image(systemName: iconPath)
                      .resizable()
                      .aspectRatio(contentMode: .fit)
-                     .foregroundStyle(.purple)
+                     .foregroundStyle(.secondary)
              } else {
                  ApplicationIconView(path: iconPath)
              }
          } else {
              Image(systemName: "circle.fill")
                  .resizable()
-                 .frame(width: 6, height: 6)
-                 .foregroundStyle(.secondary)
+                 .frame(width: 5, height: 5)
+                 .foregroundStyle(.tertiary)
          }
     }
 
     private func trafficCell(bytes: Int64, speed: Int64, color: Color, arrow: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 1.5) {
             Text(formatBytes(bytes))
-                .font(.system(.footnote, design: .monospaced))
-                .fontWeight(.medium)
+                .font(DS.Typography.metadata.monospaced().weight(.medium))
+                .monospacedDigit()
+                .foregroundStyle(.primary)
 
             if speed > 0 {
-                HStack(spacing: 2) {
+                HStack(spacing: 3) {
                     Image(systemName: arrow)
+                        .font(DS.Typography.caption.weight(.semibold))
+                        .foregroundStyle(color)
                     Text("\(formatSpeed(speed))")
+                        .font(DS.Typography.caption.monospaced())
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
                 }
-                .font(.system(size: 9, design: .monospaced))
-                .foregroundStyle(color)
             } else {
-                Text("—").font(.system(size: 9)).foregroundStyle(.tertiary)
+                Text("—")
+                    .font(DS.Typography.caption)
+                    .foregroundStyle(.tertiary)
             }
         }
     }

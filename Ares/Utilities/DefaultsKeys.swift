@@ -6,6 +6,7 @@ enum DefaultsKeys {
     nonisolated static let systemProxyEnabled = "systemProxyEnabled"
     nonisolated static let tunEnabled = "tunEnabled"
     nonisolated static let bypassRules = "bypassRules"
+    nonisolated static let dnsServers = "dnsServers"
 
     nonisolated static let mixedPort = "mixedPort"
     nonisolated static let socksPort = "socksPort"

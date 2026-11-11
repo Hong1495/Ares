@@ -6,6 +6,10 @@ import Combine
 class AppState: ObservableObject {
     static let shared = AppState()
 
+    struct OperationStatus: Equatable {
+        let title: String
+    }
+
     // Clash Mode
     @Published var currentMode: ClashConfig.Mode = .rule
 
@@ -23,7 +27,7 @@ class AppState: ObservableObject {
         var displayName: String {
             switch self {
             case .dashboard: return "Dashboard"
-            case .policies: return "Policies"
+            case .policies: return "Proxy & Rules"
             case .connections: return "Activity"
             case .analysis: return "Analysis"
             case .topology: return "Topology"
@@ -57,7 +61,10 @@ class AppState: ObservableObject {
     }
 
     // Statistics
-    @Published var activeConnectionsCount = 0
+    @Published var activeConnectionsCount: Int? = 0
+    var isSyncingStatus = false
+    @Published private(set) var operationStatus: OperationStatus?
+    @Published private(set) var lastOperationError: String?
 
     let clashController = ClashController.shared
     let clashViewModel = ClashViewModel.shared
@@ -83,6 +90,36 @@ class AppState: ObservableObject {
                     self.syncStatus()
                 }
             }
+    }
+
+    var isPerformingNetworkOperation: Bool {
+        operationStatus != nil
+    }
+
+    func beginOperation(_ title: String) -> Bool {
+        guard operationStatus == nil, !clashViewModel.isToggling else {
+            clashViewModel.addLog("[AppState] Ignored \(title) while \(operationStatus?.title ?? "another operation") is in progress", level: .warning)
+            return false
+        }
+
+        lastOperationError = nil
+        operationStatus = OperationStatus(title: title)
+        return true
+    }
+
+    func clearOperationError() { lastOperationError = nil }
+
+    func reportError(_ error: String) {
+        lastOperationError = error
+        clashViewModel.addLog(error, level: .error)
+    }
+
+    func finishOperation(error: String? = nil) {
+        operationStatus = nil
+        lastOperationError = error
+        if let error {
+            clashViewModel.addLog("[AppState] \(error)", level: .error)
+        }
     }
 
     // Implementation moved to AppState+*.swift extensions.

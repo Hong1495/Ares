@@ -80,7 +80,18 @@ class ClashViewModel: ObservableObject {
         guard !isToggling else { return }
         isToggling = true
         defer { isToggling = false }
-        await stopCore(intendedRestart: intendedRestart)
+        if !intendedRestart {
+            guard await SystemProxyManager.shared.setSystemProxy(enabled: false) else {
+                AppState.shared.reportError(SystemProxyManager.shared.lastError ?? "Proxy restoration failed; core kept running.")
+                return
+            }
+            AppState.shared.systemProxyEnabled = false
+        }
+        guard await stopCore(intendedRestart: intendedRestart) else {
+            AppState.shared.reportError("Core could not stop. The process was retained for recovery.")
+            return
+        }
+        if !intendedRestart { await NetworkMITMService.shared.stop() }
     }
     
     /// Internal methods for core operations - NO GATING
@@ -90,6 +101,7 @@ class ClashViewModel: ObservableObject {
         ClashController.shared.updatePort(tunEnabled: tunEnabled)
 
         runtimeState = .launching
+        AppState.shared.activeConnectionsCount = nil
         let started = await ClashServiceActor.shared.start(isRestart: isRestart)
 
         guard started else {
@@ -110,15 +122,24 @@ class ClashViewModel: ObservableObject {
             runtimeState = .running
         } else {
             isRunning = false
-            runtimeState = .failed("Clash API did not become ready")
+            let stopped = await ClashServiceActor.shared.stop()
+            runtimeState = .failed(stopped ? "Clash API did not become ready" : "API timeout; core stop also failed")
         }
     }
     
-    func stopCore(intendedRestart: Bool = false) async {
+    @discardableResult
+    func stopCore(intendedRestart: Bool = false) async -> Bool {
         runtimeState = .stopping
+        ClashController.shared.runtimeGeneration = UUID()
+        AppState.shared.activeConnectionsCount = nil
         self.isRunning = false
-        await ClashServiceActor.shared.stop(intendedRestart: intendedRestart)
+        guard await ClashServiceActor.shared.stop(intendedRestart: intendedRestart) else {
+            runtimeState = .failed("Core stop failed; process may still be active")
+            return false
+        }
+        AppState.shared.activeConnectionsCount = 0
         runtimeState = .stopped
+        return true
     }
     
     func restart() async {
@@ -127,7 +148,7 @@ class ClashViewModel: ObservableObject {
         isToggling = true
         defer { isToggling = false }
         
-        await stopCore(intendedRestart: true)
+        guard await stopCore(intendedRestart: true) else { return }
         await startCore(isRestart: true)
     }
     

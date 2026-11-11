@@ -19,6 +19,7 @@ struct ClashConfig: Codable {
     var logLevel: String = "info"
     var allowLan: Bool = false
     var ipv6: Bool = true
+    var dnsServers: [String] = ["223.5.5.5", "119.29.29.29"]
 
     // External controller
     var externalController: String = "127.0.0.1:\(ClashPorts.apiNormal)"
@@ -92,6 +93,13 @@ struct ClashConfig: Codable {
             self.ipv6 = defaults.bool(forKey: DefaultsKeys.ipv6)
             self.logLevel = defaults.string(forKey: DefaultsKeys.logLevel) ?? "info"
             self.mitmEnabled = defaults.bool(forKey: DefaultsKeys.mitmEnabled)
+            let savedDNSServers = (defaults.string(forKey: DefaultsKeys.dnsServers) ?? "")
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            if !savedDNSServers.isEmpty {
+                self.dnsServers = savedDNSServers
+            }
 
             // Mode is usually managed by AppState, but we load initial here
             if let modeStr = defaults.string(forKey: DefaultsKeys.clashMode), let m = Mode(rawValue: modeStr) {
@@ -172,9 +180,26 @@ struct ClashConfig: Codable {
             """
             }
 
-            // Only add our DNS config if subscription doesn't have one
-            if !skipDNS {
+            // Only add our sniffer config if subscription doesn't have one
+            if !skipSniffer {
                 yaml += """
+
+            # Sniffer Configuration
+            sniffer:
+              enable: true
+              sniff:
+                TLS:
+                  ports: [443, 8443]
+                HTTP:
+                  ports: [80, 8080-8880]
+            """
+            }
+        }
+
+        // The DNS settings are shared by normal and TUN configurations.
+        if !skipDNS {
+            let dnsEntries = dnsServers.map { "    - \($0)" }.joined(separator: "\n")
+            yaml += """
 
             # DNS Configuration
             dns:
@@ -190,13 +215,9 @@ struct ClashConfig: Codable {
                 - "localhost"
                 - "*.localhost"
               default-nameserver:
-                - 223.5.5.5
-                - 119.29.29.29
+            \(dnsEntries)
               nameserver:
-                - 223.5.5.5
-                - 119.29.29.29
-                - 114.114.114.114
-                - https://dns.alidns.com/dns-query
+            \(dnsEntries)
               fallback:
                 - https://dns.alidns.com/dns-query
                 - https://doh.pub/dns-query
@@ -208,22 +229,6 @@ struct ClashConfig: Codable {
                 ipcidr:
                   - 240.0.0.0/4
             """
-            }
-
-            // Only add our sniffer config if subscription doesn't have one
-            if !skipSniffer {
-                yaml += """
-
-            # Sniffer Configuration
-            sniffer:
-              enable: true
-              sniff:
-                TLS:
-                  ports: [443, 8443]
-                HTTP:
-                  ports: [80, 8080-8880]
-            """
-            }
         }
 
         // NOTE: MITM integration is handled by ConfigService.injectMITMConfig()

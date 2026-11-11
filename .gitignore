@@ -12,3 +12,19 @@ DerivedData/
 *.crt
 .env
 .env.local
+
+# Python test caches
+__pycache__/
+*.pyc
+# Never commit update signing exports
+*.private-key
+
+# Local build products and assistant instructions
+/build/
+/artifacts/
+/AGENTS.md
+/CLAUDE.md
+/agent.md
+/claude.md
+/.claude/
+/.codex/

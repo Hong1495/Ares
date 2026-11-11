@@ -46,7 +46,7 @@ actor ConfigService {
             await MainActor.run {
                 ClashViewModel.shared.addLog("[Config] No active profile, using safe fallback", level: .debug)
             }
-            try await buildSafeFallbackConfig()
+            try await buildSafeFallbackConfig(tunEnabled: tunEnabled)
             return
         }
         
@@ -69,7 +69,7 @@ actor ConfigService {
             let mitm = NetworkMITMService.shared
             let defaults = UserDefaults.standard
             return (
-                mitm.isRunning,
+                mitm.isRunning && mitm.routingEnabled,
                 Int(mitm.currentPort),
                 defaults.string(forKey: DefaultsKeys.bypassRules) ?? "",
                 defaults.string(forKey: DefaultsKeys.localRules) ?? "",
@@ -94,8 +94,8 @@ actor ConfigService {
         // Build base Clash config with TUN setting (MainActor required for ClashConfig)
         let baseConfig = await MainActor.run {
             var clashConfig = ClashConfig(fromUserDefaults: true)
+            clashConfig.enableTun = tunEnabled
             if tunEnabled {
-                clashConfig.enableTun = true
                 clashConfig.skipDNS = false         // Always use our DNS
                 clashConfig.skipSniffer = false     // Always use our Sniffer
             }
@@ -395,20 +395,19 @@ actor ConfigService {
     }
 
     /// Build a safe fallback config when no profile is available
-    func buildSafeFallbackConfig() async throws {
+    func buildSafeFallbackConfig(tunEnabled: Bool = false) async throws {
         await MainActor.run {
             ClashViewModel.shared.addLog("[Config] ⚠️ No active profile found. Using safe fallback (Empty Config).")
         }
         
-        // Use default path (User mode) for fallback if not specified? 
-        // Actually fallback usually happens when no profile. We should assume User mode default?
-        // Let's assume User mode for fallback safety.
-        let targetPath = getConfigPath(tunEnabled: false)
-        let targetDir = getConfigDir(tunEnabled: false)
+        // Use the requested mode even before the preference has been committed.
+        let targetPath = getConfigPath(tunEnabled: tunEnabled)
+        let targetDir = getConfigDir(tunEnabled: tunEnabled)
         try? await fileManager.createDirectoryIfNeeded(at: targetDir)
         
         let configYAML = await MainActor.run {
-            let clashConfig = ClashConfig(fromUserDefaults: true)
+            var clashConfig = ClashConfig(fromUserDefaults: true)
+            clashConfig.enableTun = tunEnabled
             return clashConfig.toYAML()
         }
         

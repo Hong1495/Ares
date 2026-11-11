@@ -7,21 +7,19 @@ extension ClashController {
             throw NSError(domain: "ClashController", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])
         }
 
-        let (data, _) = try await URLSession.shared.data(from: url)
-        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        return json ?? [:]
+        let (data, response) = try await URLSession.shared.data(for: URLRequest(url: url, timeoutInterval: 5))
+        try CoreAPIContract.requireSuccess(response)
+        return try CoreAPIContract.connections(data)
     }
 
     /// Monitor active connections and update topology data
     func monitorConnections() async {
+        let generation = runtimeGeneration
         do {
-            guard let url = URL(string: "\(baseURL)/connections") else { return }
-            let (data, _) = try await URLSession.shared.data(from: url)
-
-            guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-                  let connections = json["connections"] as? [[String: Any]] else {
-                return
-            }
+            let json = try await fetchConnections()
+            guard generation == runtimeGeneration, ClashViewModel.shared.isRunning, !ClashViewModel.shared.isToggling,
+                  let connections = json["connections"] as? [[String: Any]] else { return }
+            AppState.shared.activeConnectionsCount = connections.count
 
             var newChains: [ConnectionChain] = []
 
@@ -86,6 +84,8 @@ extension ClashController {
             }
 
         } catch {
+            guard generation == runtimeGeneration else { return }
+            AppState.shared.activeConnectionsCount = ClashViewModel.shared.isRunning ? nil : 0
             ClashViewModel.shared.addLog("[ClashController] ⚠️ Failed to get connections: \(error)")
         }
     }

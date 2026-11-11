@@ -20,17 +20,17 @@ struct CodeView: View {
                         .foregroundColor(.secondary)
                     TextField("Search code...", text: $searchText)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 12))
+                        .font(DS.Typography.secondary)
                 }
                 .padding(6)
-                .background(Color(nsColor: .controlBackgroundColor))
+                .background(DS.surface)
                 .cornerRadius(6)
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.2)))
 
                 Spacer()
 
                 Text(lang.uppercased())
-                    .font(.system(size: 10, weight: .bold))
+                    .font(DS.Typography.caption.weight(.semibold))
                     .foregroundColor(.secondary)
                     .padding(4)
                     .background(Color.secondary.opacity(0.1))
@@ -43,19 +43,19 @@ struct CodeView: View {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { isCopied = false }
                 } label: {
                     Label(isCopied ? "Copied" : "Copy", systemImage: isCopied ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 11))
+                        .font(DS.Typography.metadata)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
             }
             .padding(8)
-            .background(Color(nsColor: .windowBackgroundColor))
+            .background(DS.canvas)
 
             Divider()
 
             ScrollView {
                 Text(highlightedCode)
-                    .font(.system(size: 13, design: .monospaced))
+                    .font(DS.Typography.body.monospaced())
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding()

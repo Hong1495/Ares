@@ -1,127 +1,101 @@
 import SwiftUI
+import AppKit
 
 struct MainView: View {
+    @ObservedObject private var appUpdates = AppUpdateService.shared
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var clashViewModel: ClashViewModel
+    @EnvironmentObject private var clashController: ClashController
+    @Environment(\.openWindow) private var openWindow
+
+    private var destinations: [WorkspaceDestination] {
+        DSSidebarSection.all.flatMap { section in
+            section.items.map { item in
+                WorkspaceDestination(id: item.displayName, title: item.displayName, icon: item.sidebarIcon, section: section.id)
+            }
+        } + [WorkspaceDestination(id: "Settings", title: "Settings", icon: "slider.horizontal.3", section: "Preferences")]
+    }
 
     var body: some View {
-        NavigationSplitView {
-            List(selection: Binding(
-                get: { appState.selection },
-                set: { newValue in
-                    if let val = newValue {
-                        appState.selection = val
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            WorkspaceSidebar(
+                destinations: destinations,
+                selection: Binding(
+                    get: { appState.selection.displayName },
+                    set: { title in
+                        let items = DSSidebarSection.all.flatMap(\.items) + [.settings]
+                        if let item = items.first(where: { $0.displayName == title }) { appState.selection = item }
                     }
-                }
-            )) {
-                // Group 1: General (No Header)
-                Section {
-                    NavigationLink(value: AppState.NavigationItem.dashboard) {
-                        Label {
-                            Text("Dashboard")
-                        } icon: {
-                            Image(systemName: "square.grid.2x2")
-                                .imageScale(.medium)
-                                .fontWeight(.light)
-                                .frame(width: 20)
-                        }
-                    }
-
-                    NavigationLink(value: AppState.NavigationItem.connections) {
-                        Label {
-                            Text("Activity")
-                        } icon: {
-                            Image(systemName: "arrow.up.arrow.down")
-                                .imageScale(.medium)
-                                .fontWeight(.light)
-                                .frame(width: 20)
-                        }
-                    }
-
-                    NavigationLink(value: AppState.NavigationItem.logs) {
-                        Label {
-                            Text("Logs")
-                        } icon: {
-                            Image(systemName: "terminal")
-                                .imageScale(.medium)
-                                .fontWeight(.light)
-                                .frame(width: 20)
-                        }
-                    }
-                }
-
-                // Group 2: Proxy
-                Section("Proxy") {
-                    NavigationLink(value: AppState.NavigationItem.policies) {
-                        Label {
-                            Text("Policies")
-                        } icon: {
-                            Image(systemName: "hand.tap")
-                                .imageScale(.medium)
-                                .fontWeight(.light)
-                                .frame(width: 20)
-                        }
-                    }
-                }
-
-                // Group 3: Visualization
-                Section("Visualization") {
-                    NavigationLink(value: AppState.NavigationItem.topology) {
-                        Label("Topology", systemImage: "arrow.triangle.pull")
-                    }
-                    NavigationLink(value: AppState.NavigationItem.routeMap) {
-                        Label("Routing", systemImage: "map")
-                    }
-                }
-
-                // Group 4: DevTools
-                Section("DevTools") {
-                    NavigationLink(value: AppState.NavigationItem.analysis) {
-                        Label {
-                            Text("Analysis")
-                        } icon: {
-                            Image(systemName: "chart.bar")
-                                .imageScale(.medium)
-                                .fontWeight(.light)
-                                .frame(width: 20)
-                        }
-                    }
-                }
-
-                // Group 5: Config
-                Section("Config") {
-                    NavigationLink(value: AppState.NavigationItem.settings) {
-                        Label {
-                            Text("Settings")
-                        } icon: {
-                            Image(systemName: "gear")
-                                .imageScale(.medium)
-                                .fontWeight(.light)
-                                .frame(width: 20)
-                        }
-                    }
-                }
-            }
-            .listStyle(.sidebar)
-            .navigationTitle(appState.selection.displayName)
+                ),
+                status: clashViewModel.runtimeState.title,
+                detail: appState.currentMode.displayLabel,
+                statusKind: runtimeStatus
+            )
+            .toolbar { AresSidebarToolbar(visibility: $columnVisibility) }
+            .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 250)
         } detail: {
-            switch appState.selection {
-            case .dashboard:
-                DashboardView()
-            case .policies:
-                PoliciesView()
-            case .connections:
-                ConnectionsView()
-            case .topology:
-                TopologyPageView()
-            case .routeMap:
-                RouteMapPageView()
-            case .analysis:
-                AnalysisView()
-            case .logs:
-                LogsView()
-            case .settings:
-                SettingsView()
-            }
+            detail
+                .frame(minWidth: 680, minHeight: 540)
+                .background(DS.canvas)
+                .navigationTitle(appState.selection.displayName)
+        }
+        .background(SidebarToolbarAppearance())
+        .background(WindowUpdateIndicator(version: appUpdates.availableVersion, action: appUpdates.checkForUpdates))
+        .alert("Operation failed", isPresented: Binding(
+            get: { appState.lastOperationError != nil },
+            set: { if !$0 { appState.clearOperationError() } }
+        )) {
+            Button("OK") { appState.clearOperationError() }
+        } message: {
+            Text(appState.lastOperationError ?? "")
+        }
+        .tint(DS.accent)
+        .onAppear { WindowAccessor.openWindow = openWindow }
+    }
+
+    private var runtimeStatus: DSStatus {
+        switch clashViewModel.runtimeState {
+        case .running, .apiReady: return .good
+        case .launching, .processRunning, .stopping: return .warning
+        case .failed: return .critical
+        case .stopped: return .idle
+        }
+    }
+
+    // MARK: - Detail
+
+    @ViewBuilder
+    private var detail: some View {
+        switch appState.selection {
+        case .dashboard:
+            DashboardView()
+        case .policies:
+            PoliciesView()
+        case .connections:
+            ConnectionsView()
+        case .topology:
+            TopologyPageView()
+        case .routeMap:
+            RouteMapPageView()
+        case .analysis:
+            AnalysisView()
+        case .logs:
+            LogsView()
+        case .settings:
+            SettingsView()
+        }
+    }
+}
+
+// MARK: - Mode label
+
+extension ClashConfig.Mode {
+    var displayLabel: String {
+        switch self {
+        case .rule: return "Rule mode"
+        case .global: return "Global mode"
+        case .direct: return "Direct mode"
         }
     }
 }

@@ -13,7 +13,7 @@ struct InspectorView: View {
                 Spacer()
                 if request.hitCount > 1 {
                     Text("\(request.hitCount) hits")
-                        .font(.system(size: 10, weight: .bold))
+                        .font(DS.Typography.caption.weight(.semibold))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(Color.orange.opacity(0.15))
@@ -66,7 +66,7 @@ struct InspectorView: View {
                     if let error = request.errorMessage {
                         DetailSection(title: "Error Log") {
                             Text(error)
-                                .font(.system(size: 11, design: .monospaced))
+                                .font(DS.Typography.metadata.monospaced())
                                 .foregroundStyle(.red)
                                 .padding(8)
                                 .background(Color.red.opacity(0.05))
@@ -93,11 +93,11 @@ struct HeaderListView: View {
             ForEach(headers.sorted(by: { $0.key < $1.key }), id: \.key) { key, value in
                 HStack(alignment: .top) {
                     Text(key)
-                        .font(.system(size: 10, weight: .bold))
+                        .font(DS.Typography.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .frame(width: 100, alignment: .leading)
                     Text(value)
-                        .font(.system(size: 10))
+                        .font(DS.Typography.caption)
                         .foregroundStyle(.primary)
                         .textSelection(.enabled)
                 }
@@ -136,7 +136,7 @@ struct DetailSection<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title.uppercased())
-                .font(.system(size: 10, weight: .bold))
+                .font(DS.Typography.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             content
         }
@@ -152,7 +152,7 @@ struct DetailRow: View {
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
             Text(value)
-                .font(.system(size: 11))
+                .font(DS.Typography.metadata)
                 .textSelection(.enabled)
                 .lineLimit(5)
         }

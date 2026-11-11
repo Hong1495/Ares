@@ -1,7 +1,7 @@
 import Foundation
 
 /// Service for converting subscription content to Clash YAML
-class SubscriptionConverter {
+nonisolated final class SubscriptionConverter {
 
     /// Convert Base64 encoded subscription content to Clash YAML
     /// Returns nil if conversion is not possible or not needed

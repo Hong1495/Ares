@@ -9,71 +9,14 @@ class PrivilegeService {
 
     /// Check if we have password-less sudo access (Async)
     func checkPrivileges() async -> Bool {
-        // Run blocking checks on background thread
         let clashPath = await CoreManager.shared.activeBinaryPath()
-        return await Task.detached(priority: .userInitiated) {
-            guard FileManager.default.isExecutableFile(atPath: clashPath) else { return false }
-
-            let pkillPath = "/usr/bin/pkill"
-
-            // Check 1: Clash Binary
-            let t1 = Process()
-            t1.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
-            t1.arguments = ["-n", clashPath, "-v"]
-            // redirect output to null to keep logs clean
-            t1.standardOutput = Pipe()
-            t1.standardError = Pipe()
-            try? t1.run()
-            t1.waitUntilExit()
-            if t1.terminationStatus != 0 { return false }
-
-            // Check 2: Pkill (Test with safe argument)
-            // Note: sudo -n returns 1 if password needed. pkill returns 1 if no match found.
-            // We MUST distinguish between these two "1"s.
-            let t2 = Process()
-            t2.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
-            t2.arguments = ["-n", pkillPath, "-f", "ares_dummy_process_check_12345"]
-
-            let pipeErr = Pipe()
-            t2.standardError = pipeErr
-            t2.standardOutput = Pipe() // Silence stdout
-
-            try? t2.run()
-            t2.waitUntilExit()
-
-            let errData = pipeErr.fileHandleForReading.readDataToEndOfFile()
-            if let errStr = String(data: errData, encoding: .utf8)?.lowercased() {
-                 // Sudo error messages usually contain "password" or "sorry"
-                 if errStr.contains("password") || errStr.contains("sorry") {
-                     return false
-                 }
-            }
-
-
-            // Check 3: LSOF (Critical for port checking)
-            // If this fails (return 1 and "password" in stderr), we must reinstall sudoers.
-            let t3 = Process()
-            t3.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
-            // lsof -v is safe and fast
-            t3.arguments = ["-n", "/usr/sbin/lsof", "-v"]
-
-            let pipeErr3 = Pipe()
-            t3.standardError = pipeErr3
-            t3.standardOutput = Pipe() // Silence stdout
-
-            try? t3.run()
-            t3.waitUntilExit()
-
-            let errData3 = pipeErr3.fileHandleForReading.readDataToEndOfFile()
-            if let errStr = String(data: errData3, encoding: .utf8)?.lowercased() {
-                 if errStr.contains("password") || errStr.contains("sorry") {
-                     return false
-                 }
-            }
-
-            // If we got here, sudo didn't complain about password.
-            return true
-        }.value
+        guard FileManager.default.isExecutableFile(atPath: clashPath) else { return false }
+        let runner = ProcessManager()
+        // Read-only permission checks; never use pkill as a capability probe.
+        for arguments in [["-n", clashPath, "-v"], ["-n", "/usr/sbin/lsof", "-v"]] {
+            guard let result = try? await runner.run(executable: "/usr/bin/sudo", arguments: arguments, timeout: 5), result.exitCode == 0 else { return false }
+        }
+        return true
     }
 
     /// Verify that the sudoers file contains the correct clash-meta binary path.
@@ -181,7 +124,6 @@ class PrivilegeService {
         // Determine correct path for networksetup
         let networksetupPath = SudoersEscaper.commandPath("/usr/sbin/networksetup")
         let clashSudoersPath = SudoersEscaper.commandPath(clashPath)
-        let pkillPath = SudoersEscaper.commandPath("/usr/bin/pkill")
         let lsofPath = SudoersEscaper.commandPath("/usr/sbin/lsof")
 
         let scriptContent = """
@@ -205,8 +147,6 @@ class PrivilegeService {
         # Ares Proxy Rules
         \(username) ALL=(root) NOPASSWD: \(networksetupPath)
         \(username) ALL=(root) NOPASSWD: \(clashSudoersPath)
-        \(username) ALL=(root) NOPASSWD: /bin/kill
-        \(username) ALL=(root) NOPASSWD: \(pkillPath)
         \(username) ALL=(root) NOPASSWD: \(lsofPath)
         ARES_SUDOERS
 

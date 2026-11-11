@@ -17,10 +17,52 @@ final class SettingsViewSourceTests: XCTestCase {
     func testDashboardGridUsesAdaptiveColumns() throws {
         let source = try String(contentsOf: projectRoot.appendingPathComponent("Ares/UI/DashboardView.swift"))
 
-        XCTAssertTrue(source.contains("GridItem(.adaptive(minimum: 260, maximum: 420), spacing: 16)"))
-        XCTAssertTrue(source.contains("GridItem(.adaptive(minimum: 180), spacing: 12)"))
+        // Cards must reflow with the window rather than using a hardcoded column count.
+        let presentation = try String(contentsOf: projectRoot.appendingPathComponent("Ares/UI/DesignSystem/OverviewPresentation.swift"))
+        XCTAssertTrue(source.contains("DashboardComposition("))
+        XCTAssertTrue(presentation.contains("geometry.size.width >= 850 ? 3 : 2"))
+        XCTAssertFalse(source.contains("showAdvanced"))
+        XCTAssertFalse(source.contains("DisclosureGroup"))
         XCTAssertFalse(source.contains("[GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]"))
         XCTAssertFalse(source.contains("Divider().frame(height: 44)"))
+    }
+
+    func testDashboardCardsDoNotHardcodeHeights() throws {
+        let components = projectRoot.appendingPathComponent("Ares/UI/Components")
+        let cards = [
+            "DashboardCurrentProxyCard.swift",
+            "DashboardDNSConfigCard.swift",
+            "DashboardMITMConfigCard.swift",
+            "SubscriptionCard.swift",
+            "ExitIdentityCard.swift",
+            "ConnectivityCard.swift"
+        ]
+
+        for card in cards {
+            let source = try String(
+                contentsOf: components.appendingPathComponent(card),
+                encoding: .utf8
+            )
+            XCTAssertFalse(
+                source.contains(".frame(height: 150)"),
+                "\(card) must size to its content instead of a fixed 150pt height"
+            )
+            XCTAssertTrue(
+                source.contains("DSCard"),
+                "\(card) should use the shared card surface"
+            )
+        }
+    }
+
+    func testDesignSystemDefinesSemanticColors() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Ares/UI/DesignSystem/DesignSystem.swift")
+        )
+
+        XCTAssertTrue(source.contains("static let seriesDown"))
+        XCTAssertTrue(source.contains("static let seriesUp"))
+        XCTAssertTrue(source.contains("static func latency("))
+        XCTAssertTrue(source.contains("static func adaptive("))
     }
 
     func testAppRunsAsMenuBarAgent() throws {
@@ -53,5 +95,39 @@ final class SettingsViewSourceTests: XCTestCase {
         }
 
         XCTAssertTrue(offenders.isEmpty, "Unexpected console print calls: \(offenders.joined(separator: ", "))")
+    }
+
+    func testProxyStartsCoreBeforeEnablingSystemProxy() throws {
+        let source = try String(contentsOf: projectRoot.appendingPathComponent("Ares/Services/AppState+Proxy.swift"))
+        let start = try XCTUnwrap(source.range(of: "await clashViewModel.start()"))
+        let proxy = try XCTUnwrap(source.range(of: "setSystemProxy(enabled: newState"))
+        XCTAssertLessThan(start.lowerBound, proxy.lowerBound)
+        XCTAssertTrue(source.contains("systemProxyManager.lastError"))
+        XCTAssertFalse(source.contains("previous network state was kept"))
+    }
+
+    func testConfigMutationsValidateHTTPStatus() throws {
+        let source = try String(contentsOf: projectRoot.appendingPathComponent("Ares/Services/ClashController+Config.swift"))
+        XCTAssertTrue(source.contains("validateMutationResponse"))
+        XCTAssertTrue(source.contains("200...299"))
+    }
+
+    func testSettingsUseRuntimeMITMAndSharedDNSPreference() throws {
+        let settings = try String(contentsOf: projectRoot.appendingPathComponent("Ares/UI/SettingsView.swift"))
+        let config = try String(contentsOf: projectRoot.appendingPathComponent("Ares/Models/ClashConfig.swift"))
+        XCTAssertTrue(settings.contains("@AppStorage(DefaultsKeys.dnsServers)"))
+        XCTAssertFalse(settings.contains("@AppStorage(DefaultsKeys.mitmEnabled)"))
+        XCTAssertTrue(config.contains("DefaultsKeys.dnsServers"))
+    }
+
+    func testDataPagesExposeEmptyStatesAndRoutingDisclosure() throws {
+        let analysis = try String(contentsOf: projectRoot.appendingPathComponent("Ares/UI/AnalysisView.swift"))
+        let logs = try String(contentsOf: projectRoot.appendingPathComponent("Ares/UI/LogsView.swift"))
+        let activity = try String(contentsOf: projectRoot.appendingPathComponent("Ares/UI/ConnectionsView.swift"))
+        let routing = try String(contentsOf: projectRoot.appendingPathComponent("Ares/UI/RouteMapPageView.swift"))
+        XCTAssertTrue(analysis.contains("ContentUnavailableView"))
+        XCTAssertTrue(logs.contains("ContentUnavailableView"))
+        XCTAssertTrue(activity.contains("ContentUnavailableView"))
+        XCTAssertTrue(routing.contains("endpoint positions are not geolocated"))
     }
 }

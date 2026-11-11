@@ -1,65 +1,56 @@
 # Ares
 
-A modern macOS proxy client powered by [mihomo](https://github.com/MetaCubeX/mihomo) (Clash Meta).
+A native macOS proxy client and network inspector, built with SwiftUI and powered by [mihomo](https://github.com/MetaCubeX/mihomo).
+
+## Download
+
+Get the latest DMG from [Releases](https://github.com/Hong1495/Ares/releases/latest), choosing **arm64** for Apple Silicon or **x86_64** for Intel. Move Ares to Applications before opening it.
+
+Requires macOS 14 or later. Current distributions use ad-hoc code signing and signed update archives; they are not Apple-notarized. macOS may require approval in System Settings → Privacy & Security for the first launch.
 
 ## Features
 
-- SOCKS5 / HTTP / Mixed proxy modes
-- TUN mode (virtual network interface)
-- MITM domain filtering
-- Custom routing rules with DNS fallback
-- Multiple profiles with subscription support
-- Dynamic menu bar icon with latency display
-- Configurable keep-alive, UDP timeout, MTU
+- Native sidebar, dashboard, traffic charts and menu-bar controls.
+- HTTP, SOCKS5 and mixed proxy ports, plus TUN mode.
+- Remote subscriptions, local profiles, node selection and latency checks.
+- Routing rules, DNS settings, active connections and topology views.
+- Optional MITM inspection and certificate management.
+- Automatic update checks, manual checks and an orange update indicator next to the window controls. Downloads and installation are user initiated.
 
-## Requirements
+Import a Clash-compatible profile in Proxy & Rules, select a node, then enable the connection mode you need. TUN and system proxy operations may request administrator authorization. MITM is optional and requires explicit certificate setup.
 
-- macOS 14.0 or later
-- Apple Silicon (arm64)
+## Development
 
-## Build
+Use Xcode 26.2 or later (Swift 6.2 compiler). Build without running the production app:
 
-No Apple Developer account required.
-
-```bash
+```sh
 git clone https://github.com/Hong1495/Ares.git
 cd Ares
-
-# Build (Debug, unsigned)
-xcodebuild -project Ares.xcodeproj \
-  -scheme Ares \
-  -configuration Debug \
-  build \
-  CODE_SIGNING_ALLOWED=NO \
-  CODE_SIGNING_REQUIRED=NO
-
-# Run tests
-xcodebuild -project Ares.xcodeproj \
-  -scheme Ares \
-  -configuration Debug \
-  -destination 'platform=macOS,arch=arm64' \
-  test \
-  CODE_SIGNING_ALLOWED=NO \
-  CODE_SIGNING_REQUIRED=NO
+xcodebuild -project Ares.xcodeproj -scheme Ares -configuration Debug \
+  -derivedDataPath .build/DerivedData CODE_SIGNING_ALLOWED=NO build
 ```
 
-The built app will be at `./build/Debug/Ares.app`. Move it to `/Applications` to use.
+The app is at `.build/DerivedData/Build/Products/Debug/Ares.app`. Sparkle's pinned binary dependency is downloaded from its official release. Release packaging supplies the matching architecture's mihomo core.
 
-> **Note:** If you see a "damaged" warning on launch, run:
-> `xattr -cr /Applications/Ares.app`
+For interface development, use the isolated executable:
 
-## Configuration
-
-Place your Clash-compatible `config.yaml` in:
-
-```
-~/Library/Application Support/Ares/clash_user/config.yaml
+```sh
+scripts/preview-ui.sh --open
 ```
 
-## Credits
+It shares presentation components with Ares and uses mock data. It does not start a core or change system networking. This enables UI work while your current proxy remains in use.
 
-Powered by [mihomo](https://github.com/MetaCubeX/mihomo) (Clash Meta), licensed under GPLv3.
+```sh
+scripts/test-safe-functions.sh
+python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+```
 
-## License
+Read [development/testing](docs/development/testing.md) before testing live services. Production startup, shutdown, TUN, certificate and update-installation tests belong in a disposable VM. See [app updates](docs/diagnostics/app-updates.md) for signed release configuration and fork setup.
 
-MIT — see [LICENSE](LICENSE) for details.
+## Release status
+
+Version 1.0.0 introduces the redesigned interface, guarded network lifecycle, validated subscription updates and signed app updates. Compilation and isolated tests are covered by CI. Full live-network and in-place update acceptance on both architectures is still pending; see [functional verification](docs/diagnostics/functional-audit.md).
+
+## License and credits
+
+Ares source code is [MIT licensed](LICENSE). Bundled components retain their own licenses; see [Third-party notices](THIRD_PARTY_NOTICES.md). In particular, mihomo is a separate GPLv3 executable. Releases include the exact upstream source archive and GPL license for the bundled version. Sparkle is distributed under its upstream license.

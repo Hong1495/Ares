@@ -44,126 +44,12 @@ struct ProxiesView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header: Mode + Search + Sort
-            VStack(spacing: 16) {
-                HStack(spacing: 16) {
-                    // Mode selector
-                    Picker("Mode", selection: $selectedTab) {
-                        ForEach(ProxyTab.allCases) { tab in
-                            Text(tab.rawValue).tag(tab)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 240)
-
-                    Spacer()
-
-                    // Sort picker
-                    HStack(spacing: 6) {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
-                            .foregroundStyle(.secondary)
-                            .font(.system(size: 12))
-                        Picker("Sort", selection: $sortMode) {
-                            ForEach(SortMode.allCases) { mode in
-                                Text(mode.rawValue).tag(mode)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .frame(width: 100)
-                        .labelsHidden()
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.primary.opacity(0.05))
-                    .cornerRadius(8)
-                }
-
-                // Search bar
-                HStack(spacing: 10) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
-                        .font(.system(size: 13, weight: .medium))
-
-                    TextField("Search among \(clashController.proxyNodes.count) nodes...", text: $searchText)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 13))
-
-                    if !searchText.isEmpty {
-                        Button {
-                            withAnimation { searchText = "" }
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary.opacity(0.8))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(Color.primary.opacity(0.04))
-                .cornerRadius(10)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color.primary.opacity(0.06), lineWidth: 1)
-                )
-            }
-            .padding()
-            .background(Color(nsColor: .windowBackgroundColor))
+            toolbar
 
             Divider()
 
-            // Content
             ScrollView(showsIndicators: false) {
-                if selectedTab == .direct {
-                    VStack(spacing: 12) {
-                        Image(systemName: "arrow.turn.up.right")
-                            .font(.system(size: 48, weight: .medium))
-                            .foregroundStyle(.green)
-                        Text("Direct Connection")
-                            .font(.title2)
-                            .fontWeight(.medium)
-                        Text("All traffic goes directly")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(60)
-                } else if filteredGroups.isEmpty {
-                    VStack(spacing: 12) {
-                        Image(systemName: "network.slash")
-                            .font(.system(size: 48, weight: .medium))
-                            .foregroundStyle(.secondary)
-                        Text("No proxy groups available")
-                            .foregroundStyle(.secondary)
-                        Text("Start Clash to see proxies")
-                            .font(.footnote)
-                            .fontWeight(.medium)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(60)
-                } else {
-                    VStack(spacing: 16) {
-                        ForEach(filteredGroups) { group in
-                            SimpleProxyGroupCard(
-                                group: group,
-                                isExpanded: expandedGroups.contains(group.name) || !searchText.isEmpty, // Auto expand on search
-                                searchText: searchText,
-                                sortMode: sortMode,
-                                testingNodes: $testingNodes,
-                                onToggle: {
-                                    if expandedGroups.contains(group.name) {
-                                        expandedGroups.remove(group.name)
-                                    } else {
-                                        expandedGroups.insert(group.name)
-                                    }
-                                }
-                            )
-                        }
-                    }
-                    .padding()
-                }
+                content
             }
         }
         .task {
@@ -175,9 +61,105 @@ struct ProxiesView: View {
         }
     }
 
+    // MARK: - Toolbar
+
+    private var toolbar: some View {
+        HStack(spacing: DS.Space.md) {
+            Picker("Mode", selection: $selectedTab) {
+                ForEach(ProxyTab.allCases) { tab in
+                    Text(tab.rawValue).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.small)
+            .fixedSize()
+
+            TextField("Search nodes", text: $searchText)
+                .textFieldStyle(.roundedBorder)
+                .controlSize(.small)
+                .frame(width: 200)
+
+            Spacer(minLength: DS.Space.sm)
+
+            Menu {
+                ForEach(SortMode.allCases) { mode in
+                    Button {
+                        sortMode = mode
+                    } label: {
+                        if sortMode == mode {
+                            Label(mode.rawValue, systemImage: "checkmark")
+                        } else {
+                            Text(mode.rawValue)
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: DS.Space.xs) {
+                    Image(systemName: "arrow.up.arrow.down")
+                    Text(sortMode.rawValue)
+                }
+                .font(DS.Typography.metadata.weight(.medium))
+                .foregroundStyle(.secondary)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Sort nodes")
+
+            Text("\(clashController.proxyNodes.count) nodes")
+                .font(DS.Typography.metadata)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, DS.Space.lg)
+        .padding(.vertical, DS.Space.md)
+    }
+
+    // MARK: - Content
+
+    @ViewBuilder
+    private var content: some View {
+        if selectedTab == .direct {
+            ContentUnavailableView {
+                Label("Direct Connection", systemImage: "arrow.turn.up.right")
+            } description: {
+                Text("All traffic goes directly.")
+            }
+            .frame(maxWidth: .infinity, minHeight: 300)
+        } else if filteredGroups.isEmpty {
+            ContentUnavailableView {
+                Label("No proxy groups", systemImage: "network.slash")
+            } description: {
+                Text("Start Clash to see proxies.")
+            }
+            .frame(maxWidth: .infinity, minHeight: 300)
+        } else {
+            LazyVStack(spacing: DS.Space.md) {
+                ForEach(filteredGroups) { group in
+                    SimpleProxyGroupCard(
+                        group: group,
+                        isExpanded: expandedGroups.contains(group.name) || !searchText.isEmpty, // Auto expand on search
+                        searchText: searchText,
+                        sortMode: sortMode,
+                        testingNodes: $testingNodes,
+                        onToggle: {
+                            if expandedGroups.contains(group.name) {
+                                expandedGroups.remove(group.name)
+                            } else {
+                                expandedGroups.insert(group.name)
+                            }
+                        }
+                    )
+                }
+            }
+            .padding(DS.Space.lg)
+        }
+    }
 }
 
-// SIMPLE card - just like Clash Verge
+// MARK: - Group card
+
 struct SimpleProxyGroupCard: View {
     let group: ProxyGroup
     let isExpanded: Bool
@@ -189,137 +171,135 @@ struct SimpleProxyGroupCard: View {
     @EnvironmentObject var clashController: ClashController
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Header - clickable entire row
-            Button(action: {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        DSCard(padding: 0, spacing: 0, radius: DS.Radius.card) {
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                     onToggle()
                 }
-            }) {
-                HStack(spacing: 12) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.blue.opacity(0.12))
-                            .frame(width: 28, height: 28)
-                        Image(systemName: groupIcon)
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(.blue)
-                    }
-
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(group.name)
-                            .font(.system(size: 14, weight: .bold))
-                        Text(group.type)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    // Current selection
-                    if let now = group.now {
-                        Text(now)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(
-                                Capsule()
-                                    .fill(Color.blue)
-                                    .shadow(color: Color.blue.opacity(0.3), radius: 4, x: 0, y: 2)
-                            )
-                    }
-
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.secondary.opacity(0.5))
-                }
+            } label: {
+                headerRow
             }
             .buttonStyle(.plain)
 
             if isExpanded {
-                Divider()
+                Rectangle()
+                    .fill(Color(nsColor: .separatorColor).opacity(0.8))
+                    .frame(height: DS.hairline)
 
-                // Filter and Sort items
-                let filteredItems = group.all.filter { itemName in
-                    searchText.isEmpty || itemName.localizedCaseInsensitiveContains(searchText)
-                }
-
-                let sortedItems = filteredItems.sorted { a, b in
-                    switch sortMode {
-                    case .default:
-                        return false // Keep original order
-                    case .name:
-                        return a.localizedCaseInsensitiveCompare(b) == .orderedAscending
-                    case .delay:
-                        let delayA = clashController.proxyNodes[a]?.delay ?? 99999
-                        let delayB = clashController.proxyNodes[b]?.delay ?? 99999
-                        // Always keep direct/reject at top if they are in the group?
-                        // Actually let's just sort by delay.
-                        return delayA < delayB
-                    }
-                }
-
-                if !sortedItems.isEmpty {
-                    // Simple grid - just show all items
-                    let columns = [
-                        GridItem(.flexible(), spacing: 12),
-                        GridItem(.flexible(), spacing: 12),
-                        GridItem(.flexible(), spacing: 12),
-                        GridItem(.flexible(), spacing: 12)
-                    ]
-
-                    LazyVGrid(columns: columns, spacing: 12) {
-                        ForEach(sortedItems, id: \.self) { itemName in
-                            SimpleProxyButton(
-                                name: itemName,
-                                isSelected: group.now == itemName,
-                                delay: clashController.proxyNodes[itemName]?.delay,
-                                isTesting: testingNodes.contains(itemName),
-                                onSelect: {
-                                    Task {
-                                        do {
-                                            try await clashController.selectProxy(
-                                                group: group.name,
-                                                proxy: itemName
-                                            )
-                                            // Refresh proxy data to update UI
-                                            try? await clashController.fetchProxiesData()
-                                        } catch {
-                                            ClashViewModel.shared.addLog("[Proxies] Failed to select \(itemName): \(error.localizedDescription)", level: .warning)
-                                        }
-                                    }
-                                },
-                                onTest: {
-                                    testingNodes.insert(itemName)
-                                    Task {
-                                        _ = try? await clashController.testProxyDelay(name: itemName)
-                                        testingNodes.remove(itemName)
-                                    }
-                                }
-                            )
-                        }
-                    }
-                    .padding(.top, 8)
-                } else if !searchText.isEmpty {
-                    Text("No nodes matching \"\(searchText)\"")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding()
-                }
+                nodeGrid
             }
         }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(nsColor: .controlBackgroundColor))
-                .shadow(color: Color.black.opacity(0.03), radius: 8, x: 0, y: 4)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.primary.opacity(0.05), lineWidth: 1)
-        )
+    }
+
+    // MARK: Header
+
+    private var headerRow: some View {
+        HStack(spacing: DS.Space.sm + 2) {
+            Image(systemName: groupIcon)
+                .font(DS.Typography.metadata.weight(.semibold))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 22, height: 22)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color.accentColor.opacity(0.12))
+                )
+
+            Text(group.name)
+                .font(DS.Typography.body.weight(.semibold))
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            DSTag(text: group.type)
+
+            Spacer(minLength: DS.Space.sm)
+
+            if let now = group.now {
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(Color.accentColor)
+                        .frame(width: 5, height: 5)
+                    Text(now)
+                        .font(DS.Typography.metadata)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+
+            Image(systemName: "chevron.right")
+                .font(DS.Typography.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .rotationEffect(.degrees(isExpanded ? 90 : 0))
+        }
+        .padding(.horizontal, DS.Space.md)
+        .padding(.vertical, DS.Space.sm + 2)
+        .contentShape(Rectangle())
+    }
+
+    // MARK: Nodes
+
+    @ViewBuilder
+    private var nodeGrid: some View {
+        let filteredItems = group.all.filter { itemName in
+            searchText.isEmpty || itemName.localizedCaseInsensitiveContains(searchText)
+        }
+
+        let sortedItems = filteredItems.sorted { a, b in
+            switch sortMode {
+            case .default:
+                return false // Keep original order
+            case .name:
+                return a.localizedCaseInsensitiveCompare(b) == .orderedAscending
+            case .delay:
+                let delayA = clashController.proxyNodes[a]?.delay ?? 99999
+                let delayB = clashController.proxyNodes[b]?.delay ?? 99999
+                return delayA < delayB
+            }
+        }
+
+        if !sortedItems.isEmpty {
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 168), spacing: DS.Space.sm)],
+                spacing: DS.Space.sm
+            ) {
+                ForEach(sortedItems, id: \.self) { itemName in
+                    SimpleProxyButton(
+                        name: itemName,
+                        isSelected: group.now == itemName,
+                        delay: clashController.proxyNodes[itemName]?.delay,
+                        isTesting: testingNodes.contains(itemName),
+                        onSelect: {
+                            Task {
+                                do {
+                                    try await clashController.selectProxy(
+                                        group: group.name,
+                                        proxy: itemName
+                                    )
+                                    // Refresh proxy data to update UI
+                                    try await clashController.fetchProxiesData()
+                                } catch {
+                                    AppState.shared.reportError("Could not select \(itemName): \(error.localizedDescription)")
+                                }
+                            }
+                        },
+                        onTest: {
+                            testingNodes.insert(itemName)
+                            Task {
+                                _ = try? await clashController.testProxyDelay(name: itemName)
+                                testingNodes.remove(itemName)
+                            }
+                        }
+                    )
+                }
+            }
+            .padding(DS.Space.md)
+        } else if !searchText.isEmpty {
+            Text("No nodes matching \"\(searchText)\"")
+                .font(DS.Typography.metadata)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(DS.Space.md)
+        }
     }
 
     private var groupIcon: String {
@@ -329,92 +309,6 @@ struct SimpleProxyGroupCard: View {
         case "Fallback": return "arrow.triangle.2.circlepath"
         case "LoadBalance": return "scale.3d"
         default: return "network"
-        }
-    }
-}
-
-// Simple button
-struct SimpleProxyButton: View {
-    let name: String
-    let isSelected: Bool
-    let delay: Int?
-    let isTesting: Bool
-    let onSelect: () -> Void
-    let onTest: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(name)
-                .font(.system(size: 12, weight: isSelected ? .bold : .medium))
-                .lineLimit(1)
-                .foregroundStyle(isSelected ? .white : .primary)
-
-            HStack(spacing: 6) {
-                if let ms = delay {
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(delayColor(ms))
-                            .frame(width: 6, height: 6)
-                        Text("\(ms)ms")
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
-                            .foregroundStyle(isSelected ? .white.opacity(0.9) : .secondary)
-                    }
-                } else {
-                    Text("No delay")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(isSelected ? .white.opacity(0.6) : Color.secondary.opacity(0.5))
-                }
-
-                Spacer()
-
-                if isTesting {
-                    if isSelected {
-                        ProgressView()
-                            .controlSize(.mini)
-                            .colorInvert()
-                    } else {
-                        ProgressView()
-                            .controlSize(.mini)
-                    }
-                } else {
-                    Button {
-                        onTest()
-                    } label: {
-                        Image(systemName: "bolt.fill")
-                            .font(.system(size: 14)) // Slightly larger for tap target
-                            .foregroundStyle(isSelected ? .white.opacity(0.9) : .secondary.opacity(0.4))
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help("Test Latency")
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(isSelected ?
-                    AnyShapeStyle(LinearGradient(colors: [.blue, .blue.opacity(0.8)], startPoint: .topLeading, endPoint: .bottomTrailing)) :
-                    AnyShapeStyle(Color.primary.opacity(0.03)))
-        )
-        .shadow(color: isSelected ? Color.blue.opacity(0.3) : Color.clear, radius: 4, x: 0, y: 2)
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(isSelected ? Color.blue.opacity(0.5) : Color.primary.opacity(0.06), lineWidth: 1)
-        )
-        .contentShape(Rectangle())
-        .onTapGesture {
-            onSelect()
-        }
-    }
-
-    private func delayColor(_ ms: Int) -> Color {
-        switch ms {
-        case 0..<100: return .green
-        case 100..<300: return .orange
-        default: return .red
         }
     }
 }

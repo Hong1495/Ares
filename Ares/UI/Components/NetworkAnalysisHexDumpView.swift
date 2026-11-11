@@ -15,11 +15,11 @@ struct HexDumpView: View {
                 Image(systemName: "01.square")
                     .foregroundStyle(.purple)
                 Text("Binary Data")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(DS.Typography.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text("\(data.count) bytes")
-                    .font(.system(size: 9, design: .monospaced))
+                    .font(DS.Typography.caption.monospaced())
                     .foregroundStyle(.tertiary)
             }
 
@@ -36,7 +36,7 @@ struct HexDumpView: View {
                         Text("ASCII")
                             .frame(width: 140, alignment: .leading)
                     }
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .font(DS.Typography.caption.monospaced().weight(.semibold))
                     .foregroundStyle(.tertiary)
                     .padding(.bottom, 4)
 
@@ -48,7 +48,7 @@ struct HexDumpView: View {
 
                     if data.count > maxRows * bytesPerRow {
                         Text("... \(data.count - maxRows * bytesPerRow) more bytes truncated")
-                            .font(.system(size: 9, design: .monospaced))
+                            .font(DS.Typography.caption.monospaced())
                             .foregroundStyle(.tertiary)
                             .padding(.top, 4)
                     }
@@ -100,7 +100,7 @@ struct HexRow: View {
                 .frame(width: 140, alignment: .leading)
                 .foregroundStyle(.green.opacity(0.8))
         }
-        .font(.system(size: 9, design: .monospaced))
+        .font(DS.Typography.caption.monospaced())
     }
 
     private func isPrintable(_ byte: UInt8) -> Bool {

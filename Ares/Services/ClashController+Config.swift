@@ -3,7 +3,9 @@ import Foundation
 extension ClashController {
     /// Set Clash mode (rule/global/direct)
     func setMode(_ mode: ClashConfig.Mode) async throws {
-        guard let url = URL(string: "\(baseURL)/configs") else { return }
+        guard let url = URL(string: "\(baseURL)/configs") else {
+            throw NSError(domain: "ClashController", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid Clash API URL"])
+        }
 
         var request = URLRequest(url: url)
         request.httpMethod = "PATCH"
@@ -12,7 +14,8 @@ extension ClashController {
         let body = ["mode": mode.rawValue]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (_, _) = try await URLSession.shared.data(for: request)
+        let (_, response) = try await URLSession.shared.data(for: request)
+        try validateMutationResponse(response)
 
         ClashViewModel.shared.addLog("[ClashController] Set mode to \(mode.rawValue)", level: .debug)
     }
@@ -36,7 +39,9 @@ extension ClashController {
 
     /// Set Clash log level
     func setLogLevel(_ level: String) async throws {
-        guard let url = URL(string: "\(baseURL)/configs") else { return }
+        guard let url = URL(string: "\(baseURL)/configs") else {
+            throw NSError(domain: "ClashController", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid Clash API URL"])
+        }
 
         var request = URLRequest(url: url)
         request.httpMethod = "PATCH"
@@ -45,8 +50,21 @@ extension ClashController {
         let body = ["log-level": level]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (_, _) = try await URLSession.shared.data(for: request)
+        let (_, response) = try await URLSession.shared.data(for: request)
+        try validateMutationResponse(response)
         ClashViewModel.shared.addLog("[ClashController] Set log level to \(level)")
+    }
+
+    private func validateMutationResponse(_ response: URLResponse) throws {
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+            throw NSError(
+                domain: "ClashController",
+                code: status,
+                userInfo: [NSLocalizedDescriptionKey: "Clash API rejected the requested change (HTTP \(status))"]
+            )
+        }
     }
 
     /// Fetch active rules from Clash API

@@ -8,6 +8,7 @@ import Security
 actor MITMBackend {
     static let shared = MITMBackend()
 
+    private var upstreamPort: UInt16 = 7890
     private var listener: NWListener?
     private var connections: [UUID: MITMBoundConnection] = [:]
 
@@ -45,6 +46,7 @@ actor MITMBackend {
 
     func start(clashPort: UInt16) async {
         await stop()
+        upstreamPort = clashPort
 
         // Load display whitelist from settings
         refreshDisplayWhitelist()
@@ -54,6 +56,7 @@ actor MITMBackend {
         cleanupTask = Task.detached { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: Self.cleanupInterval)
+                guard !Task.isCancelled else { return }
                 await self?.cleanupStaleConnections()
             }
         }
@@ -66,7 +69,7 @@ actor MITMBackend {
 
             listener.newConnectionHandler = { [weak self] nwConn in
                 Task {
-                    await self?.createNewConnection(nwConn, clashPort: clashPort)
+                    await self?.createNewConnection(nwConn)
                 }
             }
 
@@ -107,7 +110,10 @@ actor MITMBackend {
     // MARK: - Internal
 
     // Actor-isolated method
-    func createNewConnection(_ nwConn: NWConnection, clashPort: UInt16) async {
+    func updateUpstream(port: UInt16) { upstreamPort = port }
+
+    func createNewConnection(_ nwConn: NWConnection) async {
+        let clashPort = upstreamPort
         // Reject new connections if at capacity
         let currentCount = connections.count
         if currentCount >= Self.maxConnections {
@@ -190,6 +196,7 @@ actor MITMBackend {
     }
 
     private func handleListenerState(_ state: NWListener.State, listener: NWListener) {
+        guard self.listener === listener else { return }
         switch state {
         case .ready:
             let port = listener.port?.rawValue ?? 0

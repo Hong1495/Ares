@@ -25,6 +25,10 @@ extension SettingsViewSourceTests {
     static let allTests = [
         ("testSettingsTUNToggleUsesRuntimeSwitch", testSettingsTUNToggleUsesRuntimeSwitch),
         ("testAppRunsAsMenuBarAgent", testAppRunsAsMenuBarAgent),
+        ("testProxyStartsCoreBeforeEnablingSystemProxy", testProxyStartsCoreBeforeEnablingSystemProxy),
+        ("testConfigMutationsValidateHTTPStatus", testConfigMutationsValidateHTTPStatus),
+        ("testSettingsUseRuntimeMITMAndSharedDNSPreference", testSettingsUseRuntimeMITMAndSharedDNSPreference),
+        ("testDataPagesExposeEmptyStatesAndRoutingDisclosure", testDataPagesExposeEmptyStatesAndRoutingDisclosure),
     ]
 }
 

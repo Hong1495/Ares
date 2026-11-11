@@ -4,127 +4,90 @@ struct SubscriptionCard: View {
     @EnvironmentObject var profileService: ProfileService
 
     var body: some View {
-        VStack(spacing: 0) {
-            // 1. Header Zone
-            HStack(spacing: 12) {
-                Image(systemName: "creditcard")
-                    .font(.system(size: 18, weight: .light))
-                    .frame(width: 24, height: 24, alignment: .center)
-                    .foregroundStyle(.primary)
-
-                Text("Subscription")
-                    .font(.headline.weight(.medium))
-
-                Spacer()
-
-                if let profile = profileService.activeProfile {
-                    Text(profile.name)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.gray.opacity(0.1))
-                        .cornerRadius(4)
+        DSCard(padding: 0, spacing: DS.Space.sm) {
+            DSCardHeader(
+                profileService.activeProfile?.name ?? "Subscription",
+                icon: "creditcard",
+                tint: .seriesDown
+            ) {
+                Button {
+                    Task { await refresh() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(DS.Typography.metadata.weight(.semibold))
                 }
-
-                Button(action: {
-                    Task {
-                        // Refresh logic if needed, or just reload profiles
-                        profileService.loadProfiles()
-                        if let id = profileService.activeProfileID {
-                            try? await profileService.updateProfile(id: id)
-                        }
-                    }
-                }) {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                        .font(.caption)
-                }
-                .buttonStyle(.plain)
-                .help("Refresh Subscription")
+                .buttonStyle(.borderless)
+                .help("Refresh subscription")
             }
-            .frame(height: 24)
-            .padding(16)
 
-            Divider()
-                .padding(.horizontal, 16)
-
-            // 2. Content Zone
-            if let profile = profileService.activeProfile, let sub = profile.subscriptionInfo {
-                VStack(alignment: .leading, spacing: 8) {
-
-                    // Usage Stats
-                    HStack {
-                        Text("Used")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Text("\(formatBytes(sub.upload + sub.download)) / \(formatBytes(sub.total))")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                    }
-
-                    // Progress Bar
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 3)
-                                .fill(Color.gray.opacity(0.15))
-
-                            let fraction = Double(sub.upload + sub.download) / Double(max(sub.total, 1))
-                            RoundedRectangle(cornerRadius: 3)
-                                .fill(fraction > 0.9 ? Color.red : (fraction > 0.7 ? Color.orange : Color.blue))
-                                .frame(width: min(geo.size.width * CGFloat(fraction), geo.size.width))
-                        }
-                    }
-                    .frame(height: 6)
-
-                    // Expiry
-                    if let expire = sub.expire {
-                        HStack(spacing: 4) {
-                            Image(systemName: "calendar")
-                            Text("Expires: \(formatDate(expire))")
-
-                            // Days remaining calculation
-                            let days = Calendar.current.dateComponents([.day], from: Date(), to: expire).day ?? 0
-                            if days < 7 {
-                                Text("(\(max(0, days)) days left)")
-                                    .foregroundStyle(.red)
-                            }
-                        }
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 2)
-                    }
-                }
-                .padding(16)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if let sub = profileService.activeProfile?.subscriptionInfo {
+                usage(sub)
             } else {
-                VStack(spacing: 8) {
-                    Image(systemName: "nosign")
-                        .font(.title3)
-                        .foregroundStyle(.secondary.opacity(0.5))
-                    Text("No Subscription Info")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(16)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                Text("No subscription")
+                    .font(DS.Typography.secondary)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, DS.Space.xs)
             }
         }
-        .frame(height: 150)
-        .cardStyle()
     }
 
-    private func formatBytes(_ bytes: Int64) -> String {
+    @ViewBuilder
+    private func usage(_ sub: SubscriptionInfo) -> some View {
+        let fraction = sub.total > 0
+            ? min(Double(sub.used) / Double(sub.total), 1)
+            : 0
+
+        VStack(alignment: .leading, spacing: DS.Space.sm) {
+            HStack(alignment: .firstTextBaseline, spacing: DS.Space.xs) {
+                Text(Self.formatBytes(sub.used))
+                    .font(DS.Typography.title.weight(.semibold))
+                    .monospacedDigit()
+                Text("of \(Self.formatBytes(sub.total))")
+                    .font(DS.Typography.metadata)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                Text("\(Int(fraction * 100))%")
+                    .font(DS.Typography.metadata.monospaced().weight(.medium))
+                    .foregroundStyle(fraction > 0.9 ? Color.statusBad : Color.secondary)
+            }
+
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.primary.opacity(0.08))
+                    Capsule()
+                        .fill(fraction > 0.9 ? Color.statusBad : Color.seriesDown)
+                        .frame(width: max(geo.size.width * fraction, fraction > 0 ? 4 : 0))
+                }
+            }
+            .frame(height: 5)
+
+            if let expire = sub.expire {
+                let days = Calendar.current.dateComponents([.day], from: Date(), to: expire).day ?? 0
+                HStack(spacing: DS.Space.xs) {
+                    Text("Expires \(expire.formatted(date: .abbreviated, time: .omitted))")
+                        .foregroundStyle(.secondary)
+                    if days <= 7 {
+                        DSTag(text: days <= 0 ? "Expired" : "\(days) days left", tint: .statusBad)
+                    }
+                }
+                .font(DS.Typography.metadata)
+            }
+        }
+    }
+
+    private func refresh() async {
+        if let id = profileService.activeProfileID {
+            do { try await profileService.updateProfile(id: id) }
+            catch is CancellationError { }
+            catch { AppState.shared.reportError(error.localizedDescription) }
+        }
+    }
+
+    private static func formatBytes(_ bytes: Int64) -> String {
         let formatter = ByteCountFormatter()
         formatter.allowedUnits = [.useGB, .useMB]
         formatter.countStyle = .file
         return formatter.string(fromByteCount: bytes)
-    }
-
-    private func formatDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        return formatter.string(from: date)
     }
 }

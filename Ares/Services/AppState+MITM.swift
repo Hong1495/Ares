@@ -2,68 +2,49 @@ import Combine
 import Foundation
 
 extension AppState {
-    // MARK: - MITM Toggle
-
-    /// Toggle MITM mode
     func toggleMITM() {
-        // Guard against rapid toggling
-        guard !isMITMToggling else {
-            clashViewModel.addLog("[AppState] ⚠️ MITM toggle in progress, ignoring")
-            return
-        }
+        guard !isMITMToggling, !clashViewModel.isToggling, beginOperation("Updating MITM Shield") else { return }
         isMITMToggling = true
-
-        let isRunning = NetworkMITMService.shared.isRunning
-        let newState = !isRunning
-
+        clashViewModel.isToggling = true
         Task { @MainActor in
-            defer { self.isMITMToggling = false }
-            if newState {
-                // STEP 1: Start MITM first to get the port number
-                await NetworkMITMService.shared.start()
-
-                // STEP 2: If TUN mode is active, restart Clash with MITM routing rules
-                // Now MITM is running, so ConfigService.buildConfig() will inject MITM rules
-                if self.tunEnabled && self.clashViewModel.isRunning {
-                    let mitmPort = NetworkMITMService.shared.currentPort
-                    self.clashViewModel.addLog("[MITM] 🔄 TUN mode active - restarting Clash with MITM routing to port \(mitmPort)...")
-
-                    await self.clashViewModel.stopCore(intendedRestart: true)
-                    await self.clashViewModel.startCore(isRestart: true)
-
-                    let isReady = await ClashController.shared.waitForAPIReady(timeout: 5.0)
-                    if isReady {
-                        self.clashViewModel.addLog("[MITM] ✅ Clash restarted with MITM routing rules")
-                    } else {
-                        self.clashViewModel.addLog("[MITM] ⚠️ Clash restart timeout")
-                    }
-                }
-            } else {
-                await NetworkMITMService.shared.stop()
-
-                // If TUN mode is active and TURNING OFF MITM, restart Clash to remove MITM config
-                if self.tunEnabled && self.clashViewModel.isRunning {
-                    self.clashViewModel.addLog("[MITM] 🔄 TUN mode active - rebuilding Clash config after MITM disabled...")
-
-                    await self.clashViewModel.stopCore(intendedRestart: true)
-                    await self.clashViewModel.startCore(isRestart: true)
-
-                    let isReady = await ClashController.shared.waitForAPIReady(timeout: 5.0)
-                    if isReady {
-                        self.clashViewModel.addLog("[MITM] ✅ Clash restarted without MITM routing")
-                    }
-                }
+            defer { isMITMToggling = false; clashViewModel.isToggling = false; objectWillChange.send() }
+            let mitm = NetworkMITMService.shared
+            let enabling = !mitm.isRunning
+            let wasRunning = clashViewModel.isRunning
+            let oldRouting = mitm.routingEnabled
+            if enabling {
+                guard wasRunning else { finishOperation(error: "Start the core before enabling MITM."); return }
+                guard await mitm.start() else { finishOperation(error: "MITM listener failed to start."); return }
             }
-
-            // Trigger UI update
-            self.objectWillChange.send()
-
-            // Refresh system proxy if it is enabled to apply new port rules
-            // In TUN mode: system proxy points to Clash, traffic flows TUN->Clash->MITM
-            // In non-TUN mode: system proxy points to MITM, traffic flows SystemProxy->MITM->Clash
-            if self.systemProxyEnabled {
-                await self.enableSystemProxy()
-            }
+            mitm.routingEnabled = enabling
+            let migrated = await ListenerMigration.retire(
+                migrateRoutes: {
+                    if self.tunEnabled && wasRunning { return await self.restartForMITMRouting() }
+                    // A failed runtime might still contain routes to this listener.
+                    if self.tunEnabled && !enabling && self.clashViewModel.runtimeState != .stopped { return false }
+                    return true
+                },
+                migrateProxy: {
+                    if self.systemProxyEnabled { return await self.enableSystemProxy() }
+                    return true
+                },
+                stopListener: { if !enabling { await mitm.stop() } })
+            if migrated { finishOperation(); return }
+            mitm.routingEnabled = oldRouting
+            var recovered = true
+            if tunEnabled && wasRunning { recovered = await restartForMITMRouting() }
+            if recovered && systemProxyEnabled { recovered = await enableSystemProxy() }
+            // Keep the listener alive when recovery is uncertain: traffic may still target it.
+            if recovered && enabling { await mitm.stop() }
+            finishOperation(error: recovered ? "MITM change failed; previous routing was restored." : "MITM routing recovery could not be verified. The listener was kept running.")
         }
+    }
+
+    private func restartForMITMRouting() async -> Bool {
+        do { try await ConfigService.shared.buildConfig(tunEnabled: tunEnabled) }
+        catch { return false }
+        guard await clashViewModel.stopCore(intendedRestart: true) else { return false }
+        await clashViewModel.startCore(isRestart: true)
+        return clashViewModel.runtimeState.isAPIReady
     }
 }

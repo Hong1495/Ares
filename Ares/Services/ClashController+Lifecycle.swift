@@ -41,6 +41,7 @@ extension ClashController {
                     if let mode = try? await self.getCurrentMode() {
                         AppState.shared.currentMode = mode
                     }
+                    await self.monitorConnections()
                     ClashViewModel.shared.addLog("[ClashController] ✅ Initial sync completed (Attempt \(i))")
                     return
                 } catch {
@@ -84,10 +85,15 @@ extension ClashController {
 
         while Date().timeIntervalSince(start) < timeout {
             do {
-                let (_, response) = try await URLSession.shared.data(from: url)
+                try Task.checkCancellation()
+                let remaining = timeout - Date().timeIntervalSince(start)
+                guard remaining > 0 else { return false }
+                let (_, response) = try await URLSession.shared.data(for: URLRequest(url: url, timeoutInterval: min(1, remaining)))
                 if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
                     return true
                 }
+            } catch is CancellationError {
+                return false
             } catch {
                 // Ignore errors during retry period
             }

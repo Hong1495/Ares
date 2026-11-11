@@ -96,10 +96,10 @@ struct AnalysisView: View {
                     }
                 }
             }
-            .font(.system(size: 11))
+            .font(DS.Typography.metadata)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(Color(nsColor: .windowBackgroundColor))
+            .background(DS.canvas)
             
             Divider()
             
@@ -357,7 +357,14 @@ struct DetailContent: View {
     }
     
     var body: some View {
-        Table(filteredRequests, selection: $selectedRequestId, sortOrder: $sortOrder) {
+        if filteredRequests.isEmpty {
+            ContentUnavailableView {
+                Label(emptyTitle, systemImage: emptyIcon)
+            } description: {
+                Text(emptyDescription)
+            }
+        } else {
+            Table(filteredRequests, selection: $selectedRequestId, sortOrder: $sortOrder) {
             TableColumn("Status", value: \.sortStatus) { req in
                 StatusIcon(req: req)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -369,11 +376,11 @@ struct DetailContent: View {
             TableColumn("Sec", value: \.url) { req in
                 if req.url.lowercased().hasPrefix("https") {
                     Image(systemName: "lock.fill") // Secure
-                        .font(.system(size: 10))
+                        .font(DS.Typography.caption)
                         .foregroundStyle(.green)
                 } else {
                     Image(systemName: "lock.open.fill") // Insecure
-                        .font(.system(size: 10))
+                        .font(DS.Typography.caption)
                         .foregroundStyle(.orange)
                 }
             }
@@ -382,12 +389,12 @@ struct DetailContent: View {
             TableColumn("Method", value: \.method) { req in
                 HStack(spacing: 4) {
                     Text(req.method)
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .font(DS.Typography.metadata.monospaced().weight(.semibold))
                         .foregroundStyle(methodColor(req.method))
                     
                     if req.hitCount > 1 {
                         Text("\(req.hitCount)")
-                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                            .font(DS.Typography.caption.monospaced().weight(.semibold))
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
                             .background(Color.orange.opacity(0.8))
@@ -403,7 +410,7 @@ struct DetailContent: View {
             
             TableColumn("Started", value: \.timestamp) { req in
                 Text(formatTableTime(req.timestamp))
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(DS.Typography.metadata.monospaced())
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
@@ -415,14 +422,14 @@ struct DetailContent: View {
                 HStack(spacing: 4) {
                     if req.responseBody != nil || req.requestBody != nil {
                         Text("📦")
-                            .font(.system(size: 9))
+                            .font(DS.Typography.caption)
                             .help("Payload Captured")
                     } else if req.url.lowercased().hasPrefix("http://") {
                          // Removed confusing lock icon for HTTP plaintext
                     }
                     
                     Text(req.url)
-                        .font(.system(size: 11))
+                        .font(DS.Typography.metadata)
                         .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -440,7 +447,7 @@ struct DetailContent: View {
             
             TableColumn("Size", value: \.displaySize) { req in
                 Text(formatSize(req.displaySize))
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(DS.Typography.metadata.monospaced())
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .trailing)
                     .contentShape(Rectangle())
@@ -450,17 +457,33 @@ struct DetailContent: View {
             
             TableColumn("Time", value: \.sortDuration) { req in
                 Text(formatDuration(req.duration))
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(DS.Typography.metadata.monospaced())
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .trailing)
                     .contentShape(Rectangle())
                     .contextMenu { tableRowContextMenu(req) }
             }
             .width(60)
+            }
+            .scrollIndicators(.hidden)
         }
-        .scrollIndicators(.hidden)
 
 
+    }
+
+    private var emptyTitle: String {
+        if !service.isListening { return "Analysis listener is stopped" }
+        return requests.isEmpty ? "No requests captured" : "No matching requests"
+    }
+
+    private var emptyIcon: String {
+        service.isListening ? "network.slash" : "pause.circle"
+    }
+
+    private var emptyDescription: String {
+        if !service.isListening { return "Start listening to capture browser traffic." }
+        if requests.isEmpty { return "Captured requests will appear here." }
+        return "Change the search or filter selection to show requests."
     }
     
     @ViewBuilder
@@ -521,4 +544,3 @@ struct DetailContent: View {
         return formatter.string(from: date)
     }
 }
-

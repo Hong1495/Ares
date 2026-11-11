@@ -113,7 +113,7 @@ struct InspectorHeader: View {
         HStack(spacing: 12) {
             // Method Badge
             Text(request.method)
-                .font(.system(size: 11, weight: .bold))
+                .font(DS.Typography.metadata.weight(.semibold))
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
                 .background(methodColor(request.method).opacity(0.1))
@@ -122,7 +122,7 @@ struct InspectorHeader: View {
 
             // URL
             Text(request.url)
-                .font(.system(size: 13, weight: .medium))
+                .font(DS.Typography.body.weight(.medium))
                 .lineLimit(1)
                 .truncationMode(.middle)
 
@@ -135,17 +135,17 @@ struct InspectorHeader: View {
                     .frame(width: 8, height: 8)
                 if let code = request.statusCode {
                     Text("\(code)")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(DS.Typography.secondary.weight(.semibold))
                         .foregroundColor(statusColor(request))
                 } else {
                     Text(request.status.rawValue.uppercased())
-                        .font(.system(size: 10, weight: .bold))
+                        .font(DS.Typography.caption.weight(.semibold))
                         .foregroundColor(statusColor(request))
                 }
             }
         }
         .padding(12)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(DS.canvas)
     }
 
     private func methodColor(_ method: String) -> Color {

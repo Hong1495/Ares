@@ -137,7 +137,7 @@ struct TopologyView: View {
             context.fill(Path(ellipseIn: nodeRect), with: .color(node.color))
 
             let text = Text(node.label)
-                .font(.system(size: 10, weight: .medium))
+                .font(DS.Typography.caption.weight(.medium))
                 .foregroundStyle(.primary)
 
             context.draw(text, at: CGPoint(x: node.position.x, y: node.position.y + 14), anchor: .top)

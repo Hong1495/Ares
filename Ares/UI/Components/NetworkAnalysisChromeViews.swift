@@ -23,7 +23,7 @@ struct StatusIndicator: View {
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: service.activeTabs.isEmpty ? "antenna.radiowaves.left.and.right.slash" : "antenna.radiowaves.left.and.right")
-                .font(.system(size: 10, weight: .light))
+                .font(DS.Typography.caption.weight(.light))
                 .foregroundStyle(service.activeTabs.isEmpty ? Color.secondary : Color.green)
 
             Circle()
@@ -45,11 +45,11 @@ struct SearchField: View {
     var body: some View {
         HStack {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 10, weight: .bold))
+                .font(DS.Typography.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             TextField("Search...", text: $text)
                 .textFieldStyle(.plain)
-                .font(.system(size: 11))
+                .font(DS.Typography.metadata)
             if !text.isEmpty {
                 Button(action: { text = "" }) {
                     Image(systemName: "xmark.circle.fill")
@@ -72,9 +72,9 @@ struct EmptyStateView: View {
                 .font(.system(size: 32, weight: .ultraLight))
                 .foregroundStyle(.tertiary)
             Text("No Activity Captured")
-                .font(.system(size: 13, weight: .medium))
+                .font(DS.Typography.body.weight(.medium))
             Text("Network requests for this tab will appear here in real-time.")
-                .font(.system(size: 11))
+                .font(DS.Typography.metadata)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 200)

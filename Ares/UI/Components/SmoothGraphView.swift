@@ -197,14 +197,14 @@ struct DualSmoothGraphView: View {
                 fillPath.closeSubpath()
 
                 let gradient = Gradient(stops: [
-                    .init(color: color.opacity(0.3), location: 0),
+                    .init(color: color.opacity(0.14), location: 0),
                     .init(color: color.opacity(0.0), location: 1)
                 ])
                 context.fill(fillPath, with: .linearGradient(gradient, startPoint: CGPoint(x: 0, y: 0), endPoint: CGPoint(x: 0, y: height)))
             }
 
-            drawLine(data: uploadData, color: .cyan)
-            drawLine(data: downloadData, color: .green)
+            drawLine(data: uploadData, color: .seriesUp)
+            drawLine(data: downloadData, color: .seriesDown)
         }
     }
 }

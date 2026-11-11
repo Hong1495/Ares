@@ -16,7 +16,7 @@ struct JSONTreeView: View {
                         .foregroundColor(.secondary)
                     TextField("Filter via JSON path...", text: $searchText)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 12))
+                        .font(DS.Typography.secondary)
                 }
                 .padding(6)
                 .background(Color(nsColor: .controlBackgroundColor))
@@ -30,7 +30,7 @@ struct JSONTreeView: View {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { isCopied = false }
                 } label: {
                     Label(isCopied ? "Copied" : "Copy", systemImage: isCopied ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 11))
+                        .font(DS.Typography.metadata)
                 }
                 .buttonStyle(.bordered)
             }
@@ -44,7 +44,7 @@ struct JSONTreeView: View {
                     if let error = parseError {
                         Text("Invalid JSON: \(error)")
                             .foregroundColor(.red)
-                            .font(.system(size: 11, design: .monospaced))
+                            .font(DS.Typography.metadata.monospaced())
                     } else if let data = parsedData {
                         JSONNodeView(key: "root", value: data, isRoot: true, searchText: searchText)
                     } else {
@@ -98,7 +98,7 @@ struct JSONNodeView: View {
                         }
                     } label: {
                         Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                            .font(.system(size: 8, weight: .bold))
+                            .font(DS.Typography.caption.weight(.semibold))
                             .foregroundColor(.secondary)
                             .frame(width: 12, height: 12)
                     }
@@ -111,7 +111,7 @@ struct JSONNodeView: View {
                 // Key Display
                 if let key = key, !isRoot {
                     Text("\(key):")
-                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                        .font(DS.Typography.body.monospaced().weight(.semibold))
                         .foregroundColor(.purple)
                         .background(highlightColor(for: key))
                 }
@@ -119,24 +119,24 @@ struct JSONNodeView: View {
                 // Value Display (Inline for primitives, braced for containers)
                 if isContainer {
                     Text(containerStart)
-                        .font(.system(size: 13, design: .monospaced))
+                        .font(DS.Typography.body.monospaced())
                         .foregroundColor(.secondary)
                     
                     if !isExpanded {
                         Text("...")
-                            .font(.system(size: 13, design: .monospaced))
+                            .font(DS.Typography.body.monospaced())
                             .foregroundColor(.secondary)
                             .padding(.horizontal, 4)
                             .background(Color.secondary.opacity(0.1))
                             .cornerRadius(2)
                         
                         Text(containerEnd)
-                            .font(.system(size: 13, design: .monospaced))
+                            .font(DS.Typography.body.monospaced())
                             .foregroundColor(.secondary)
                         
                         // Item count for collapsed state
                         Text(itemCountDescription)
-                            .font(.system(size: 10))
+                            .font(DS.Typography.caption)
                             .foregroundColor(.secondary)
                             .padding(.leading, 4)
                     }
@@ -164,7 +164,7 @@ struct JSONNodeView: View {
                 HStack {
                     Spacer().frame(width: 12)
                     Text(containerEnd)
-                        .font(.system(size: 13, design: .monospaced))
+                        .font(DS.Typography.body.monospaced())
                         .foregroundColor(.secondary)
                 }
             }
@@ -206,27 +206,27 @@ struct JSONNodeView: View {
     var primitiveValueView: some View {
         if let str = value as? String {
             Text("\"\(str)\"")
-                .font(.system(size: 13, design: .monospaced))
+                .font(DS.Typography.body.monospaced())
                 .foregroundColor(.green)
                 .lineLimit(isRoot ? nil : 5) 
                 .background(highlightColor(for: str)) 
         } else if let num = value as? NSNumber {
             if CFBooleanGetTypeID() == CFGetTypeID(num) {
                 Text(num.boolValue ? "true" : "false")
-                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    .font(DS.Typography.body.monospaced().weight(.semibold))
                     .foregroundColor(.orange)
             } else {
                 Text("\(num)")
-                    .font(.system(size: 13, design: .monospaced))
+                    .font(DS.Typography.body.monospaced())
                     .foregroundColor(.blue)
             }
         } else if value is NSNull {
             Text("null")
-                .font(.system(size: 13, weight: .bold, design: .monospaced))
+                .font(DS.Typography.body.monospaced().weight(.semibold))
                 .foregroundColor(.red)
         } else {
             Text("\(String(describing: value))")
-                .font(.system(size: 13, design: .monospaced))
+                .font(DS.Typography.body.monospaced())
                 .foregroundColor(.primary)
                 .background(highlightColor(for: String(describing: value)))
         }

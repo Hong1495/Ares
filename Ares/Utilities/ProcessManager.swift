@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 /// Async-safe process manager that runs shell commands without blocking MainActor
 /// Uses async/await pattern to prevent watchdog terminations
@@ -22,40 +23,50 @@ actor ProcessManager {
         arguments: [String],
         timeout: TimeInterval? = nil
     ) async throws -> CommandResult {
-        return try await withCheckedThrowingContinuation { continuation in
-            Task.detached {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: executable)
-                process.arguments = arguments
-
-                let outputPipe = Pipe()
-                let errorPipe = Pipe()
-                process.standardOutput = outputPipe
-                process.standardError = errorPipe
-
-                do {
-                    try process.run()
-
-                    // Wait for completion (in background thread, won't block MainActor)
+        let worker = Task.detached {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: executable)
+            process.arguments = arguments
+            // Files avoid pipe-buffer deadlock even for verbose commands.
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let outURL = directory.appendingPathComponent("stdout")
+            let errURL = directory.appendingPathComponent("stderr")
+            FileManager.default.createFile(atPath: outURL.path, contents: nil)
+            FileManager.default.createFile(atPath: errURL.path, contents: nil)
+            let out = try FileHandle(forWritingTo: outURL)
+            let err = try FileHandle(forWritingTo: errURL)
+            defer { try? out.close(); try? err.close() }
+            process.standardOutput = out
+            process.standardError = err
+            try process.run()
+            let deadline = ContinuousClock.now.advanced(by: .seconds(timeout ?? 30))
+            while process.isRunning {
+                if Task.isCancelled || ContinuousClock.now >= deadline {
+                    let cancelled = Task.isCancelled
+                    process.terminate()
+                    for _ in 0..<50 {
+                        if !process.isRunning { break }
+                        try? await Task.sleep(for: .milliseconds(20))
+                    }
+                    // This is the retained child created above, never a discovered PID.
+                    if process.isRunning { _ = Darwin.kill(process.processIdentifier, SIGKILL) }
                     process.waitUntilExit()
-
-                    let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-                    let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-
-                    let output = String(data: outputData, encoding: .utf8) ?? ""
-                    let error = String(data: errorData, encoding: .utf8) ?? ""
-
-                    let result = CommandResult(
-                        output: output,
-                        error: error,
-                        exitCode: process.terminationStatus
-                    )
-
-                    continuation.resume(returning: result)
-                } catch {
-                    continuation.resume(throwing: error)
+                    if cancelled { throw CancellationError() }
+                    throw URLError(.timedOut)
                 }
+                try? await Task.sleep(for: .milliseconds(20))
             }
+            return CommandResult(
+                output: String(decoding: try Data(contentsOf: outURL), as: UTF8.self),
+                error: String(decoding: try Data(contentsOf: errURL), as: UTF8.self),
+                exitCode: process.terminationStatus)
+        }
+        return try await withTaskCancellationHandler {
+            try await worker.value
+        } onCancel: {
+            worker.cancel()
         }
     }
 
@@ -67,6 +78,7 @@ actor ProcessManager {
     func runSimple(_ command: String, args: [String]) async -> String {
         do {
             let result = try await run(executable: command, arguments: args)
+            guard result.exitCode == 0 else { return "" }
             return result.output.trimmingCharacters(in: .whitespacesAndNewlines)
         } catch {
             return ""
@@ -80,7 +92,7 @@ actor ProcessManager {
         // Try with sudo first (can see all processes including root-owned)
         let output = await runSimple(
             "/usr/bin/sudo",
-            args: ["-n", "/usr/sbin/lsof", "-i", ":\(port)", "-t"]
+            args: ["-n", "/usr/sbin/lsof", "-nP", "-iTCP:\(port)", "-sTCP:LISTEN", "-t"]
         )
 
         let pids = output.components(separatedBy: .newlines)
@@ -91,7 +103,7 @@ actor ProcessManager {
         if pids.isEmpty {
             let fallbackOutput = await runSimple(
                 "/usr/sbin/lsof",
-                args: ["-i", ":\(port)", "-t"]
+                args: ["-nP", "-iTCP:\(port)", "-sTCP:LISTEN", "-t"]
             )
             let fallbackPids = fallbackOutput.components(separatedBy: .newlines)
                 .compactMap { Int32($0.trimmingCharacters(in: .whitespaces)) }
@@ -103,22 +115,4 @@ actor ProcessManager {
         return pids
     }
 
-    /// Kill process by PID
-    /// - Parameter pid: Process ID to kill
-    /// - Returns: True if kill command succeeded (does not guarantee process died immediately)
-    func killProcess(_ pid: Int32) async -> Bool {
-        // Try user kill first (works for own processes)
-        let userKill = await runSimple("/bin/kill", args: ["-9", "\(pid)"])
-        if userKill.isEmpty { return true } // Empty usually means success for kill command
-
-        // If user kill failed/printed error, try sudo kill
-        let result = try? await run(executable: "/usr/bin/sudo", arguments: ["-n", "/bin/kill", "-9", "\(pid)"])
-        return result?.exitCode == 0
-    }
-
-    /// Kill all processes matching a pattern
-    /// - Parameter pattern: Process name pattern
-func killAllProcesses(matching pattern: String) async {
-        _ = await runSimple("/usr/bin/sudo", args: ["-n", "/usr/bin/pkill", "-9", "-f", pattern])
-    }
 }

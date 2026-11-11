@@ -7,10 +7,10 @@ final class AppStateTUNSourceTests: XCTestCase {
             .deletingLastPathComponent()
             .appendingPathComponent("Ares/Services/AppState+TUN.swift"))
 
-        XCTAssertTrue(source.contains("let succeeded = await self.performTUNToggleWork(newState: newTUN)"))
-        XCTAssertTrue(source.contains("self.tunEnabled = oldTUN"))
-        XCTAssertTrue(source.contains("UserDefaults.standard.set(oldTUN, forKey: DefaultsKeys.tunEnabled)"))
-        XCTAssertTrue(source.contains("self.clashController.updatePort(tunEnabled: oldTUN)"))
-        XCTAssertTrue(source.contains("return false"))
+        XCTAssertTrue(source.contains("RuntimeTransition.perform("))
+        XCTAssertTrue(source.contains("setTUNConfiguration(oldTUN)"))
+        XCTAssertTrue(source.contains("startAndVerifyTUN(expected: oldTUN, restoreProxy: hadProxy)"))
+        XCTAssertTrue(source.contains("CoreAPIContract.verifyTUN(data, expected: expected)"))
+        XCTAssertFalse(source.contains("try? await self.verifyTUNStatus()"))
     }
 }

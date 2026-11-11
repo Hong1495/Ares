@@ -14,12 +14,12 @@ struct MultipartFormDataView: View {
                 Image(systemName: "doc.on.doc")
                     .foregroundStyle(.green)
                 Text("Multipart Form Data")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(DS.Typography.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
                 if let boundary = boundary {
                     Text("boundary: \(boundary.prefix(20))...")
-                        .font(.system(size: 8, design: .monospaced))
+                        .font(DS.Typography.caption.monospaced())
                         .foregroundStyle(.tertiary)
                 }
             }
@@ -29,7 +29,7 @@ struct MultipartFormDataView: View {
             let parts = parseMultipart(content, boundary: boundary)
             if parts.isEmpty {
                 Text("Unable to parse multipart data")
-                    .font(.system(size: 10))
+                    .font(DS.Typography.caption)
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(parts.indices, id: \.self) { index in
@@ -99,22 +99,22 @@ struct MultipartPartView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text("\(index + 1).")
-                    .font(.system(size: 9, weight: .bold))
+                    .font(DS.Typography.caption.weight(.semibold))
                     .foregroundStyle(.tertiary)
 
                 Text(part.name)
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .font(DS.Typography.caption.monospaced().weight(.semibold))
                     .foregroundStyle(.blue)
 
                 if let filename = part.filename {
                     Text("(\(filename))")
-                        .font(.system(size: 9))
+                        .font(DS.Typography.caption)
                         .foregroundStyle(.orange)
                 }
 
                 if let ct = part.contentType {
                     Text("[\(ct)]")
-                        .font(.system(size: 8))
+                        .font(DS.Typography.caption)
                         .foregroundStyle(.tertiary)
                 }
 
@@ -122,7 +122,7 @@ struct MultipartPartView: View {
 
                 Button(action: { isExpanded.toggle() }) {
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 8))
+                        .font(DS.Typography.caption)
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
@@ -130,7 +130,7 @@ struct MultipartPartView: View {
 
             if isExpanded {
                 Text(part.value.prefix(500) + (part.value.count > 500 ? "..." : ""))
-                    .font(.system(size: 9, design: .monospaced))
+                    .font(DS.Typography.caption.monospaced())
                     .padding(6)
                     .background(Color.secondary.opacity(0.05))
                     .cornerRadius(4)

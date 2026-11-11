@@ -45,9 +45,12 @@ class ClashController: ObservableObject {
 
     /// Update the API port based on current TUN state
     func updatePort(tunEnabled: Bool) {
+        runtimeGeneration = UUID()
         currentPort = tunEnabled ? ClashPorts.apiTun : ClashPorts.apiNormal
     }
 
+    var selectingProxyGroups: Set<String> = []
+    var runtimeGeneration = UUID()
     @Published var traffic = TrafficStats()
     @Published var proxies: [String: Any] = [:]
     @Published var proxyGroups: [ProxyGroup] = []

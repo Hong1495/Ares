@@ -11,7 +11,7 @@ struct FormDataView: View {
                 Image(systemName: "list.bullet.rectangle")
                     .foregroundStyle(.blue)
                 Text("Form Data")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(DS.Typography.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
             }
@@ -60,12 +60,12 @@ struct FormDataRow: View {
             HStack(alignment: .top) {
                 // Key
                 Text(key)
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .font(DS.Typography.caption.monospaced().weight(.semibold))
                     .foregroundStyle(.blue)
                     .frame(minWidth: 80, alignment: .leading)
 
                 Text("=")
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(DS.Typography.caption.monospaced())
                     .foregroundStyle(.tertiary)
 
                 // Value or expand button for JSON
@@ -73,16 +73,16 @@ struct FormDataRow: View {
                     Button(action: { isExpanded.toggle() }) {
                         HStack(spacing: 4) {
                             Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                                .font(.system(size: 8))
+                                .font(DS.Typography.caption)
                             Text(isExpanded ? "JSON Object" : "JSON Object (tap to expand)")
-                                .font(.system(size: 10))
+                                .font(DS.Typography.caption)
                         }
                         .foregroundStyle(.orange)
                     }
                     .buttonStyle(.plain)
                 } else {
                     Text(value)
-                        .font(.system(size: 10, design: .monospaced))
+                        .font(DS.Typography.caption.monospaced())
                         .foregroundStyle(.primary)
                         .textSelection(.enabled)
                         .lineLimit(3)

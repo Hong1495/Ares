@@ -7,6 +7,8 @@ import Combine
 final class NetworkMITMService: ObservableObject {
     static let shared = NetworkMITMService()
     
+    /// Desired routing is independent of listener lifetime during migration.
+    var routingEnabled = false
     @Published var isRunning = false
     @Published var currentPort: UInt16 = 0
     @Published var interceptedRequests: [InterceptedRequest] = []
@@ -39,7 +41,8 @@ final class NetworkMITMService: ObservableObject {
         )
     }
     
-    func start() async {
+    @discardableResult
+    func start() async -> Bool {
         ClashViewModel.shared.addLog("[NetworkMITMService] 🟢 Starting MITM Service...")
         await setupCallbacks()
         
@@ -52,7 +55,8 @@ final class NetworkMITMService: ObservableObject {
             ClashViewModel.shared.addLog("[NetworkMITMService] 📡 TUN mode detected, using Clash port \(ClashPorts.tunMixed)")
         } else {
             let userPort = UserDefaults.standard.integer(forKey: DefaultsKeys.mixedPort)
-            clashPort = UInt16(userPort == 0 ? ClashPorts.defaultMixed : userPort)
+            guard let validPort = UInt16(exactly: userPort == 0 ? ClashPorts.defaultMixed : userPort), validPort > 0 else { return false }
+            clashPort = validPort
             ClashViewModel.shared.addLog("[NetworkMITMService] 📡 Normal mode, using Clash port \(clashPort)")
         }
         
@@ -62,17 +66,27 @@ final class NetworkMITMService: ObservableObject {
         for i in 0..<20 {
             if isRunning && currentPort > 0 {
                 ClashViewModel.shared.addLog("[NetworkMITMService] ✅ MITM Service Ready on port \(currentPort)")
-                break
+                return true
             }
             try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
             if i == 19 {
                  ClashViewModel.shared.addLog("[NetworkMITMService] ⚠️ MITM Service startup timed out (isRunning=\(isRunning))")
             }
         }
+        await MITMBackend.shared.stop()
+        return false
+    }
+
+    func updateUpstream(tunEnabled: Bool) async -> Bool {
+        let port = tunEnabled ? ClashPorts.tunMixed : (Int(UserDefaults.standard.string(forKey: DefaultsKeys.mixedPort) ?? "") ?? ClashPorts.defaultMixed)
+        guard let validPort = UInt16(exactly: port), validPort > 0 else { return false }
+        await MITMBackend.shared.updateUpstream(port: validPort)
+        return true
     }
     
     func stop() async {
         ClashViewModel.shared.addLog("[NetworkMITMService] 🔴 Stopping MITM Service...")
+        routingEnabled = false
         await MITMBackend.shared.stop()
         
         // Wait for stop to complete

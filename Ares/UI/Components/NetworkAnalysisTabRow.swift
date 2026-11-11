@@ -7,18 +7,18 @@ struct TabRow: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "safari")
-                .font(.system(size: 14))
+                .font(DS.Typography.body)
                 .foregroundStyle(isSelected ? Color.blue : Color.secondary)
                 .frame(width: 20)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(tab.title.isEmpty ? "Untitled Tab" : tab.title)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(DS.Typography.secondary.weight(.semibold))
                     .foregroundStyle(isSelected ? Color.primary : Color.primary.opacity(0.8))
                     .lineLimit(1)
 
                 Text(tab.url)
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(DS.Typography.caption.monospaced())
                     .foregroundStyle(Color.secondary.opacity(0.7))
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -28,7 +28,7 @@ struct TabRow: View {
 
             if !tab.requests.isEmpty {
                 Text("\(tab.requests.count)")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .font(DS.Typography.caption.monospaced().weight(.semibold))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(isSelected ? Color.white.opacity(0.2) : Color.blue.opacity(0.1))

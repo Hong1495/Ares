@@ -4,26 +4,30 @@ import Foundation
 extension AppState {
     /// Toggle system proxy
     func toggleSystemProxy() async {
-        guard !isSystemProxyToggling else {
+        guard !isSystemProxyToggling, beginOperation("Updating System Proxy") else {
             clashViewModel.addLog("[AppState] ⚠️ System proxy toggle ignored - already in progress")
             return
         }
 
         isSystemProxyToggling = true
-        defer { isSystemProxyToggling = false }
+        defer {
+            isSystemProxyToggling = false
+            if operationStatus != nil {
+                finishOperation()
+            }
+        }
 
         let newState = !systemProxyEnabled
         clashViewModel.addLog("[AppState] 🌐 \(newState ? "Enabling" : "Disabling") system proxy...")
 
-        // CRITICAL: If disabling proxy while MITM is running, stop MITM first to avoid crashes
-        if !newState && NetworkMITMService.shared.isRunning {
-            clashViewModel.addLog("[AppState] ⚠️ MITM is running - stopping MITM before disabling system proxy")
-            await NetworkMITMService.shared.stop()
+        // Never point macOS at a local proxy until the core is ready to accept traffic.
+        if newState && !clashViewModel.isRunning {
+            await clashViewModel.start()
+            guard clashViewModel.isRunning else {
+                finishOperation(error: "System Proxy was not enabled because the Clash core failed to start")
+                return
+            }
         }
-
-        // Optimistic Update
-        systemProxyEnabled = newState
-        objectWillChange.send()
 
         // Ensure privileges are installed if missing (Auto-Upgrade)
         var shouldCheckPrivileges = false
@@ -52,25 +56,20 @@ extension AppState {
         }
 
         guard await systemProxyManager.setSystemProxy(enabled: newState, httpPort: httpPort, socksPort: socksPort, bypassRules: bypassRules) else {
-            clashViewModel.addLog("[AppState] ❌ Failed to set system proxy")
-            // Revert on failure
-            systemProxyEnabled = !newState
+            finishOperation(error: systemProxyManager.lastError ?? "System Proxy update could not be verified.")
             return
         }
 
+        systemProxyEnabled = newState
         UserDefaults.standard.set(newState, forKey: DefaultsKeys.systemProxyEnabled) // Save preference
         clashViewModel.addLog("[AppState] ✅ System proxy \(newState ? "enabled" : "disabled") (HTTP/HTTPS: \(httpPort), SOCKS: \(socksPort))")
 
-        // Start Clash if it's not running and we just enabled proxy
-        if newState && !clashViewModel.isRunning {
-            await clashViewModel.start()
-        } else if !newState && !tunEnabled {
-            // Keep running to avoid side effects
-        }
+
     }
 
     /// Force enable system proxy (for startup restoration)
-    func enableSystemProxy() async {
+    @discardableResult
+    func enableSystemProxy() async -> Bool {
         clashViewModel.addLog("[AppState] 🔄 Restoring system proxy state...")
 
         // Ensure privileges
@@ -95,10 +94,12 @@ extension AppState {
 
         if await systemProxyManager.setSystemProxy(enabled: true, httpPort: httpPort, socksPort: socksPort, bypassRules: bypassRules) {
             systemProxyEnabled = true
-            objectWillChange.send()
             clashViewModel.addLog("[AppState] ✅ System proxy enabled (HTTP/HTTPS: \(httpPort), SOCKS: \(socksPort))")
+            return true
         } else {
             clashViewModel.addLog("[AppState] ❌ Failed to restore system proxy")
+            finishOperation(error: systemProxyManager.lastError ?? "Failed to restore System Proxy")
+            return false
         }
     }
 
@@ -118,7 +119,7 @@ extension AppState {
 
         // In non-TUN mode: If MITM is running, system proxy points to MITM
         // Traffic flows SystemProxy->MITM->Clash
-        if NetworkMITMService.shared.isRunning {
+        if NetworkMITMService.shared.isRunning && NetworkMITMService.shared.routingEnabled {
             let mitmPort = Int(NetworkMITMService.shared.currentPort)
             let httpPort = mitmPort > 0 ? mitmPort : clashHttpPort
             // SOCKS still goes to Clash (MITM doesn't handle SOCKS)

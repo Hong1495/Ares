@@ -2,6 +2,7 @@ import Foundation
 import Combine
 
 /// Service for managing Clash profiles
+@MainActor
 class ProfileService: ObservableObject {
     static let shared = ProfileService()
 
@@ -9,6 +10,7 @@ class ProfileService: ObservableObject {
     @Published var activeProfileID: UUID?
     @Published var isSwitchingProfile: Bool = false
 
+    private var updateRevisions = ProfileUpdateRevisions()
     private let profilesDir: URL
     private let profilesMetadataFile: URL
 
@@ -81,11 +83,13 @@ class ProfileService: ObservableObject {
     func saveProfiles() {
         do {
             let data = try JSONEncoder().encode(profiles)
-            try data.write(to: profilesMetadataFile)
+            try data.write(to: profilesMetadataFile, options: .atomic)
 
             // Also persist active profile ID
             if let activeID = activeProfileID {
                 UserDefaults.standard.set(activeID.uuidString, forKey: DefaultsKeys.activeProfileID)
+            } else {
+                UserDefaults.standard.removeObject(forKey: DefaultsKeys.activeProfileID)
             }
         } catch {
             Task { @MainActor in
@@ -152,138 +156,68 @@ class ProfileService: ObservableObject {
         }
     }
 
-    /// Update a remote profile by downloading latest content
-    func updateProfile(_ profile: inout Profile) async throws {
-        guard profile.type == .remote, let url = profile.url else {
-            throw NSError(domain: "ProfileService", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not a remote profile"])
-        }
-
-        let finalUrl = appendCompatibilityFlags(to: url)
-
-        // Unified User-Agent for maximum compatibility
-        let userAgent = "ClashMeta/1.31.0 Enforce (Ares; macOS)"
-        var request = URLRequest(url: finalUrl)
-        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-
+    private func downloadProfile(_ profile: Profile) async throws -> (String, SubscriptionInfo?) {
+        guard profile.type == .remote, let url = profile.url, ["https", "http"].contains(url.scheme?.lowercased() ?? "") else { throw URLError(.badURL) }
+        var request = URLRequest(url: appendCompatibilityFlags(to: url))
+        request.setValue("ClashMeta/1.31.0 Enforce (Ares; macOS)", forHTTPHeaderField: "User-Agent")
         let (data, response) = try await directURLSession.data(for: request)
-
-        // Parse subscription info from headers
-        if let httpResponse = response as? HTTPURLResponse {
-            profile.subscriptionInfo = parseSubscriptionInfo(from: httpResponse)
+        let content = try await SubscriptionPayload.prepare(data: data, response: response) { candidate in
+            try await self.validateProfileContent(candidate)
         }
+        let header = (response as? HTTPURLResponse).flatMap { parseSubscriptionInfo(from: $0) }
+        let info = (header?.total ?? 0) > 0 ? header : (parseSubscriptionInfo(fromContent: content) ?? header)
+        return (content, info)
+    }
 
-        // Destination path
-        let filename = "\(profile.id.uuidString).yaml"
-        let destination = profilesDir.appendingPathComponent(filename)
+    private func validateProfileContent(_ content: String) async throws -> Bool {
+        // Full mihomo parsing happens only on an isolated candidate, before replacement.
+        // Development tests inject a validator and never execute this production path.
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("Ares-validation-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try content.write(to: directory.appendingPathComponent("config.yaml"), atomically: true, encoding: .utf8)
+        return await CoreManager.shared.validateConfig(configDir: directory)
+    }
 
-        // Fallback: Parse from YAML content if header info is missing
-        if profile.subscriptionInfo == nil || profile.subscriptionInfo?.total == 0 {
-            if let content = String(data: data, encoding: .utf8) {
-                if let info = parseSubscriptionInfo(fromContent: content) {
-                    profile.subscriptionInfo = info
-                }
-
-                // Check if content needs conversion (Base64 -> YAML)
-                if let converted = SubscriptionConverter.convert(content: content) {
-                    // Use converted content
-                    try converted.write(to: destination, atomically: true, encoding: .utf8)
-
-                    // Update profile path and timestamp
-                    profile.path = destination
-                    profile.lastUpdated = Date()
-
-                    return
-                }
-            }
-        }
-
-        // Save to file
-        try data.write(to: destination)
-
-        // Update profile
+    func updateProfile(_ profile: inout Profile) async throws {
+        let (content, info) = try await downloadProfile(profile)
+        let destination = profilesDir.appendingPathComponent("\(profile.id.uuidString).yaml")
+        try content.write(to: destination, atomically: true, encoding: .utf8)
         profile.path = destination
+        profile.subscriptionInfo = info
         profile.lastUpdated = Date()
     }
 
-    /// Update a remote profile by re-downloading
     func updateProfile(id: UUID) async throws {
-        guard let index = profiles.firstIndex(where: { $0.id == id }),
-              case .remote = profiles[index].type,
-              let url = profiles[index].url else {
-            throw NSError(domain: "ProfileService", code: 3, userInfo: [NSLocalizedDescriptionKey: "Profile not found or not remote"])
+        guard let profile = profiles.first(where: { $0.id == id }) else { throw URLError(.fileDoesNotExist) }
+        let revision = updateRevisions.begin(id)
+        let (content, info) = try await downloadProfile(profile)
+        try Task.checkCancellation()
+        // Resolve the index AFTER all suspension points. Delete/edit/newer refresh invalidates this response.
+        guard !ClashViewModel.shared.isToggling, updateRevisions.isCurrent(revision, for: id),
+              let index = profiles.firstIndex(where: { $0.id == id }), profiles[index].url == profile.url else { throw CancellationError() }
+        let destination = profiles[index].path ?? profilesDir.appendingPathComponent("\(id.uuidString).yaml")
+        let previousData = try? Data(contentsOf: destination)
+        let previousProfiles = profiles
+        do {
+            try content.write(to: destination, atomically: true, encoding: .utf8)
+            profiles[index].path = destination
+            profiles[index].subscriptionInfo = info
+            profiles[index].lastUpdated = Date()
+            try JSONEncoder().encode(profiles).write(to: profilesMetadataFile, options: .atomic)
+        } catch {
+            profiles = previousProfiles
+            if let previousData { try previousData.write(to: destination, options: .atomic) }
+            else { try? FileManager.default.removeItem(at: destination) }
+            throw error
         }
-
-        let isActive = activeProfileID == id
-
-        let finalUrl = appendCompatibilityFlags(to: url)
-        await MainActor.run {
-            ClashViewModel.shared.addLog("[ProfileService] 🔄 Updating profile")
-        }
-
-        // Unified User-Agent for maximum compatibility
-        let userAgent = "ClashMeta/1.31.0 Enforce (Ares; macOS)"
-        var request = URLRequest(url: finalUrl)
-        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-
-        let (data, response) = try await directURLSession.data(for: request)
-
-        // Parse subscription info from headers
-        if let httpResponse = response as? HTTPURLResponse {
-            profiles[index].subscriptionInfo = parseSubscriptionInfo(from: httpResponse)
-        }
-
-        guard let content = String(data: data, encoding: .utf8) else {
-            throw NSError(domain: "ProfileService", code: 4, userInfo: [NSLocalizedDescriptionKey: "Invalid profile content"])
-        }
-
-        // Fallback: Parse from YAML content if header info is missing
-        if profiles[index].subscriptionInfo == nil || profiles[index].subscriptionInfo?.total == 0 {
-            if let info = parseSubscriptionInfo(fromContent: content) {
-                profiles[index].subscriptionInfo = info
-            }
-        }
-
-        // Check if content needs conversion (Base64 -> YAML)
-        var finalContent = content
-        if let converted = SubscriptionConverter.convert(content: content) {
-            await MainActor.run {
-                ClashViewModel.shared.addLog("[ProfileService] 🔄 Automatically converted subscription format")
-            }
-            finalContent = converted
-        }
-
-        // Save to existing path (use finalContent, not content!)
-        if let path = profiles[index].path {
-            try finalContent.write(to: path, atomically: true, encoding: .utf8)
-        } else {
-            // Create path if missing
-            let filename = "\(id.uuidString).yaml"
-            let path = profilesDir.appendingPathComponent(filename)
-            try finalContent.write(to: path, atomically: true, encoding: .utf8)
-            profiles[index].path = path
-        }
-
-        // Update timestamp
-        profiles[index].lastUpdated = Date()
-
-        // Save metadata
-        saveProfiles()
-
-        await MainActor.run {
-            ClashViewModel.shared.addLog("[ProfileService] ✅ Updated profile")
-        }
-
-        // If this is the active profile, reload Clash to apply changes
-        if isActive {
-            await MainActor.run {
-                ClashViewModel.shared.addLog("[ProfileService] 🔄 Reloading Clash with updated profile...")
-            }
-            await reloadClashWithCurrentProfile()
-        }
+        if activeProfileID == id { await reloadClashWithCurrentProfile() }
     }
 
     /// Edit profile metadata (Name, URL)
     func editProfile(id: UUID, name: String, urlString: String) throws {
+        guard !ClashViewModel.shared.isToggling else { throw URLError(.cancelled) }
+        updateRevisions.invalidate(id)
         guard let index = profiles.firstIndex(where: { $0.id == id }) else { return }
 
         var profile = profiles[index]
@@ -318,6 +252,9 @@ class ProfileService: ObservableObject {
 
     /// Update the raw content of a profile
     func updateProfileContent(id: UUID, content: String) async throws {
+        let revision = updateRevisions.begin(id)
+        guard try await validateProfileContent(content) else { throw URLError(.cannotParseResponse) }
+        guard !ClashViewModel.shared.isToggling, updateRevisions.isCurrent(revision, for: id) else { throw CancellationError() }
         guard let index = profiles.firstIndex(where: { $0.id == id }),
               let path = profiles[index].path else {
             throw NSError(domain: "ProfileService", code: 11, userInfo: [NSLocalizedDescriptionKey: "Profile or path not found"])
@@ -343,6 +280,11 @@ class ProfileService: ObservableObject {
 
     /// Delete a profile
     func deleteProfile(id: UUID) {
+        guard !ClashViewModel.shared.isToggling else {
+            AppState.shared.reportError("Wait for the current core operation before deleting a profile.")
+            return
+        }
+        updateRevisions.invalidate(id)
         guard let index = profiles.firstIndex(where: { $0.id == id }) else { return }
 
         let profile = profiles[index]
@@ -388,8 +330,8 @@ class ProfileService: ObservableObject {
 
     /// Set active profile and reload Clash with new configuration
     func setActiveProfile(id: UUID) {
-        guard activeProfileID != id else { return } // No-op if already active
-        guard !isSwitchingProfile else {
+        guard profiles.contains(where: { $0.id == id }), activeProfileID != id else { return } // No-op if already active
+        guard !isSwitchingProfile, !ClashViewModel.shared.isToggling, AppState.shared.operationStatus == nil else {
             ClashViewModel.shared.addLog("[ProfileService] ⚠️ Profile switch already in progress", level: .debug)
             return
         }
@@ -415,62 +357,41 @@ class ProfileService: ObservableObject {
         }
     }
 
-    /// Reload Clash with the current active profile
+    /// Reload is serialized with all runtime changes. A saved profile never starts a stopped core.
     @MainActor
-    func reloadClashWithCurrentProfile() async {
+    @discardableResult
+    func reloadClashWithCurrentProfile() async -> Bool {
+        let vm = ClashViewModel.shared
+        guard vm.isRunning else { return true }
+        guard !vm.isToggling, AppState.shared.beginOperation("Applying Profile") else {
+            AppState.shared.reportError("Profile saved; apply it after the current operation finishes.")
+            return false
+        }
+        vm.isToggling = true
+        defer {
+            vm.isToggling = false
+            if AppState.shared.operationStatus != nil { AppState.shared.finishOperation() }
+        }
         let tunEnabled = AppState.shared.tunEnabled
-        let systemProxyEnabled = AppState.shared.systemProxyEnabled
-
-        ClashViewModel.shared.addLog("[ProfileService] 📝 Rebuilding configuration (TUN=\(tunEnabled))...")
-
+        let proxyEnabled = AppState.shared.systemProxyEnabled
         do {
-            // 1. Rebuild config with new profile
             try await ConfigService.shared.buildConfig(tunEnabled: tunEnabled)
-
-            // 2. Restart Clash to apply new config
-            ClashViewModel.shared.addLog("[ProfileService] 🔄 Restarting Clash with new profile...")
-            await ClashViewModel.shared.restart()
-
-            // 3. Wait for API to be ready
-            let isReady = await ClashController.shared.waitForAPIReady(timeout: 5.0)
-            if isReady {
-                ClashViewModel.shared.addLog("[ProfileService] ✅ Profile switch completed")
-
-                // 4. Force refresh proxies and rules
-                // Clear old state first to avoid UI confusing old data with new
-                await MainActor.run {
-                    ClashController.shared.proxyGroups = []
-                    ClashController.shared.proxyNodes = [:]
-                    ClashController.shared.rules = []
-                }
-
-                try? await Task.sleep(nanoseconds: 500_000_000) // Small delay for core to initialize mappings
-
-                do {
-                    try await ClashController.shared.fetchProxiesData()
-                    try await ClashController.shared.fetchRules()
-                    ClashViewModel.shared.addLog("[ProfileService] 📡 Refreshed UI data for new profile")
-                } catch {
-                     ClashViewModel.shared.addLog("[ProfileService] ⚠️ Failed to fetch fresh data: \(error)")
-                }
-
-                // 5. CRITICAL: Restore system proxy if it was enabled
-                // This ensures proxy continues to work after profile switch
-                // In TUN mode, enableSystemProxy is still needed for DNS hijacking in some configurations
-                if systemProxyEnabled {
-                    ClashViewModel.shared.addLog("[ProfileService] 🌐 Restoring system proxy...")
-                    await AppState.shared.enableSystemProxy()
-                }
-
-                // 6. Log TUN mode status
-                if tunEnabled {
-                    ClashViewModel.shared.addLog("[ProfileService] 🛡️ TUN mode active, profile switch complete")
-                }
-            } else {
-                ClashViewModel.shared.addLog("[ProfileService] ⚠️ Clash API not ready after restart")
+            guard await vm.stopCore(intendedRestart: true) else {
+                AppState.shared.finishOperation(error: "Profile saved; the old core could not stop.")
+                return false
             }
+            await vm.startCore(isRestart: true)
+            guard vm.runtimeState.isAPIReady else {
+                AppState.shared.finishOperation(error: "Profile saved but the core did not become ready.")
+                return false
+            }
+            if proxyEnabled, !(await AppState.shared.enableSystemProxy()) { return false }
+            try await ClashController.shared.fetchProxiesData()
+            try await ClashController.shared.fetchRules()
+            return true
         } catch {
-            ClashViewModel.shared.addLog("[ProfileService] ❌ Failed to reload: \(error.localizedDescription)")
+            AppState.shared.finishOperation(error: "Profile saved but could not be applied: \(error.localizedDescription)")
+            return false
         }
     }
 
@@ -514,7 +435,7 @@ class ProfileService: ObservableObject {
         if let long = Int64(cleaned) {
             return long
         }
-        if let double = Double(cleaned) {
+        if let double = Double(cleaned), double.isFinite, double >= 0, double < Double(Int64.max) {
             return Int64(double)
         }
         return 0

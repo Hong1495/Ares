@@ -14,7 +14,7 @@ struct SectionView<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.system(size: 11, weight: .bold))
+                .font(DS.Typography.metadata.weight(.semibold))
                 .foregroundColor(.secondary)
 
             content
@@ -29,12 +29,12 @@ struct KeyValueRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Text(key + ":")
-                .font(.system(size: 11, weight: .bold))
+                .font(DS.Typography.metadata.weight(.semibold))
                 .foregroundColor(.secondary)
                 .frame(width: 120, alignment: .trailing)
 
             Text(value)
-                .font(.system(size: 11, design: .monospaced))
+                .font(DS.Typography.metadata.monospaced())
                 .textSelection(.enabled)
 
             Spacer()

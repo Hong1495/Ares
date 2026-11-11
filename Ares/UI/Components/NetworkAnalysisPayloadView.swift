@@ -33,7 +33,7 @@ struct SectionHeader: View {
     var body: some View {
         HStack {
             Text(title)
-                .font(.system(size: 11, weight: .bold))
+                .font(DS.Typography.metadata.weight(.semibold))
                 .foregroundStyle(.secondary)
             Spacer()
             Button {
@@ -50,7 +50,7 @@ struct SectionHeader: View {
                     Image(systemName: copied ? "checkmark" : "doc.on.doc")
                     Text(copied ? "Copied" : "Copy")
                 }
-                .font(.system(size: 10))
+                .font(DS.Typography.caption)
                 .foregroundStyle(copied ? .green : .blue)
             }
             .buttonStyle(.plain)
@@ -81,7 +81,7 @@ struct BodyTextView: View {
                     .padding(8)
             } else {
                 Text(text)
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(DS.Typography.caption.monospaced())
                     .padding(8)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)

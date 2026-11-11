@@ -1,0 +1,125 @@
+name: Signed app update
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+concurrency:
+  group: ares-release
+  cancel-in-progress: false
+jobs:
+  package:
+    runs-on: macos-15
+    strategy:
+      fail-fast: true
+      matrix:
+        arch: [arm64, x86_64]
+    env:
+      ARES_UPDATE_PUBLIC_KEY: ${{ vars.ARES_UPDATE_PUBLIC_KEY }}
+      SIGNING_KEY: ${{ secrets.ARES_UPDATE_PRIVATE_KEY }}
+      TAG: ${{ github.ref_name }}
+      REPOSITORY: ${{ github.repository }}
+      ARCH: ${{ matrix.arch }}
+      CORE_TAG: v1.19.34
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select supported Xcode
+        run: scripts/select-xcode.sh
+      - name: Validate release inputs
+        run: |
+          python3 - <<'PY'
+          import base64, os, re
+          assert re.fullmatch(r'v\d+\.\d+\.\d+', os.environ['TAG']), 'Stable semver tag required'
+          assert len(base64.b64decode(os.environ['ARES_UPDATE_PUBLIC_KEY'], validate=True)) == 32, 'Set ARES_UPDATE_PUBLIC_KEY repository variable'
+          assert os.environ['SIGNING_KEY'].strip(), 'Set ARES_UPDATE_PRIVATE_KEY repository secret'
+          PY
+      - name: Verify signing identity
+        run: printf '%s' "$SIGNING_KEY" | swift scripts/verify-update-key.swift
+      - name: Isolated regression tests
+        run: |
+          scripts/test-safe-functions.sh
+          python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+      - name: Download Sparkle release tools
+        run: |
+          mkdir -p .build/sparkle-tools
+          curl --fail --location --retry 3 https://github.com/sparkle-project/Sparkle/releases/download/2.9.6/Sparkle-2.9.6.tar.xz -o .build/sparkle.tar.xz
+          echo "52bf9e88cdd972fc0c81501377a880e90d47031bd8ca5462488f843e2609e192  .build/sparkle.tar.xz" | shasum -a 256 -c -
+          tar -xf .build/sparkle.tar.xz -C .build/sparkle-tools
+      - name: Build app
+        run: |
+          VERSION="${TAG#v}"
+          # Monotonic across reruns, independent of mihomo's version.
+          BUILD_NUMBER="$((GITHUB_RUN_NUMBER * 100 + GITHUB_RUN_ATTEMPT))"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+          xcodebuild -project Ares.xcodeproj -scheme Ares -configuration Release \
+            -derivedDataPath .build/release ARCHS="$ARCH" ONLY_ACTIVE_ARCH=NO \
+            MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            ARES_UPDATE_PUBLIC_KEY="$ARES_UPDATE_PUBLIC_KEY" \
+            ARES_UPDATE_FEED_URL="https://github.com/$REPOSITORY/releases/latest/download/appcast.xml" \
+            CODE_SIGNING_ALLOWED=NO build
+      - name: Embed matching core and sign app bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CORE_ARCH="$ARCH"
+          if [[ "$ARCH" == x86_64 ]]; then CORE_ARCH=amd64; fi
+          gh api "repos/MetaCubeX/mihomo/releases/tags/$CORE_TAG" > .build/core-release.json
+          python3 scripts/select-core-asset.py .build/core-release.json "$CORE_ARCH" > .build/core-url
+          curl --fail --location --retry 3 "$(cat .build/core-url)" -o .build/core.gz
+          mkdir -p artifacts
+          curl --fail --location --retry 3 "https://github.com/MetaCubeX/mihomo/archive/refs/tags/$CORE_TAG.tar.gz" -o "artifacts/mihomo-$CORE_TAG-source.tar.gz"
+          curl --fail --location --retry 3 "https://raw.githubusercontent.com/MetaCubeX/mihomo/$CORE_TAG/LICENSE" -o artifacts/mihomo-LICENSE.txt
+          cp .build/core-release.json artifacts/mihomo-release.json
+          APP=.build/release/Build/Products/Release/Ares.app
+          mkdir -p "$APP/Contents/Resources/Licenses"
+          cp artifacts/mihomo-LICENSE.txt "$APP/Contents/Resources/Licenses/"
+          cp Packages/Sparkle/LICENSE "$APP/Contents/Resources/Licenses/Sparkle.txt"
+          cp THIRD_PARTY_NOTICES.md "$APP/Contents/Resources/Licenses/"
+          gunzip -c .build/core.gz > "$APP/Contents/Resources/clash-meta"
+          chmod +x "$APP/Contents/Resources/clash-meta"
+          # Stable EdDSA archive signatures establish update trust. Ad-hoc code signing
+          # keeps local bundles internally consistent; it is not Apple notarization.
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --deep --strict "$APP"
+      - name: Package and generate signed appcast
+        run: |
+          mkdir -p artifacts .build/staging
+          APP=.build/release/Build/Products/Release/Ares.app
+          ARCHIVE="artifacts/Ares-$TAG-$ARCH.zip"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "$ARCHIVE"
+          # stdin avoids placing a private key in command-line arguments or the checkout.
+          printf '%s' "$SIGNING_KEY" | .build/sparkle-tools/bin/sign_update --ed-key-file - -p "$ARCHIVE" > .build/signature
+          python3 scripts/create-appcast.py --repository "$REPOSITORY" --tag "$TAG" \
+            --version "$VERSION" --build "$BUILD_NUMBER" --archive "$ARCHIVE" \
+            --signature-file .build/signature --output "artifacts/appcast-$ARCH.xml"
+          printf '%s' "$SIGNING_KEY" | .build/sparkle-tools/bin/sign_update --ed-key-file - "artifacts/appcast-$ARCH.xml"
+          cp -R "$APP" .build/staging/
+          ln -s /Applications .build/staging/Applications
+          hdiutil create -volname Ares -srcfolder .build/staging -ov -format UDZO "artifacts/Ares-$TAG-$ARCH.dmg"
+          (cd artifacts && shasum -a 256 * > "SHA256SUMS-$ARCH.txt")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: update-${{ matrix.arch }}
+          path: artifacts/
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: update-*
+          merge-multiple: true
+          path: artifacts
+      - name: Publish both architectures together
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          # A failure leaves a draft; no client can observe a half-published update.
+          gh release create "$TAG" --repo "$REPOSITORY" --verify-tag --draft --title "Ares $TAG" --notes-file docs/release-1.0.0.md artifacts/*
+          gh release edit "$TAG" --repo "$REPOSITORY" --draft=false --latest
