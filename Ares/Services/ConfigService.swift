@@ -62,7 +62,7 @@ actor ConfigService {
         }
         
         // Parse profile YAML to remove conflicting keys (Performed on Actor background thread)
-        var cleanedProfile = removeConflictingKeys(from: profileContent)
+        var cleanedProfile = ProfileConfigMerge.removingOverrides(from: profileContent)
         
         // Dynamic Rules: Inject Bypass rules and MITM rules
         let (mitmEnabled, mitmPort, bypassRules, localRules, mitmPortsString, mitmHosts, tlsFingerprint) = await MainActor.run {
@@ -121,19 +121,7 @@ actor ConfigService {
         
         // Write to config.yaml (Async, non-blocking)
         do {
-            await MainActor.run {
-                ClashViewModel.shared.addLog("[Config] 📝 Writing config content (Preview lines 1-10):", level: .debug)
-                let preview = finalConfig.components(separatedBy: "\n").prefix(10).joined(separator: "\n")
-                ClashViewModel.shared.addLog(preview, level: .debug)
-            }
-            try await fileManager.writeText(finalConfig, to: targetPath)
-            let isValid = await CoreManager.shared.validateConfig(configDir: targetDir)
-            guard isValid else {
-                await MainActor.run {
-                    ClashViewModel.shared.addLog("[Config] ❌ Generated config failed mihomo validation")
-                }
-                throw NSError(domain: "ConfigService", code: 2, userInfo: [NSLocalizedDescriptionKey: "Generated config failed mihomo validation"])
-            }
+            try await writeValidatedConfig(finalConfig, to: targetPath, directory: targetDir)
             await MainActor.run {
                 ClashViewModel.shared.addLog("[Config] ✅ Config written to: \(targetPath.lastPathComponent)")
             }
@@ -146,95 +134,17 @@ actor ConfigService {
     }
 
     
-    /// Remove keys that conflict with our base config
-    /// Handles both single-line keys and multi-line blocks (like dns:, tun:, sniffer:)
-    nonisolated private func removeConflictingKeys(from yaml: String) -> String {
-        // Single-line conflicting keys
-        let singleLineKeys = [
-            "mixed-port",
-            "socks-port",
-            "port",
-            "mode",
-            "log-level",
-            "allow-lan",
-            "ipv6",
-            "external-controller",
-            "secret",
-            "keep-alive-interval",
-            "tcp-concurrent",
-            "unified-delay",
-            "global-client-fingerprint",
-            "find-process-mode",
-            "geodata-mode",
-            "geodata-loader",
-            "geox-url"
-        ]
-        
-        // Multi-line block keys (need to remove entire block including children)
-        // We enforce our own TUN, DNS, and Sniffer config to ensure stability in TUN mode
-        let blockKeys = [
-            "tun",      // Use our own TUN config (required for TUN mode control)
-            "profile",  // Use our own profile config (required for node selection persistence)
-            "dns",      // Use our own DNS config (force Fake-IP for TUN stability)
-            "sniffer"   // Use our own Sniffer config
-        ]
-        
-        let lines = yaml.components(separatedBy: .newlines)
-        var result: [String] = []
-        var skipUntilIndent: Int? = nil  // Track when we're inside a block to skip
-        
-        for line in lines {
-            // Calculate current line's indentation (number of leading spaces)
-            let leadingSpaces = line.prefix(while: { $0 == " " || $0 == "\t" }).count
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            let lower = trimmed.lowercased()
-            
-            // If we're in skip mode, check if we should exit
-            if let blockIndent = skipUntilIndent {
-                // Empty lines stay in skip mode
-                if trimmed.isEmpty {
-                    continue
-                }
-                // If current line has same or less indentation than block start, exit skip mode
-                if leadingSpaces <= blockIndent {
-                    skipUntilIndent = nil
-                } else {
-                    // Still inside the block, skip this line
-                    continue
-                }
-            }
-            
-            // Check for block keys (multi-line sections)
-            var isBlockStart = false
-            for key in blockKeys {
-                if lower.hasPrefix(key + ":") || lower == key + ":" {
-                    isBlockStart = true
-                    skipUntilIndent = leadingSpaces
-                    break
-                }
-            }
-            
-            if isBlockStart {
-                continue  // Skip the block header line
-            }
-            
-            // Check for single-line conflicting keys
-            var isSingleLineConflict = false
-            for key in singleLineKeys {
-                if lower.hasPrefix(key + ":") || lower.hasPrefix(key + " :") {
-                    isSingleLineConflict = true
-                    break
-                }
-            }
-            
-            if !isSingleLineConflict {
-                result.append(line)
-            }
+    /// Validate a candidate with the same resource directory before replacing the working file.
+    private func writeValidatedConfig(_ content: String, to destination: URL, directory: URL) async throws {
+        let candidate = directory.appendingPathComponent("candidate-\(UUID().uuidString).yaml")
+        defer { try? FileManager.default.removeItem(at: candidate) }
+        try await fileManager.writeText(content, to: candidate)
+        guard await CoreManager.shared.validateConfig(configDir: directory, configFile: candidate) else {
+            throw NSError(domain: "ConfigService", code: 2, userInfo: [NSLocalizedDescriptionKey: "Generated configuration is invalid. The previous configuration was kept."])
         }
-        
-        return result.joined(separator: "\n")
+        try await fileManager.writeText(content, to: destination)
     }
-    
+
     /// Inject Dynamic Rules (Bypass & MITM) into existing profile sections
     /// - bypassRules: User-defined bypass domains (DIRECT)
     /// - localRules: User-defined raw rules (from Rules interface)
@@ -422,11 +332,7 @@ actor ConfigService {
         rules: []
         """
         
-        try await fileManager.writeText(config, to: targetPath)
-        let isValid = await CoreManager.shared.validateConfig(configDir: targetDir)
-        guard isValid else {
-            throw NSError(domain: "ConfigService", code: 3, userInfo: [NSLocalizedDescriptionKey: "Fallback config failed mihomo validation"])
-        }
+        try await writeValidatedConfig(config, to: targetPath, directory: targetDir)
         await MainActor.run {
             ClashViewModel.shared.addLog("[Config] Safe fallback config created", level: .debug)
         }

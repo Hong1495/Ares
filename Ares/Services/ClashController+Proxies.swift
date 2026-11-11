@@ -14,42 +14,7 @@ extension ClashController {
 
         // Parse in background to avoid blocking Main Actor
         let (groups, nodes) = try await Task.detached(priority: .userInitiated) {
-            guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-                  let proxiesDict = json["proxies"] as? [String: [String: Any]] else {
-                throw URLError(.cannotParseResponse)
-            }
-
-            var groups: [ProxyGroup] = []
-            var nodes: [String: ProxyNode] = [:]
-
-            for (name, proxyData) in proxiesDict {
-                if let type = proxyData["type"] as? String {
-                    // Check if it's a node (has history or delay)
-                    if let history = proxyData["history"] as? [[String: Any]] {
-                        let delay = history.last?["delay"] as? Int
-                        let node = ProxyNode(
-                            name: name,
-                            type: type,
-                            delay: delay
-                        )
-                        nodes[name] = node
-                    }
-
-                    // Parse ALL proxy groups
-                    if let all = proxyData["all"] as? [String], !all.isEmpty {
-                        let now = proxyData["now"] as? String
-
-                        let group = ProxyGroup(
-                            name: name,
-                            type: type,
-                            now: now,
-                            all: all
-                        )
-                        groups.append(group)
-                    }
-                }
-            }
-            return (groups, nodes)
+            try ProxySnapshot.decode(data)
         }.value
 
         guard generation == runtimeGeneration else { throw CancellationError() }

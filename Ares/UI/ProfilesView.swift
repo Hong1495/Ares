@@ -176,6 +176,7 @@ struct ProfileCard: View {
     let onEditRaw: () -> Void
     let onDelete: () -> Void
 
+    @EnvironmentObject private var clashViewModel: ClashViewModel
     @State private var isUpdating = false
     @EnvironmentObject var profileService: ProfileService
 
@@ -224,7 +225,7 @@ struct ProfileCard: View {
                         .font(DS.Typography.body.weight(.semibold))
                         .lineLimit(1)
                     if isActive {
-                        DSTag(text: "ACTIVE", tint: .statusGood)
+                        DSTag(text: "SELECTED", tint: .statusGood)
                     }
                 }
 
@@ -295,14 +296,14 @@ struct ProfileCard: View {
         HStack(spacing: DS.Space.xs) {
             Button(action: onSelect) {
                 Text(isActive
-                     ? (profileService.isSwitchingProfile ? "Switching…" : "Selected")
+                     ? (profileService.isSwitchingProfile ? "Applying…" : (clashViewModel.isRunning ? "Apply again" : "Selected"))
                      : "Use profile")
                     .font(DS.Typography.metadata.weight(.medium))
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
-            .disabled(isActive || profileService.isSwitchingProfile)
+            .disabled(profileService.isSwitchingProfile || clashViewModel.isToggling || (isActive && !clashViewModel.isRunning))
 
             if profile.type == .remote {
                 ActionButton(icon: "arrow.clockwise", tooltip: "Update subscription") {

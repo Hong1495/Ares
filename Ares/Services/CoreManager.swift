@@ -104,11 +104,13 @@ actor CoreManager {
         }
     }
 
-    func validateConfig(configDir: URL) async -> Bool {
+    func validateConfig(configDir: URL, configFile: URL? = nil) async -> Bool {
         let path = activeBinaryPath()
         guard FileManager.default.fileExists(atPath: path) else { return false }
 
-        let result = try? await ProcessManager().run(executable: path, arguments: ["-t", "-d", configDir.path], timeout: 15)
+        var arguments = ["-t", "-d", configDir.path]
+        if let configFile { arguments += ["-f", configFile.path] }
+        let result = try? await ProcessManager().run(executable: path, arguments: arguments, timeout: 15)
         return result?.exitCode == 0
     }
 

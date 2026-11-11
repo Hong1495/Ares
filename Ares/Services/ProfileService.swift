@@ -330,7 +330,7 @@ class ProfileService: ObservableObject {
 
     /// Set active profile and reload Clash with new configuration
     func setActiveProfile(id: UUID) {
-        guard profiles.contains(where: { $0.id == id }), activeProfileID != id else { return } // No-op if already active
+        guard profiles.contains(where: { $0.id == id }) else { return }
         guard !isSwitchingProfile, !ClashViewModel.shared.isToggling, AppState.shared.operationStatus == nil else {
             ClashViewModel.shared.addLog("[ProfileService] ⚠️ Profile switch already in progress", level: .debug)
             return

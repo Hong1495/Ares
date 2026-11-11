@@ -12,6 +12,9 @@ enum ProxyTab: String, CaseIterable, Identifiable {
 struct ProxiesView: View {
     @EnvironmentObject var clashController: ClashController
     @EnvironmentObject var profileService: ProfileService
+    @EnvironmentObject var clashViewModel: ClashViewModel
+    @State private var loadError: String?
+    @State private var isLoading = false
     @State private var selectedTab: ProxyTab = .rule
     @State private var expandedGroups = Set<String>()
     @State private var testingNodes = Set<String>()
@@ -23,6 +26,14 @@ struct ProxiesView: View {
         case name = "Name"
         case delay = "Delay"
         var id: String { rawValue }
+    }
+
+    private var nodeCount: Int {
+        let groupNames = Set(clashController.proxyGroups.map(\.name))
+        let builtIns = Set(["Direct", "Reject", "RejectDrop", "Pass"])
+        return clashController.proxyNodes.values.filter {
+            !groupNames.contains($0.name) && !builtIns.contains($0.type)
+        }.count
     }
 
     // Filter groups based on selected tab
@@ -52,13 +63,24 @@ struct ProxiesView: View {
                 content
             }
         }
-        .task {
-            await Task.yield()
-            DispatchQueue.main.async {
-                // Default: all collapsed (empty set)
-                expandedGroups = []
-            }
+        .task(id: clashViewModel.isRunning) {
+            await refreshProxies()
         }
+        .onChange(of: clashController.proxyGroups.map(\.name)) { _, names in
+            expandedGroups.formUnion(names)
+        }
+    }
+
+    private func refreshProxies() async {
+        guard clashViewModel.isRunning, !clashViewModel.isToggling else { return }
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            try await clashController.fetchProxiesData()
+            loadError = nil
+            expandedGroups.formUnion(clashController.proxyGroups.map(\.name))
+        } catch is CancellationError { }
+        catch { loadError = "Could not load nodes. Try refreshing." }
     }
 
     // MARK: - Toolbar
@@ -107,7 +129,16 @@ struct ProxiesView: View {
             .fixedSize()
             .help("Sort nodes")
 
-            Text("\(clashController.proxyNodes.count) nodes")
+            Button {
+                Task { await refreshProxies() }
+            } label: {
+                Image(systemName: "arrow.clockwise")
+            }
+            .buttonStyle(.plain)
+            .help("Refresh nodes")
+            .disabled(!clashViewModel.isRunning || clashViewModel.isToggling || isLoading)
+
+            Text("\(nodeCount) nodes")
                 .font(DS.Typography.metadata)
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
@@ -129,9 +160,13 @@ struct ProxiesView: View {
             .frame(maxWidth: .infinity, minHeight: 300)
         } else if filteredGroups.isEmpty {
             ContentUnavailableView {
-                Label("No proxy groups", systemImage: "network.slash")
+                Label(clashViewModel.isRunning ? "No proxy groups" : "Core is stopped", systemImage: "network.slash")
             } description: {
-                Text("Start Clash to see proxies.")
+                Text(loadError ?? (clashViewModel.isRunning
+                    ? "Apply your subscription from Profiles, then refresh."
+                    : (profileService.activeProfile == nil
+                        ? "Add a subscription in Profiles."
+                        : "Subscription saved. Start the core from Overview to load its nodes.")))
             }
             .frame(maxWidth: .infinity, minHeight: 300)
         } else {

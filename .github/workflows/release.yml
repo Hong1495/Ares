@@ -121,5 +121,5 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           # A failure leaves a draft; no client can observe a half-published update.
-          gh release create "$TAG" --repo "$REPOSITORY" --verify-tag --draft --title "Ares $TAG" --notes-file docs/release-1.0.0.md artifacts/*
+          gh release create "$TAG" --repo "$REPOSITORY" --verify-tag --draft --title "Ares $TAG" --notes-file "docs/release-${TAG#v}.md" artifacts/*
           gh release edit "$TAG" --repo "$REPOSITORY" --draft=false --latest
