@@ -4,7 +4,7 @@ import sys
 
 release = json.load(open(sys.argv[1]))
 arch = sys.argv[2]
-if arch not in ('arm64', 'amd64'):
+if arch != 'arm64':
     raise SystemExit('Unsupported core architecture')
 assets = [a for a in release['assets'] if a['name'].startswith(f'mihomo-darwin-{arch}-') and a['name'].endswith('.gz')]
 preferred = [a for a in assets if '-go' not in a['name'] and 'compatible' not in a['name']]

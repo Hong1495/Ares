@@ -4,9 +4,9 @@ A native macOS proxy client and network inspector, built with SwiftUI and powere
 
 ## Download
 
-Get the latest DMG from [Releases](https://github.com/Hong1495/Ares/releases/latest), choosing **arm64** for Apple Silicon or **x86_64** for Intel. Move Ares to Applications before opening it.
+Get the latest DMG from [Releases](https://github.com/Hong1495/Ares/releases/latest), using the **arm64** package for Apple Silicon. Move Ares to Applications before opening it.
 
-Requires macOS 14 or later. Current distributions use ad-hoc code signing and signed update archives; they are not Apple-notarized. macOS may require approval in System Settings → Privacy & Security for the first launch.
+Requires an Apple Silicon Mac and macOS 14 or later. Starting with 1.0.2, Intel Macs are no longer supported. Current distributions use ad-hoc code signing and signed update archives; they are not Apple-notarized. macOS may require approval in System Settings → Privacy & Security for the first launch.
 
 ## Features
 
@@ -30,7 +30,7 @@ xcodebuild -project Ares.xcodeproj -scheme Ares -configuration Debug \
   -derivedDataPath .build/DerivedData CODE_SIGNING_ALLOWED=NO build
 ```
 
-The app is at `.build/DerivedData/Build/Products/Debug/Ares.app`. Sparkle's pinned binary dependency is downloaded from its official release. Release packaging supplies the matching architecture's mihomo core.
+The app is at `.build/DerivedData/Build/Products/Debug/Ares.app`. Sparkle's pinned binary dependency is downloaded from its official release. Release packaging supplies the arm64 mihomo core.
 
 For interface development, use the isolated executable:
 
@@ -49,7 +49,7 @@ Read [development/testing](docs/development/testing.md) before testing live serv
 
 ## Release status
 
-Version 1.0.0 introduces the redesigned interface, guarded network lifecycle, validated subscription updates and signed app updates. Compilation and isolated tests are covered by CI. Full live-network and in-place update acceptance on both architectures is still pending; see [functional verification](docs/diagnostics/functional-audit.md).
+Version 1.0.2 continues the subscription fixes from 1.0.1 and supports Apple Silicon only. Compilation and isolated tests are covered by CI. Full live-network and in-place update acceptance on Apple Silicon is still pending; see [functional verification](docs/diagnostics/functional-audit.md).
 
 ## License and credits
 

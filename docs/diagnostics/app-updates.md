@@ -23,12 +23,11 @@ The upstream repository is configured for 1.0.0. Forks require their own one-tim
 5. Configure the same public key for any locally distributed build: `xcodebuild ... ARES_UPDATE_PUBLIC_KEY="$ARES_UPDATE_PUBLIC_KEY"`.
 6. Push a stable `vMAJOR.MINOR.PATCH` tag when ready to publish. The release workflow runs on stable version tags.
 
-The workflow builds arm64 and x86_64 independently, sets app versions from the tag and an increasing CI build number, embeds the matching mihomo binary, creates ZIP and DMG artifacts, signs the ZIP and XML feed, and only publishes once both architectures are ready. Both appcasts are assets of the same latest release:
+Starting with 1.0.2, the workflow builds arm64 only, sets app versions from the tag and an increasing CI build number, embeds the matching mihomo binary, creates ZIP and DMG artifacts, signs the ZIP and XML feed, and publishes after packaging and signing succeed. The appcast is an asset of the latest release:
 
 - `https://github.com/Hong1495/Ares/releases/latest/download/appcast-arm64.xml`
-- `https://github.com/Hong1495/Ares/releases/latest/download/appcast-x86_64.xml`
 
-The app chooses the feed for its compiled architecture, including Intel apps running through Rosetta. The base repository URL can be overridden using `ARES_UPDATE_FEED_URL`; forks must provide their own URL and signing keys. XML construction escapes release content and requires a stable tag, a nonempty archive and a correctly sized Ed25519 signature. Actual archive verification is Sparkle's responsibility.
+The app uses the arm64 feed. Intel builds are no longer produced or updated; historical releases remain archived. The base repository URL can be overridden using `ARES_UPDATE_FEED_URL`; forks must provide their own URL and signing keys. XML construction escapes release content and requires a stable tag, a nonempty archive and a correctly sized Ed25519 signature. Actual archive verification is Sparkle's responsibility.
 
 `Packages/Sparkle/Package.swift` is the official binary package manifest pinned to 2.9.6 and its SHA-256. Keeping this small manifest locally avoids downloading Sparkle's complete Git history. The framework itself downloads from the official release and is not vendored. Its license accompanies the manifest.
 
@@ -40,6 +39,6 @@ The repository can remain private during development, but the updater feed and r
 
 ## Validation
 
-Only the isolated presentation preview is launched on the development host. It uses a fake `1.1` availability flag and a mock alert, with no Sparkle import, network transport, production app delegate or core. Real download, signature rejection, replacement and restart tests belong in a disposable VM, including failed network restoration and both architectures.
+Only the isolated presentation preview is launched on the development host. It uses a fake `1.1` availability flag and a mock alert, with no Sparkle import, network transport, production app delegate or core. Real download, signature rejection, replacement and restart tests belong in a disposable VM, including failed network restoration on Apple Silicon.
 
 Implementation verification on 2026-11-11: production Debug build passed without launching it; Sparkle.framework is embedded and SU* keys are present with correct Boolean/integer types in the built Info.plist. 53 isolated XCTest cases and 6 Python appcast cases passed. The preview dot was visible and its click opened the mock update alert. Production update services and archive replacement were not executed. Release setup is documented separately from those implementation-only checks.

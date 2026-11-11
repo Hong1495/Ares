@@ -10,16 +10,12 @@ concurrency:
 jobs:
   package:
     runs-on: macos-15
-    strategy:
-      fail-fast: true
-      matrix:
-        arch: [arm64, x86_64]
     env:
       ARES_UPDATE_PUBLIC_KEY: ${{ vars.ARES_UPDATE_PUBLIC_KEY }}
       SIGNING_KEY: ${{ secrets.ARES_UPDATE_PRIVATE_KEY }}
       TAG: ${{ github.ref_name }}
       REPOSITORY: ${{ github.repository }}
-      ARCH: ${{ matrix.arch }}
+      ARCH: arm64
       CORE_TAG: v1.19.34
     steps:
       - uses: actions/checkout@v4
@@ -62,10 +58,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          CORE_ARCH="$ARCH"
-          if [[ "$ARCH" == x86_64 ]]; then CORE_ARCH=amd64; fi
           gh api "repos/MetaCubeX/mihomo/releases/tags/$CORE_TAG" > .build/core-release.json
-          python3 scripts/select-core-asset.py .build/core-release.json "$CORE_ARCH" > .build/core-url
+          python3 scripts/select-core-asset.py .build/core-release.json "$ARCH" > .build/core-url
           curl --fail --location --retry 3 "$(cat .build/core-url)" -o .build/core.gz
           mkdir -p artifacts
           curl --fail --location --retry 3 "https://github.com/MetaCubeX/mihomo/archive/refs/tags/$CORE_TAG.tar.gz" -o "artifacts/mihomo-$CORE_TAG-source.tar.gz"
@@ -78,6 +72,8 @@ jobs:
           cp THIRD_PARTY_NOTICES.md "$APP/Contents/Resources/Licenses/"
           gunzip -c .build/core.gz > "$APP/Contents/Resources/clash-meta"
           chmod +x "$APP/Contents/Resources/clash-meta"
+          test "$(lipo -archs "$APP/Contents/MacOS/Ares")" = arm64
+          test "$(lipo -archs "$APP/Contents/Resources/clash-meta")" = arm64
           # Stable EdDSA archive signatures establish update trust. Ad-hoc code signing
           # keeps local bundles internally consistent; it is not Apple notarization.
           codesign --force --deep --sign - "$APP"
@@ -100,7 +96,7 @@ jobs:
           (cd artifacts && shasum -a 256 * > "SHA256SUMS-$ARCH.txt")
       - uses: actions/upload-artifact@v4
         with:
-          name: update-${{ matrix.arch }}
+          name: update-arm64
           path: artifacts/
   publish:
     needs: package
@@ -114,12 +110,12 @@ jobs:
           pattern: update-*
           merge-multiple: true
           path: artifacts
-      - name: Publish both architectures together
+      - name: Publish Apple Silicon release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
           REPOSITORY: ${{ github.repository }}
         run: |
-          # A failure leaves a draft; no client can observe a half-published update.
+          # A failure leaves a draft; clients only see a completed release.
           gh release create "$TAG" --repo "$REPOSITORY" --verify-tag --draft --title "Ares $TAG" --notes-file "docs/release-${TAG#v}.md" artifacts/*
           gh release edit "$TAG" --repo "$REPOSITORY" --draft=false --latest

@@ -68,11 +68,7 @@ final class AppUpdateService: NSObject, ObservableObject, SPUUpdaterDelegate, SP
 
     func feedURLString(for updater: SPUUpdater) -> String? {
         guard let base = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String else { return nil }
-        #if arch(arm64)
         return base.replacingOccurrences(of: "appcast.xml", with: "appcast-arm64.xml")
-        #else
-        return base.replacingOccurrences(of: "appcast.xml", with: "appcast-x86_64.xml")
-        #endif
     }
 
     var supportsGentleScheduledUpdateReminders: Bool { true }
