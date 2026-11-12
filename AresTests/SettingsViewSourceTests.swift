@@ -99,9 +99,11 @@ final class SettingsViewSourceTests: XCTestCase {
     func testDataPagesExposeEmptyStates() throws {
         let analysis = try String(contentsOf: projectRoot.appendingPathComponent("Ares/UI/AnalysisView.swift"))
         let logs = try String(contentsOf: projectRoot.appendingPathComponent("Ares/UI/LogsView.swift"))
+        let logPresentation = try String(contentsOf: projectRoot.appendingPathComponent("Ares/UI/DesignSystem/LogsPresentation.swift"))
         let activity = try String(contentsOf: projectRoot.appendingPathComponent("Ares/UI/ConnectionsView.swift"))
         XCTAssertTrue(analysis.contains("ContentUnavailableView"))
-        XCTAssertTrue(logs.contains("ContentUnavailableView"))
+        XCTAssertTrue(logs.contains("LogsSurface("))
+        XCTAssertTrue(logPresentation.contains("ContentUnavailableView"))
         XCTAssertTrue(activity.contains("ContentUnavailableView"))
     }
 }

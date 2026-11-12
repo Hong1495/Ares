@@ -74,17 +74,20 @@ struct PreviewWorkspace: View {
             .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 260)
         } detail: {
             Group {
-                if page == "Dashboard" { dashboard } else if page == "Settings" { SettingsPreview() } else { secondaryPage }
+                if page == "Dashboard" { dashboard } else if page == "Logs" { LogsPreview(empty: empty) } else if page == "Settings" { SettingsPreview() } else { secondaryPage }
             }
             .frame(minWidth: 650, minHeight: 540)
             .background(DS.canvas)
-            .navigationTitle(page == "Activity" || page == "Dashboard" ? "" : page)
+            .navigationTitle(page == "Activity" || page == "Dashboard" || ["Proxies", "Rules", "Subscriptions", "Logs"].contains(page) ? "" : page)
             .toolbar {
                 if page == "Dashboard" {
                     ToolbarItem(placement: .navigation) {
                         DashboardTitleSummary(country: empty ? nil : "JP", ip: empty ? "—" : "203.0.113.24", latency: empty || mode == 2 ? nil : 38, showsRisk: true, risk: empty || error ? nil : 33, riskHelp: "Preview · 33/100 risk · proxycheck.io").padding(.leading, 16)
                     }.aresUnframed()
                 }
+                if page == "Proxies" { ProxiesTitleToolbar(count: empty ? 0 : 6) }
+                if page == "Rules" { CollectionTitleToolbar(title: "Rules", count: empty ? 0 : 4, unit: "Rules") }
+                if page == "Subscriptions" { CollectionTitleToolbar(title: "Subscriptions", count: empty ? 0 : 2, unit: "Profiles") }
                 if page == "Activity" {
                     ActivityTitleToolbar(count: tab == 0 ? 9 : 13,
                                          topologySummary: tab == 0 ? "9 processes · 3 rule types · 2 routes · 18 targets" : nil,
@@ -122,7 +125,10 @@ struct PreviewWorkspace: View {
         }
     }
 
-    private var secondaryPage: some View {
+    @ViewBuilder private var secondaryPage: some View {
+        if page == "Rules" || page == "Subscriptions" {
+            CollectionPreview(subscriptions: page == "Subscriptions", empty: empty).id(page)
+        } else {
         VStack(alignment: .leading, spacing: 22) {
             if ["Proxies", "Rules", "Subscriptions"].contains(page) {
                 proxyPage
@@ -141,6 +147,7 @@ struct PreviewWorkspace: View {
         .padding(.bottom, 30)
         .padding(.top, DS.Space.pageTop)
     }
+    }
 
     private var subtitle: String {
         switch page {
@@ -153,12 +160,27 @@ struct PreviewWorkspace: View {
         }
     }
 
+    private func previewDelay(_ name: String) -> Int? {
+        measured ? 42 : (name.contains("Singapore") ? 288 : name.contains("London") ? 817 : 38)
+    }
+
     @ViewBuilder private var proxyPage: some View {
         if page == "Proxies" {
-            HStack {
-                TextField("Search nodes", text: $search).textFieldStyle(.roundedBorder).frame(width: 240)
-                Spacer()
-                Text("6 nodes").font(DS.Typography.metadata).foregroundStyle(.secondary)
+            HStack(spacing: DS.Space.md) {
+                Picker("Mode", selection: $mode) {
+                    Text("Rule").tag(0)
+                    Text("Global").tag(1)
+                    Text("Direct").tag(2)
+                }.pickerStyle(.segmented).labelsHidden().controlSize(.small).fixedSize()
+                Spacer(minLength: DS.Space.sm)
+                TextField("Search nodes", text: $search).textFieldStyle(.roundedBorder)
+                    .controlSize(.small).frame(minWidth: 130, idealWidth: 200, maxWidth: 200)
+                HStack(spacing: DS.Space.xs) {
+                    Button { measured.toggle() } label: { ProxyLatencySymbol() }
+                        .help("Test all nodes").accessibilityLabel("Test all nodes")
+                    Button { measured = false } label: { Image(systemName: "arrow.clockwise") }
+                        .help("Refresh nodes")
+                }.font(DS.Typography.secondary.weight(.medium)).buttonStyle(.borderless)
             }
             if empty {
                 ContentUnavailableView("No proxy groups", systemImage: "network.slash", description: Text("Add a subscription to get started."))
@@ -166,8 +188,8 @@ struct PreviewWorkspace: View {
                 DSCard(padding: 22, spacing: 22) {
                     DSCardHeader("Automatic selection", icon: "hand.tap", subtitle: "Select a preferred route")
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 195), spacing: 12)], spacing: 12) {
-                        ForEach(["Tokyo · 01", "Tokyo · 02", "Singapore · 01", "Hong Kong · 01", "Los Angeles · 01", "London · 01"].filter { search.isEmpty || $0.localizedCaseInsensitiveContains(search) }, id: \.self) { name in
-                            SimpleProxyButton(name: name, isSelected: name == selectedNode, delay: measured ? 42 : 38, isTesting: false, onSelect: { selectedNode = name }, onTest: { measured.toggle() })
+                        ForEach(ProxyNodeOrder.sorted(["Tokyo · 01", "Tokyo · 02", "Singapore · 01", "Hong Kong · 01", "Los Angeles · 01", "London · 01"].filter { search.isEmpty || $0.localizedCaseInsensitiveContains(search) }, delay: previewDelay), id: \.self) { name in
+                            SimpleProxyButton(name: name, isSelected: name == selectedNode, delay: previewDelay(name), isTesting: false, onSelect: { selectedNode = name }, onTest: { measured.toggle() })
                         }
                     }
                     if !search.isEmpty && !["Tokyo", "Singapore", "Hong Kong", "Los Angeles", "London"].contains(where: { $0.localizedCaseInsensitiveContains(search) }) {

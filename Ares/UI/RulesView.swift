@@ -30,7 +30,8 @@ struct RulesView: View {
             // Table is the right control for uniform, sortable rule rows.
             Table(filteredRules, sortOrder: $sortOrder) {
                 TableColumn("Type", value: \.type) { rule in
-                    DSTag(text: rule.type, tint: RuleKindTint.tint(for: rule.type))
+                    Text(rule.type).font(DS.Typography.metadata)
+                        .foregroundStyle(RuleKindTint.tint(for: rule.type)).lineLimit(1)
                 }
                 .width(min: 96, ideal: 120, max: 170)
 
@@ -59,7 +60,9 @@ struct RulesView: View {
             }
             .scrollIndicators(.hidden)
         }
-        .navigationTitle("Rules")
+        .background(DS.canvas)
+        .navigationTitle("")
+        .toolbar { CollectionTitleToolbar(title: "Rules", count: clashController.rules.count, unit: "Rules") }
         .task {
             await Task.yield()
             try? await clashController.fetchRules()
@@ -77,32 +80,13 @@ struct RulesView: View {
     // MARK: - Toolbar
 
     private var toolbar: some View {
-        HStack(spacing: DS.Space.md) {
-            TextField("Search \(filteredRules.count) rules", text: $searchText)
-                .textFieldStyle(.roundedBorder)
-                .controlSize(.small)
-                .frame(width: 220)
-
-            Spacer(minLength: DS.Space.sm)
-
-            Text("\(filteredRules.count) rules")
-                .font(DS.Typography.metadata)
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-
-            Button {
-                showingLocalRulesEditor = true
-            } label: {
-                Label("Local Rules", systemImage: "plus.message")
-                    .font(DS.Typography.metadata.weight(.medium))
+        CollectionTools(placeholder: "Search rules", search: $searchText) {
+            Button { showingLocalRulesEditor = true } label: {
+                Image(systemName: "text.badge.plus").frame(width: 16, height: 16)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .help("Add local rule overrides")
+            .help("Edit local rule overrides")
+            .accessibilityLabel("Edit local rules")
         }
-        .padding(.horizontal, DS.Space.lg)
-        .padding(.top, DS.Space.pageTop)
-        .padding(.bottom, DS.Space.md)
     }
 
     // MARK: - Cells
@@ -111,9 +95,9 @@ struct RulesView: View {
     private func proxyCell(_ proxy: String) -> some View {
         switch proxy.lowercased() {
         case "direct":
-            DSStatusPill(text: proxy, status: .good)
+            Text(proxy).font(DS.Typography.metadata).foregroundStyle(.secondary)
         case "reject":
-            DSStatusPill(text: proxy, status: .critical)
+            Text(proxy).font(DS.Typography.metadata).foregroundStyle(Color.statusBad)
         default:
             Text(proxy)
                 .font(DS.Typography.metadata)

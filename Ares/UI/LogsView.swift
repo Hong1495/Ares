@@ -8,9 +8,6 @@ struct LogsView: View {
     @State private var searchText = ""
     @State private var autoScroll = true
 
-    // Levels mapped for Priority Filtering
-    private let levels = ["debug", "info", "warning", "error", "silent"]
-
     var filteredLogs: [String] {
         let lines = clashViewModel.logs
         var filtered = lines
@@ -22,8 +19,6 @@ struct LogsView: View {
         // 2. View Filter: Tab-specific logic
         if selectedTabLevel == "all" {
             // "All" keeps everything from the global baseline
-        } else if selectedTabLevel == "silent" {
-            return []
         } else {
             // Specific tabs: Strictly literal matching for that exact level
             let targetPriority = priority(for: selectedTabLevel)
@@ -68,117 +63,19 @@ struct LogsView: View {
     }
 
     var body: some View {
-        VStack(spacing: DS.Space.md) {
-            DSCard(padding: DS.Space.md) {
-                toolbarRow
-            }
-
-            logSurface
+        VStack(spacing: 0) {
+            LogsTools(level: $selectedTabLevel, search: $searchText, autoScroll: $autoScroll,
+                      canClear: !clashViewModel.logs.isEmpty, canExport: !filteredLogs.isEmpty,
+                      onClear: { clashViewModel.clearLogs() }, onExport: exportLogs)
+            Divider()
+            LogsSurface(lines: filteredLogs, autoScroll: autoScroll,
+                        emptyTitle: emptyLogsTitle, emptyDescription: emptyLogsDescription)
         }
-        .padding(.horizontal, DS.Space.lg)
-            .padding(.bottom, DS.Space.lg)
-            .padding(.top, DS.Space.pageTop)
         .background(DS.canvas)
-        .navigationTitle("Logs")
-    }
-
-    // MARK: - Toolbar
-
-    private var toolbarRow: some View {
-        HStack(spacing: DS.Space.md) {
-            // Level filter
-            Picker("", selection: $selectedTabLevel) {
-                Text("All").tag("all")
-                Text("Debug").tag("debug")
-                Text("Info").tag("info")
-                Text("Warning").tag("warning")
-                Text("Error").tag("error")
-                Text("Silent").tag("silent")
-            }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .controlSize(.small)
-            .frame(maxWidth: 320)
-
-            Spacer(minLength: DS.Space.sm)
-
-            // Search
-            TextField("Search logs", text: $searchText)
-                .textFieldStyle(.roundedBorder)
-                .controlSize(.small)
-                .frame(minWidth: 120, idealWidth: 180, maxWidth: 180)
-
-            // Match count
-            Text("\(filteredLogs.count)")
-                .font(DS.Typography.metadata.monospaced().weight(.medium))
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-                .help("Matching lines")
-
-            // Auto-scroll toggle
-            Toggle("Auto-scroll", isOn: $autoScroll)
-                .toggleStyle(.switch)
-                .controlSize(.mini)
-                .font(DS.Typography.metadata)
-                .fixedSize()
-
-            // Clear / Export
-            HStack(spacing: DS.Space.xs) {
-                Button {
-                    clashViewModel.clearLogs()
-                } label: {
-                    Image(systemName: "trash")
-                        .font(DS.Typography.secondary.weight(.medium))
-                }
-                .buttonStyle(.borderless)
-                .help("Clear logs")
-
-                Button {
-                    exportLogs()
-                } label: {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(DS.Typography.secondary.weight(.medium))
-                }
-                .buttonStyle(.borderless)
-                .help("Export logs")
-            }
+        .navigationTitle("")
+        .toolbar {
+            CollectionTitleToolbar(title: "Logs", count: filteredLogs.count, unit: "Lines")
         }
-    }
-
-    // MARK: - Log surface
-
-    private var logSurface: some View {
-        DSCard(padding: 0, spacing: 0) {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    if filteredLogs.isEmpty {
-                        ContentUnavailableView {
-                            Label(emptyLogsTitle, systemImage: "text.line.first.and.arrowtriangle.forward")
-                        } description: {
-                            Text(emptyLogsDescription)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 260)
-                    } else {
-                        LazyVStack(alignment: .leading, spacing: DS.Space.xxs) {
-                            ForEach(Array(filteredLogs.enumerated()), id: \.offset) { index, line in
-                                LogLineView(line: line, index: index)
-                                    .id(index)
-                            }
-                        }
-                        .padding(DS.Space.md)
-                    }
-                }
-                .onChange(of: filteredLogs.count) { oldValue, newValue in
-                    if autoScroll, let lastIndex = filteredLogs.indices.last {
-                        withAnimation {
-                            proxy.scrollTo(lastIndex, anchor: .bottom)
-                        }
-                    }
-                }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var emptyLogsTitle: String {
@@ -191,87 +88,18 @@ struct LogsView: View {
 
     private func exportLogs() {
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = "clash-logs-\(Date().ISO8601Format()).txt"
+        let lines = filteredLogs
+        panel.nameFieldStringValue = "ares-logs-\(Date().ISO8601Format()).txt"
         panel.allowedContentTypes = [.plainText]
 
         panel.begin { response in
             if response == .OK, let url = panel.url {
-                try? clashViewModel.logs.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+                do {
+                    try lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+                } catch {
+                    AppState.shared.reportError("Could not export logs: \(error.localizedDescription)")
+                }
             }
         }
-    }
-}
-
-// MARK: - Severity
-
-/// Visual severity for a log line. Color is used for the marker only —
-/// the line text itself stays primary/secondary ink.
-private enum LogSeverity {
-    case debug
-    case info
-    case warning
-    case error
-
-    init(line: String) {
-        let lower = line.lowercased()
-        if lower.contains("error") || lower.contains("fatal") || lower.contains("31m") {
-            self = .error
-        } else if lower.contains("warning") || lower.contains("warn") || lower.contains("33m") {
-            self = .warning
-        } else if lower.contains("debug") || lower.contains("35m") {
-            self = .debug
-        } else {
-            self = .info
-        }
-    }
-
-    var marker: AnyShapeStyle {
-        switch self {
-        case .error: return AnyShapeStyle(Color.statusBad)
-        case .warning: return AnyShapeStyle(Color.statusWarn)
-        case .debug: return AnyShapeStyle(HierarchicalShapeStyle.tertiary)
-        case .info: return AnyShapeStyle(HierarchicalShapeStyle.secondary)
-        }
-    }
-
-    var ink: Color {
-        switch self {
-        case .debug: return .secondary
-        default: return .primary
-        }
-    }
-}
-
-struct LogLineView: View {
-    let line: String
-    let index: Int
-
-    var body: some View {
-        HStack(alignment: .top, spacing: DS.Space.sm) {
-            // Severity marker
-            RoundedRectangle(cornerRadius: 1, style: .continuous)
-                .fill(severity.marker)
-                .frame(width: 3, height: 12)
-                .padding(.top, 2.5)
-
-            // Line number
-            Text("\(index + 1)")
-                .font(DS.Typography.metadata.monospaced())
-                .foregroundStyle(.tertiary)
-                .frame(width: 34, alignment: .trailing)
-
-            // Log content
-            Text(line)
-                .font(DS.Typography.metadata.monospaced())
-                .foregroundStyle(severity.ink)
-                .lineSpacing(1.5)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(.vertical, 1)
-    }
-
-    private var severity: LogSeverity {
-        LogSeverity(line: line)
     }
 }

@@ -3,6 +3,7 @@ import UniformTypeIdentifiers
 
 struct ProfilesView: View {
     @EnvironmentObject var profileService: ProfileService
+    @State private var searchText = ""
     @State private var showingAddSheet = false
     @State private var showingFileImporter = false
     @State private var newProfileName = ""
@@ -12,37 +13,46 @@ struct ProfilesView: View {
     @State private var editingProfile: Profile?
     @State private var editingRawProfile: Profile?
 
-    var body: some View {
-        ScrollView(.vertical) {
-            VStack(spacing: DS.Space.lg) {
-                toolbar
-
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 290, maximum: 460), spacing: DS.Space.lg)],
-                    spacing: DS.Space.lg
-                ) {
-                    addCard
-                    ForEach(profileService.profiles) { profile in
-                        ProfileCard(
-                            profile: profile,
-                            isActive: profileService.activeProfileID == profile.id,
-                            onSelect: { profileService.setActiveProfile(id: profile.id) },
-                            onEdit: { editingProfile = profile },
-                            onEditRaw: { editingRawProfile = profile },
-                            onDelete: { profileService.deleteProfile(id: profile.id) }
-                        )
-                    }
-                }
-            }
-            .padding(.horizontal, DS.Space.xl)
-            .padding(.bottom, DS.Space.xl)
-            .padding(.top, DS.Space.pageTop)
-            .frame(maxWidth: 1180)
-            .frame(maxWidth: .infinity)
+    private var filteredProfiles: [Profile] {
+        profileService.profiles.filter {
+            searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText) ||
+            ($0.url?.host?.localizedCaseInsensitiveContains(searchText) ?? false)
         }
-        .scrollIndicators(.never)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            toolbar
+            Divider()
+            ScrollView(.vertical) {
+                if filteredProfiles.isEmpty {
+                    ContentUnavailableView(
+                        searchText.isEmpty ? "No subscriptions" : "No matching subscriptions",
+                        systemImage: "rectangle.stack",
+                        description: Text(searchText.isEmpty ? "Use + to add a remote subscription or local file." : "Try another name or host.")
+                    ).frame(maxWidth: .infinity).padding(.top, 60)
+                } else {
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 290), spacing: DS.Space.md)],
+                        spacing: DS.Space.md
+                    ) {
+                        ForEach(filteredProfiles) { profile in
+                            ProfileCard(
+                                profile: profile,
+                                isActive: profileService.activeProfileID == profile.id,
+                                onSelect: { profileService.setActiveProfile(id: profile.id) },
+                                onEdit: { editingProfile = profile },
+                                onEditRaw: { editingRawProfile = profile },
+                                onDelete: { profileService.deleteProfile(id: profile.id) }
+                            )
+                        }
+                    }.padding(DS.Space.lg)
+                }
+            }.scrollIndicators(.never)
+        }
         .background(DS.canvas)
-        .navigationTitle("Subscriptions")
+        .navigationTitle("")
+        .toolbar { CollectionTitleToolbar(title: "Subscriptions", count: profileService.profiles.count, unit: "Profiles") }
         .sheet(isPresented: $showingAddSheet) {
             AddProfileSheet(
                 name: $newProfileName,
@@ -79,55 +89,17 @@ struct ProfilesView: View {
     // MARK: - Toolbar
 
     private var toolbar: some View {
-        HStack(spacing: DS.Space.md) {
-            Text("\(profileService.profiles.count) profile\(profileService.profiles.count == 1 ? "" : "s")")
-                .font(DS.Typography.metadata)
-                .foregroundStyle(.secondary)
-
-            Spacer(minLength: 0)
-
+        CollectionTools(placeholder: "Search subscriptions", search: $searchText) {
             Menu {
                 Button("Remote Subscription") { showingAddSheet = true }
                 Button("Local File") { showingFileImporter = true }
             } label: {
-                Label("Add Profile", systemImage: "plus")
-                    .font(DS.Typography.metadata.weight(.medium))
+                Image(systemName: "plus").frame(width: 16, height: 16)
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
+            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            .help("Add subscription or local file")
+            .accessibilityLabel("Add subscription")
         }
-    }
-
-    // MARK: - Add
-
-    private var addCard: some View {
-        Menu {
-            Button("Remote Subscription") { showingAddSheet = true }
-            Button("Local File") { showingFileImporter = true }
-        } label: {
-            VStack(spacing: DS.Space.sm) {
-                Image(systemName: "plus")
-                    .font(DS.Typography.title.weight(.medium))
-                    .foregroundStyle(.secondary)
-                Text("Add profile")
-                    .font(DS.Typography.secondary.weight(.medium))
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, minHeight: 150)
-            .background(
-                RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)
-                    .fill(Color.primary.opacity(0.02))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)
-                    .strokeBorder(
-                        Color.secondary.opacity(0.35),
-                        style: StrokeStyle(lineWidth: 1, dash: [5, 4])
-                    )
-            )
-            .contentShape(Rectangle())
-        }
-        .menuStyle(.borderlessButton)
     }
 
     // MARK: - Actions
@@ -199,58 +171,13 @@ struct ProfileCard: View {
 
             actions
         }
-        .padding(DS.Space.lg)
-        .frame(maxWidth: .infinity, minHeight: 168, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)
-                .fill(DS.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)
-                .strokeBorder(
-                    isActive ? Color.accentColor.opacity(0.55) : Color(nsColor: .separatorColor).opacity(0.9),
-                    lineWidth: isActive ? 1.25 : DS.hairline
-                )
-        )
-        .shadow(color: .black.opacity(0.04), radius: 3, x: 0, y: 1)
+        .modifier(SubscriptionSurface(selected: isActive))
     }
 
     private var header: some View {
-        HStack(spacing: DS.Space.md) {
-            Image(systemName: profile.type == .remote ? "cloud" : "doc")
-                .font(DS.Typography.body.weight(.medium))
-                .foregroundStyle(isActive ? Color.accentColor : Color.secondary)
-                .frame(width: 30, height: 30)
-                .background(
-                    RoundedRectangle(cornerRadius: DS.Radius.tile, style: .continuous)
-                        .fill((isActive ? Color.accentColor : Color.secondary).opacity(0.12))
-                )
-
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: DS.Space.xs) {
-                    Text(profile.name)
-                        .font(DS.Typography.body.weight(.semibold))
-                        .lineLimit(1)
-                    if isActive {
-                        DSTag(text: "SELECTED", tint: .statusGood)
-                    }
-                }
-
-                if let urlString = profile.url?.absoluteString {
-                    Text(urlString)
-                        .font(DS.Typography.metadata.monospaced())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                } else {
-                    Text("Local configuration")
-                        .font(DS.Typography.metadata)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Spacer(minLength: 0)
-        }
+        SubscriptionHeading(name: profile.name,
+                            source: profile.url?.host ?? "Local configuration",
+                            remote: profile.type == .remote, selected: isActive)
     }
 
     private func usage(_ sub: SubscriptionInfo) -> some View {
@@ -292,11 +219,7 @@ struct ProfileCard: View {
             .font(DS.Typography.caption)
             .foregroundStyle(.tertiary)
         }
-        .padding(DS.Space.sm)
-        .background(
-            RoundedRectangle(cornerRadius: DS.Radius.tile, style: .continuous)
-                .fill(Color.primary.opacity(0.03))
-        )
+
     }
 
     private var actions: some View {
@@ -356,7 +279,8 @@ struct ActionButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(DS.Typography.metadata.weight(.medium))
+                .font(.system(size: 13, weight: .regular))
+                .symbolRenderingMode(.monochrome)
                 .foregroundStyle(isHovered ? color : Color.secondary)
                 .frame(width: 26, height: 22)
                 .background(
@@ -366,6 +290,7 @@ struct ActionButton: View {
         }
         .buttonStyle(.plain)
         .help(tooltip)
+        .accessibilityLabel(tooltip)
         .onHover { isHovered = $0 }
     }
 }

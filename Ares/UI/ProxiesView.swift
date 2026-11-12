@@ -26,15 +26,6 @@ struct ProxiesView: View {
     @State private var selectedTab: ProxyTab = .rule
     @State private var expandedGroups = Set<String>()
     @State private var searchText = ""
-    @State private var sortMode: SortMode = .default
-
-    enum SortMode: String, CaseIterable, Identifiable {
-        case `default` = "Default"
-        case name = "Name"
-        case delay = "Delay"
-        var id: String { rawValue }
-    }
-
     private var profileKey: String { profileService.activeProfileRevision }
 
     private var showingLive: Bool {
@@ -89,6 +80,8 @@ struct ProxiesView: View {
                 content
             }
         }
+        .navigationTitle("")
+        .toolbar { ProxiesTitleToolbar(count: nodeCount) }
         .onAppear { selectedTab = ProxyTab(rawValue: appState.currentMode.rawValue.capitalized) ?? .rule }
         .onChange(of: appState.currentMode) { _, mode in
             selectedTab = ProxyTab(rawValue: mode.rawValue.capitalized) ?? .rule
@@ -175,73 +168,48 @@ struct ProxiesView: View {
             .controlSize(.small)
             .fixedSize()
 
+            Spacer(minLength: DS.Space.sm)
+
             TextField("Search nodes", text: $searchText)
                 .textFieldStyle(.roundedBorder)
                 .controlSize(.small)
-                .frame(width: 200)
+                .frame(minWidth: 130, idealWidth: 200, maxWidth: 200)
 
-            Spacer(minLength: DS.Space.sm)
-
-            Menu {
-                ForEach(SortMode.allCases) { mode in
+            HStack(spacing: DS.Space.xs) {
+                if !clashViewModel.isRunning {
                     Button {
-                        sortMode = mode
+                        Task { await clashViewModel.start() }
                     } label: {
-                        if sortMode == mode {
-                            Label(mode.rawValue, systemImage: "checkmark")
-                        } else {
-                            Text(mode.rawValue)
-                        }
+                        Image(systemName: "power")
+                    }
+                    .accessibilityLabel("Start Core")
+                    .disabled(clashViewModel.isToggling || appState.isPerformingNetworkOperation)
+                    .help("Start the core to test latency; system proxy remains a separate control")
+                }
+
+                Button {
+                    Task { await clashController.testAllProxyDelays() }
+                } label: {
+                    if clashController.isTestingAllProxies {
+                        ProgressView().controlSize(.mini)
+                    } else {
+                        ProxyLatencySymbol()
                     }
                 }
-            } label: {
-                HStack(spacing: DS.Space.xs) {
-                    Image(systemName: "arrow.up.arrow.down")
-                    Text(sortMode.rawValue)
+                .disabled(!showingLive || clashController.isTestingAllProxies)
+                .help("Test all nodes · Automatically refreshed every 5 minutes while the core runs")
+                .accessibilityLabel("Test all nodes")
+
+                Button {
+                    Task { await refreshProxies() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
                 }
-                .font(DS.Typography.metadata.weight(.medium))
-                .foregroundStyle(.secondary)
+                .help("Refresh nodes")
+                .disabled(isLoading)
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help("Sort nodes")
-
-            if !clashViewModel.isRunning {
-                Button("Start Core") {
-                    Task { await clashViewModel.start() }
-                }
-                .disabled(clashViewModel.isToggling || appState.isPerformingNetworkOperation)
-                .help("Start the core to test latency; system proxy remains a separate control")
-            }
-
-            Button {
-                Task { await clashController.testAllProxyDelays() }
-            } label: {
-                if clashController.isTestingAllProxies {
-                    ProgressView().controlSize(.mini)
-                } else {
-                    Image(systemName: "bolt.horizontal")
-                }
-            }
-            .buttonStyle(.plain)
-            .disabled(!showingLive || clashController.isTestingAllProxies)
-            .help("Test all nodes · Automatically refreshed every 5 minutes while the core runs")
-            .accessibilityLabel("Test all nodes")
-
-            Button {
-                Task { await refreshProxies() }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-            .buttonStyle(.plain)
-            .help("Refresh nodes")
-            .disabled(isLoading)
-
-            Text("\(nodeCount) nodes")
-                .font(DS.Typography.metadata)
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
+            .font(DS.Typography.secondary.weight(.medium))
+            .buttonStyle(.borderless)
         }
         .padding(.horizontal, DS.Space.lg)
         .padding(.top, DS.Space.pageTop)
@@ -285,7 +253,6 @@ struct ProxiesView: View {
                         allowsRuntimeActions: showingLive,
                         isExpanded: expandedGroups.contains(group.name) || !searchText.isEmpty, // Auto expand on search
                         searchText: searchText,
-                        sortMode: sortMode,
                         onToggle: {
                             if expandedGroups.contains(group.name) {
                                 expandedGroups.remove(group.name)
@@ -309,7 +276,6 @@ struct SimpleProxyGroupCard: View {
     let allowsRuntimeActions: Bool
     let isExpanded: Bool
     let searchText: String
-    let sortMode: ProxiesView.SortMode
     let onToggle: () -> Void
 
     @EnvironmentObject var clashController: ClashController
@@ -409,18 +375,7 @@ struct SimpleProxyGroupCard: View {
             searchText.isEmpty || itemName.localizedCaseInsensitiveContains(searchText)
         }
 
-        let sortedItems = filteredItems.sorted { a, b in
-            switch sortMode {
-            case .default:
-                return false // Keep original order
-            case .name:
-                return a.localizedCaseInsensitiveCompare(b) == .orderedAscending
-            case .delay:
-                let delayA = nodes[a]?.delay.flatMap { $0 > 0 ? $0 : nil } ?? Int.max
-                let delayB = nodes[b]?.delay.flatMap { $0 > 0 ? $0 : nil } ?? Int.max
-                return delayA < delayB
-            }
-        }
+        let sortedItems = ProxyNodeOrder.sorted(filteredItems) { nodes[$0]?.delay }
 
         if !sortedItems.isEmpty {
             LazyVGrid(
