@@ -34,3 +34,7 @@ Sources:
 - https://deck.gl/docs/api-reference/layers/arc-layer
 - https://wiki.metacubex.one/config/proxies/dialer-proxy/
 - https://wiki.metacubex.one/api/
+
+## Isolated spike result
+
+A runnable comparison now lives in `DesignPreview/RoutingLab`; launch with `scripts/preview-routing.sh --open`. Both MapLibre 5.12.0/WKWebView and SwiftUI Canvas use the same offline Natural Earth geometry and fixtures. Observed global, Pacific, colocated and aggregated 20k-record scenes support MapLibre as the preferred next implementation. A `transformConstrain` override was needed to escape default zoom-out constraints. Selection fitting and light/dark behavior were exercised. See the lab README for specific results and remaining acceptance work; this does not establish production real-time performance or real-route correctness.
