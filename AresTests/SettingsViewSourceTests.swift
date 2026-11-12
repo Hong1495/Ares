@@ -14,13 +14,13 @@ final class SettingsViewSourceTests: XCTestCase {
         XCTAssertFalse(source.contains("@AppStorage(DefaultsKeys.tunEnabled)"))
     }
 
-    func testDashboardGridUsesAdaptiveColumns() throws {
+    func testDashboardUsesAdaptiveComposition() throws {
         let source = try String(contentsOf: projectRoot.appendingPathComponent("Ares/UI/DashboardView.swift"))
 
         // Cards must reflow with the window rather than using a hardcoded column count.
         let presentation = try String(contentsOf: projectRoot.appendingPathComponent("Ares/UI/DesignSystem/OverviewPresentation.swift"))
-        XCTAssertTrue(source.contains("DashboardComposition("))
-        XCTAssertTrue(presentation.contains("geometry.size.width >= 850 ? 3 : 2"))
+        XCTAssertTrue(source.contains("DashboardComposition {"))
+        XCTAssertTrue(presentation.contains("geometry.size.width >= 850"))
         XCTAssertFalse(source.contains("showAdvanced"))
         XCTAssertFalse(source.contains("DisclosureGroup"))
         XCTAssertFalse(source.contains("[GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]"))
@@ -30,10 +30,6 @@ final class SettingsViewSourceTests: XCTestCase {
     func testDashboardCardsDoNotHardcodeHeights() throws {
         let components = projectRoot.appendingPathComponent("Ares/UI/Components")
         let cards = [
-            "DashboardCurrentProxyCard.swift",
-            "DashboardDNSConfigCard.swift",
-            "DashboardMITMConfigCard.swift",
-            "SubscriptionCard.swift",
             "ConnectivityCard.swift"
         ]
 

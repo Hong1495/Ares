@@ -110,21 +110,11 @@ struct PreviewWorkspace: View {
     }
 
     private var dashboard: some View {
-        DashboardComposition(runtime: error ? "Core unavailable" : (enabled ? "Running" : "Stopped"), version: "Mihomo 1.19 · Sample", status: error ? .critical : (enabled ? .good : .idle), api: "HTTP :7890 · SOCKS :7891 · API :9090") {
+        DashboardComposition {
             OverviewTrafficCard(points: points, download: snapshot.download, upload: snapshot.upload)
         } controls: {
             OverviewConnectionCard(snapshot: snapshot, systemProxy: $enabled, tun: $tun, interception: $inspection, mode: $mode)
         } details: {
-            DSCard(padding: 0) {
-                DSCardHeader("Proxy", icon: "server.rack")
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(mode == 2 ? "Direct connection" : (empty ? "No active proxy" : selectedNode)).font(DS.Typography.body.weight(.semibold))
-                        if mode != 2 { Text("Automatic selection").font(DS.Typography.metadata).foregroundStyle(.secondary) }
-                    }
-                    Spacer()
-                }
-            }
             DSCard(padding: 0, spacing: DS.Space.sm) {
                 DSCardHeader("Reachability", icon: "antenna.radiowaves.left.and.right") {
                     Button { measured.toggle() } label: { Image(systemName: "arrow.clockwise") }.buttonStyle(.borderless).help("Simulate measurement")
@@ -134,51 +124,6 @@ struct PreviewWorkspace: View {
                         .padding(.vertical, 3)
                     if name != "Gemini" { Divider().opacity(0.35) }
                 }
-            }
-        } advanced: {
-            DSCard(padding: 0, spacing: DS.Space.sm) {
-                DSCardHeader("Personal", icon: "creditcard") {
-                    Button { measured.toggle() } label: { Image(systemName: "arrow.clockwise") }.buttonStyle(.borderless).help("Refresh subscription")
-                }
-                if empty {
-                    Text("No subscription").font(DS.Typography.secondary).foregroundStyle(.secondary)
-                } else {
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text("28.4 GB").font(DS.Typography.title.weight(.semibold))
-                        Text("of 200 GB").foregroundStyle(.secondary)
-                        Spacer()
-                        Text("14%").foregroundStyle(.secondary)
-                    }.font(DS.Typography.metadata)
-                    ProgressView(value: 0.142).tint(DS.accent)
-                    Text("Expires Dec 31, 2026").font(DS.Typography.metadata).foregroundStyle(.secondary)
-                }
-            }
-            DSCard(padding: 0, spacing: DS.Space.sm) {
-                DSCardHeader("DNS", icon: "network.badge.shield.half.filled")
-                ForEach(["223.5.5.5", "119.29.29.29"], id: \.self) { server in
-                    Text(server).font(DS.Typography.secondary.monospaced().weight(.medium))
-                }
-            }
-            DSCard(padding: 0, spacing: DS.Space.sm) {
-                DSCardHeader("Bypass", icon: "arrow.triangle.turn.up.right.diamond")
-                Text("localhost · 127.* · 10.*\n172.16.* · 172.31.* · 192.168.*")
-                    .font(DS.Typography.metadata.monospaced()).foregroundStyle(.secondary).lineSpacing(6)
-            }
-            diagnostic("MITM", icon: "eye", rows: [("Certificate", "Not installed"), ("Ports", "80, 443, 8080, 8443"), ("Scope", "All hosts")])
-            diagnostic("Core", icon: "cpu", rows: [("Latest release", "1.19"), ("API", error ? "Unreachable" : "Reachable")])
-            DSCard(padding: 0, spacing: DS.Space.sm) {
-                DSCardHeader("System", icon: "desktopcomputer")
-                Text("macOS 27.2.1 · arm64").font(DS.Typography.secondary)
-                Text("32 GB memory").font(DS.Typography.metadata).foregroundStyle(.secondary).help("Physical memory")
-            }
-        }
-    }
-
-    private func diagnostic(_ title: String, icon: String, rows: [(String, String)]) -> some View {
-        DSCard(padding: 0, spacing: DS.Space.sm) {
-            DSCardHeader(title, icon: icon)
-            ForEach(rows.indices, id: \.self) { index in
-                DSKeyValueRow(label: rows[index].0, value: rows[index].1)
             }
         }
     }

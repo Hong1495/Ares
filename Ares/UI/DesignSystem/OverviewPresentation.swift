@@ -15,15 +15,10 @@ struct OverviewSnapshot {
 }
 
 /// The production page and preview use the same layout, not parallel mockups.
-struct DashboardComposition<Traffic: View, Controls: View, Details: View, Advanced: View>: View {
-    let runtime: String
-    let version: String
-    let status: DSStatus
-    let api: String
+struct DashboardComposition<Traffic: View, Controls: View, Details: View>: View {
     @ViewBuilder var traffic: () -> Traffic
     @ViewBuilder var controls: () -> Controls
     @ViewBuilder var details: () -> Details
-    @ViewBuilder var advanced: () -> Advanced
 
     var body: some View {
         GeometryReader { geometry in
@@ -42,25 +37,9 @@ struct DashboardComposition<Traffic: View, Controls: View, Details: View, Advanc
                         }
                     }
                     Rectangle().fill(DS.line).frame(height: 0.5).padding(.vertical, 24)
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 24, alignment: .top), count: geometry.size.width >= 850 ? 3 : 2), alignment: .leading, spacing: 24) {
-                        details()
-                    }
-                    .environment(\.flatSurfaces, true)
-                    Rectangle().fill(DS.line).frame(height: 0.5).padding(.top, 24).padding(.bottom, 18)
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 28, alignment: .top), count: geometry.size.width >= 850 ? 3 : 2), alignment: .leading, spacing: 28) {
-                        advanced()
-                    }
-                    .environment(\.flatSurfaces, true)
-                    HStack(spacing: 7) {
-                        Circle().fill(status.color).frame(width: 6, height: 6)
-                        Text(runtime).fontWeight(.medium)
-                        Text("·").foregroundStyle(.tertiary)
-                        Text(version).foregroundStyle(.secondary)
-                        Spacer()
-                        Text(api).foregroundStyle(.secondary).monospacedDigit()
-                    }
-                    .font(DS.Typography.metadata)
-                    .padding(.top, 24)
+                    details()
+                        .frame(maxWidth: 380, alignment: .leading)
+                        .environment(\.flatSurfaces, true)
 
                 }
                 .padding(.horizontal, 28)

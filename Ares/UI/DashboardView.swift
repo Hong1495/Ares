@@ -1,31 +1,14 @@
 import SwiftUI
 
 struct DashboardView: View {
-    @EnvironmentObject var clashViewModel: ClashViewModel
-    @EnvironmentObject var clashController: ClashController
-    @EnvironmentObject var appState: AppState
-
     var body: some View {
         VStack(spacing: 0) {
-            DashboardComposition(
-                runtime: clashViewModel.runtimeState.title,
-                version: clashViewModel.coreVersionInfo.displayVersion,
-                status: runtimeStatus,
-                api: "HTTP :\(appState.tunEnabled ? ClashPorts.tunMixed : ClashPorts.defaultMixed) · SOCKS :\(appState.tunEnabled ? ClashPorts.tunSocks : ClashPorts.defaultSocks) · API :\(clashController.currentPort)"
-            ) {
+            DashboardComposition {
                 TrafficCard()
             } controls: {
                 ControlCenterCard()
             } details: {
-                CurrentProxyCard()
                 ConnectivityCard()
-            } advanced: {
-                SubscriptionCard()
-                DNSConfigCard()
-                BypassSettingsCard()
-                MITMConfigCard()
-                ClashInfoCard()
-                SystemInfoCard()
             }
         }
         .navigationTitle("")
@@ -33,15 +16,6 @@ struct DashboardView: View {
             ToolbarItem(placement: .navigation) {
                 DashboardIdentityView().padding(.leading, 16)
             }.aresUnframed()
-        }
-    }
-
-    private var runtimeStatus: DSStatus {
-        switch clashViewModel.runtimeState {
-        case .running, .apiReady: return .good
-        case .launching, .processRunning, .stopping: return .warning
-        case .failed: return .critical
-        case .stopped: return .idle
         }
     }
 }
