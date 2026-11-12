@@ -75,7 +75,9 @@ struct LogsView: View {
 
             logSurface
         }
-        .padding(DS.Space.lg)
+        .padding(.horizontal, DS.Space.lg)
+            .padding(.bottom, DS.Space.lg)
+            .padding(.top, DS.Space.pageTop)
         .background(DS.canvas)
         .navigationTitle("Logs")
     }

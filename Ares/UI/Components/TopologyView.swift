@@ -21,7 +21,7 @@ struct TopologyEdge: Identifiable {
     let id: UUID = UUID()
     let from: String
     let to: String
-    let weight: Int
+    var weight: Int
     var color: Color = .gray // Propagated color
 
     // Control Point Offsets for Bundling
@@ -35,8 +35,9 @@ struct TopologyEdge: Identifiable {
 // MARK: - Topology Canvas View
 
 struct TopologyView: View {
-    @EnvironmentObject var clashController: ClashController
+    let rows: [TopologyRow]
     @EnvironmentObject var appState: AppState
+    @State private var nodeLookup: [String: TopologyNode] = [:]
     @State private var size: CGSize = .zero
 
     // Cache the graph to avoid recalculation on every frame
@@ -60,7 +61,7 @@ struct TopologyView: View {
                         staticCanvas
 
                         if appState.animationsEnabled && appState.isForeground {
-                            TimelineView(.animation) { timeline in
+                            TimelineView(.animation(minimumInterval: 1.0 / 30)) { timeline in
                                 particleCanvas(timeline: timeline)
                             }
                         }
@@ -76,7 +77,7 @@ struct TopologyView: View {
                 self.size = newSize
                 updateGraph()
             }
-            .onChange(of: clashController.activeChains) { _, _ in
+            .onChange(of: rows) { _, _ in
                 // Only update structure when data changes, NOT on every frame
                 withAnimation(.easeInOut(duration: 0.5)) {
                     updateGraph()
@@ -105,8 +106,8 @@ struct TopologyView: View {
     private func drawStaticGraph(in context: GraphicsContext, size: CGSize) {
         // Draw Edges (Curves)
         for edge in graph.edges {
-            if let startNode = graph.nodes.first(where: { $0.id == edge.from }),
-               let endNode = graph.nodes.first(where: { $0.id == edge.to }) {
+            if let startNode = nodeLookup[edge.from],
+               let endNode = nodeLookup[edge.to] {
 
                 let start = startNode.position
                 let end = endNode.position
@@ -125,7 +126,7 @@ struct TopologyView: View {
                     .init(color: edge.color.opacity(0.4), location: 1.0)
                 ])
 
-                context.stroke(path, with: .linearGradient(gradient, startPoint: start, endPoint: end), lineWidth: 1.5)
+                context.stroke(path, with: .linearGradient(gradient, startPoint: start, endPoint: end), lineWidth: min(3.5, 1.2 + log2(Double(edge.weight) + 1) * 0.35))
             }
         }
 
@@ -150,8 +151,8 @@ struct TopologyView: View {
         let particleCount = 1
 
         for edge in animatedEdges {
-            if let startNode = graph.nodes.first(where: { $0.id == edge.from }),
-               let endNode = graph.nodes.first(where: { $0.id == edge.to }) {
+            if let startNode = nodeLookup[edge.from],
+               let endNode = nodeLookup[edge.to] {
 
                 let start = startNode.position
                 let end = endNode.position
@@ -180,11 +181,12 @@ struct TopologyView: View {
     // MARK: - Graph Algorithm
 
     func updateGraph() {
-        let newGraph = calculateGraph(chains: clashController.activeChains, size: size)
+        let newGraph = calculateGraph(rows: rows, size: size)
         self.graph = newGraph
+        nodeLookup = Dictionary(uniqueKeysWithValues: newGraph.nodes.map { ($0.id, $0) })
     }
 
-    func calculateGraph(chains: [ConnectionChain], size: CGSize) -> (nodes: [TopologyNode], edges: [TopologyEdge]) {
+    func calculateGraph(rows: [TopologyRow], size: CGSize) -> (nodes: [TopologyNode], edges: [TopologyEdge]) {
         var nodes: [String: TopologyNode] = [:]
 
         let width = size.width
@@ -204,13 +206,13 @@ struct TopologyView: View {
         var targets = Set<String>()
         var sourceColors: [String: Color] = [:]
 
-        let topChains = chains.prefix(40) // Limit for performance
+        let topChains = rows // Every active connection contributes; only duplicate edges are merged.
 
         for chain in topChains {
-            let source = chain.sourceProcess.isEmpty ? "Unknown" : chain.sourceProcess
+            let source = chain.source
             let rule = chain.rule
-            let target = chain.host
-            let proxy = chain.chains.last(where: { $0 != "DIRECT" && $0 != target }) ?? "DIRECT"
+            let target = chain.target
+            let proxy = chain.proxy
 
             sources.insert(source)
             rules.insert(rule)
@@ -252,7 +254,12 @@ struct TopologyView: View {
         layoutColumn(items: Array(proxies), x: col3X, type: .proxy)
         layoutColumn(items: Array(targets), x: col4X, type: .target)
 
-        var rawEdges: [TopologyEdge] = []
+        struct EdgeKey: Hashable {
+            let from: String
+            let to: String
+            let source: String
+        }
+        var edgesByKey: [EdgeKey: TopologyEdge] = [:]
 
         func addEdge(uName: String, uType: TopologyNode.NodeType, vName: String, vType: TopologyNode.NodeType, sourceName: String) {
             let uID = "\(uType)_\(uName)"
@@ -260,39 +267,42 @@ struct TopologyView: View {
 
             if nodes[uID] != nil && nodes[vID] != nil {
                 let color = sourceColors[sourceName] ?? .gray
-                let edge = TopologyEdge(from: uID, to: vID, weight: 1, color: color)
-                rawEdges.append(edge)
+                let key = EdgeKey(from: uID, to: vID, source: sourceName)
+                if var edge = edgesByKey[key] {
+                    edge.weight += 1
+                    edgesByKey[key] = edge
+                } else {
+                    edgesByKey[key] = TopologyEdge(from: uID, to: vID, weight: 1, color: color)
+                }
             }
         }
 
         for chain in topChains {
-            let source = chain.sourceProcess.isEmpty ? "Unknown" : chain.sourceProcess
+            let source = chain.source
             let rule = chain.rule
-            let proxy = chain.chains.last(where: { $0 != "DIRECT" && $0 != chain.host }) ?? "DIRECT"
-            let target = chain.host
+            let proxy = chain.proxy
+            let target = chain.target
 
             addEdge(uName: source, uType: .source, vName: rule, vType: .rule, sourceName: source)
             addEdge(uName: rule, uType: .rule, vName: proxy, vType: .proxy, sourceName: source)
             addEdge(uName: proxy, uType: .proxy, vName: target, vType: .target, sourceName: source)
         }
 
-        var edgeGroups: [String: [UUID]] = [:] // "u|v" -> [EdgeID]
-        for edge in rawEdges {
-            let key = "\(edge.from)|\(edge.to)"
-            edgeGroups[key, default: []].append(edge.id)
-        }
-
-        var finalEdges: [TopologyEdge] = []
-        for edge in rawEdges {
-            var modifiedEdge = edge
-            let key = "\(edge.from)|\(edge.to)"
-            if let group = edgeGroups[key] {
-                if let index = group.firstIndex(of: edge.id) {
-                    let total = group.count
-                    modifiedEdge.controlOffset = calculateControlOffset(index: index, total: total)
-                }
-            }
-            finalEdges.append(modifiedEdge)
+        // Sort for stable lane placement, then assign offsets in linear time.
+        let rawEdges = edgesByKey.sorted {
+            ($0.key.from, $0.key.to, $0.key.source) < ($1.key.from, $1.key.to, $1.key.source)
+        }.map(\.value)
+        struct Pair: Hashable { let from: String; let to: String }
+        var counts: [Pair: Int] = [:]
+        for edge in rawEdges { counts[Pair(from: edge.from, to: edge.to), default: 0] += 1 }
+        var offsets: [Pair: Int] = [:]
+        let finalEdges = rawEdges.map { edge in
+            var result = edge
+            let pair = Pair(from: edge.from, to: edge.to)
+            let index = offsets[pair, default: 0]
+            offsets[pair] = index + 1
+            result.controlOffset = calculateControlOffset(index: index, total: counts[pair, default: 1])
+            return result
         }
 
         return (Array(nodes.values), finalEdges)
@@ -307,10 +317,10 @@ struct TopologyView: View {
     }
 
     func generateColor(for string: String) -> Color {
-        let hash = abs(string.hashValue)
+        let hash = string.hashValue.magnitude
         let colors: [Color] = [
             .blue, .red, .green, .orange, .purple, .pink, .cyan, .mint, .indigo, .teal
         ]
-        return colors[hash % colors.count]
+        return colors[Int(hash % UInt(colors.count))]
     }
 }

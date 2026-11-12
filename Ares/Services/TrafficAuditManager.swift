@@ -145,13 +145,7 @@ actor TrafficAuditor {
             appActiveConns[appKey, default: []].append(conn)
         }
 
-        // Cleanup Closed Connections
-        let currentIDs = Set(connections.map { $0.id })
-        let storedIDs = Set(connectionSnapshots.keys)
-        let removedIDs = storedIDs.subtracting(currentIDs)
-        for id in removedIDs {
-            connectionSnapshots.removeValue(forKey: id)
-        }
+        // Keep byte baselines when a connection temporarily disappears from a sample.
 
         // Update Sessions
         for key in sessionMap.keys {
@@ -195,7 +189,7 @@ actor TrafficAuditor {
 
     func reset() {
         sessionMap.removeAll()
-        connectionSnapshots.removeAll()
+        // Retain live-connection baselines across a statistics reset.
     }
 
 }
@@ -207,6 +201,9 @@ final class TrafficAuditManager: ObservableObject {
     static let shared = TrafficAuditManager()
 
     @Published var sessions: [AppSession] = []
+    @Published private(set) var observedUpload: Int64 = 0
+    @Published private(set) var observedDownload: Int64 = 0
+    private var ledger = ActivityTrafficLedger()
 
     // Background worker
     private let auditor = TrafficAuditor()
@@ -215,6 +212,9 @@ final class TrafficAuditManager: ObservableObject {
 
     /// Process a new snapshot of active connections from the kernel.
     func update(with currentConnections: [Connection]) async {
+        ledger.record(currentConnections)
+        observedUpload = ledger.upload
+        observedDownload = ledger.download
         // Offload heavy processing to background actor
         let updatedSessions = await auditor.process(connections: currentConnections)
 
@@ -224,6 +224,9 @@ final class TrafficAuditManager: ObservableObject {
 
     /// Reset all statistics
     func reset() {
+        ledger.reset()
+        observedUpload = 0
+        observedDownload = 0
         Task { await auditor.reset() }
         self.sessions = []
     }

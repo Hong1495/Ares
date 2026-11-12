@@ -46,7 +46,9 @@ struct ConnectionsView: View {
                 hierarchicalTable
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .padding(DS.Space.lg)
+            .padding(.horizontal, DS.Space.lg)
+            .padding(.bottom, DS.Space.lg)
+            .padding(.top, DS.Space.pageTop)
             .background(DS.canvas)
             .layoutPriority(1)
             .frame(minWidth: 400)

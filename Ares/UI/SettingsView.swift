@@ -106,6 +106,7 @@ struct SettingsView: View {
                 set: { pane = SettingsPane.allCases[$0] }
             ))
             .padding(.horizontal, 30)
+            .padding(.top, DS.Space.pageTop)
             .padding(.bottom, 12)
             paneDetail
         }

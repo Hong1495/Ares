@@ -244,7 +244,8 @@ struct ProxiesView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal, DS.Space.lg)
-        .padding(.vertical, DS.Space.md)
+        .padding(.top, DS.Space.pageTop)
+        .padding(.bottom, DS.Space.md)
     }
 
     // MARK: - Content

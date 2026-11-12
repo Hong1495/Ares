@@ -115,6 +115,7 @@ struct AnalysisView: View {
                 showingDiagnostics: $showingDiagnostics
             )
         }
+        .padding(.top, DS.Space.pageTop)
         .toolbar { toolbarContent }
         .navigationTitle("Analysis")
     }

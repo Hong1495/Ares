@@ -28,14 +28,19 @@ final class ConnectionsViewModel: ObservableObject {
 
     var totalDownload: Int64 {
         // TrafficAuditManager.shared.sessions is source of truth
-        TrafficAuditManager.shared.sessions.reduce(0) { $0 + $1.totalDownload }
+        TrafficAuditManager.shared.observedDownload
     }
 
     var totalUpload: Int64 {
-        TrafficAuditManager.shared.sessions.reduce(0) { $0 + $1.totalUpload }
+        TrafficAuditManager.shared.observedUpload
     }
 
     init() {
+        TrafficAuditManager.shared.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+
         // MARK: - Global Lifecycle (Event Bus)
         NotificationCenter.default.publisher(for: .appDidGoSilent)
             .receive(on: RunLoop.main)

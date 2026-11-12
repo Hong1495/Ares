@@ -63,7 +63,9 @@ struct DashboardComposition<Traffic: View, Controls: View, Details: View, Advanc
                     .padding(.top, 24)
 
                 }
-                .padding(28)
+                .padding(.horizontal, 28)
+                .padding(.bottom, 28)
+                .padding(.top, DS.Space.pageTop)
                 .frame(maxWidth: 1240)
                 .frame(maxWidth: .infinity, minHeight: geometry.size.height, alignment: .top)
             }

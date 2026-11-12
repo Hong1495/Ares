@@ -101,7 +101,8 @@ struct RulesView: View {
             .help("Add local rule overrides")
         }
         .padding(.horizontal, DS.Space.lg)
-        .padding(.vertical, DS.Space.md)
+        .padding(.top, DS.Space.pageTop)
+        .padding(.bottom, DS.Space.md)
     }
 
     // MARK: - Cells

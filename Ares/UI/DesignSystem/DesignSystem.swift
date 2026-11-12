@@ -28,6 +28,7 @@ enum DS {
     static let soft = Color.primary.opacity(0.035)
 
     enum Space {
+        static let pageTop: CGFloat = 8
         static let xxs: CGFloat = 2
         static let xs: CGFloat = 4
         static let sm: CGFloat = 8

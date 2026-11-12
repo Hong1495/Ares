@@ -34,7 +34,9 @@ struct ProfilesView: View {
                     }
                 }
             }
-            .padding(DS.Space.xl)
+            .padding(.horizontal, DS.Space.xl)
+            .padding(.bottom, DS.Space.xl)
+            .padding(.top, DS.Space.pageTop)
             .frame(maxWidth: 1180)
             .frame(maxWidth: .infinity)
         }

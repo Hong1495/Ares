@@ -82,6 +82,7 @@ struct PreviewWorkspace: View {
             .toolbar {
                 if page == "Activity" {
                     ActivityTitleToolbar(count: tab == 0 ? 9 : 13,
+                                         topologySummary: tab == 0 ? "9 processes · 3 rule types · 2 routes · 18 targets" : nil,
                                          download: tab == 0 ? nil : "1.3 MB",
                                          upload: tab == 0 ? nil : "3.6 MB")
                     ToolbarItem(placement: .primaryAction) {
@@ -214,7 +215,9 @@ struct PreviewWorkspace: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(30)
+        .padding(.horizontal, 30)
+        .padding(.bottom, 30)
+        .padding(.top, DS.Space.pageTop)
     }
 
     private var subtitle: String {

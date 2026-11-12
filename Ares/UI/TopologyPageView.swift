@@ -3,13 +3,28 @@ import SwiftUI
 struct TopologyPageView: View {
     @EnvironmentObject var clashController: ClashController
 
+    private var snapshot: TopologySnapshot {
+        TopologySnapshot(rows: clashController.activeChains.map {
+            TopologyRow(source: $0.sourceProcess, rule: $0.rule, chain: $0.chains,
+                        host: $0.host, destinationIP: $0.destinationIP)
+        })
+    }
+
     var body: some View {
-        TopologyView()
-            .padding(DS.Space.lg)
+        GeometryReader { geometry in
+            ScrollView(.vertical) {
+                TopologyView(rows: snapshot.rows)
+                    .frame(height: max(geometry.size.height - DS.Space.pageTop - DS.Space.lg,
+                                       CGFloat(snapshot.maximumColumnCount + 1) * 36))
+            }
+        }
+            .padding(.horizontal, DS.Space.lg)
+            .padding(.bottom, DS.Space.lg)
+            .padding(.top, DS.Space.pageTop)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(DS.canvas)
             .toolbar {
-                ActivityTitleToolbar(count: Set(clashController.activeChains.map(\.sourceProcess)).count)
+                ActivityTitleToolbar(count: snapshot.processCount, topologySummary: snapshot.summary, topologySubtitle: snapshot.subtitle)
             }
         .onAppear {
             Task { await clashController.monitorConnections() }

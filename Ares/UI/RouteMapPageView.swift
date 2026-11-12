@@ -50,7 +50,9 @@ struct RouteMapPageView: View {
                 }
             }
         }
-        .padding(DS.Space.lg)
+        .padding(.horizontal, DS.Space.lg)
+            .padding(.bottom, DS.Space.lg)
+            .padding(.top, DS.Space.pageTop)
         .navigationTitle("Routing")
         .onAppear {
             Task { await clashController.monitorConnections() }
