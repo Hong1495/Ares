@@ -8,25 +8,10 @@ struct AresMenuBarLabel: View {
     var latency: Int?
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(nsImage: Self.boarImage)
-                .renderingMode(.template)
-                .frame(width: 17, height: 17)
-                .accessibilityHidden(true)
-
-            if showsLatency {
-                HStack(alignment: .firstTextBaseline, spacing: 2) {
-                    Text(latency.map { $0 > 0 ? "\($0)" : "--" } ?? "--")
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .monospacedDigit()
-                    Text("ms")
-                        .font(.system(size: 10, weight: .regular))
-                }
-                .foregroundStyle(.primary)
-                .fixedSize()
-            }
-        }
-        .fixedSize()
+        // MenuBarExtra can discard nested text/layout when bridging to NSStatusItem.
+        // One template image preserves the unit and spacing with native adaptive tint.
+        Image(nsImage: Self.statusImage(showsLatency: showsLatency, latency: latency))
+        .renderingMode(.template)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Ares")
         .accessibilityValue(showsLatency ? latencyDescription : "")
@@ -35,6 +20,25 @@ struct AresMenuBarLabel: View {
     private var latencyDescription: String {
         guard let latency else { return "Latency not measured" }
         return latency > 0 ? "\(latency) milliseconds" : "Node unavailable"
+    }
+
+    static func statusImage(showsLatency: Bool, latency: Int?) -> NSImage {
+        guard showsLatency else { return boarImage }
+        let number = NSAttributedString(
+            string: latency.map { $0 > 0 ? "\($0)" : "--" } ?? "--",
+            attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium), .foregroundColor: NSColor.black])
+        let unit = NSAttributedString(string: "ms", attributes: [
+            .font: NSFont.systemFont(ofSize: 10), .foregroundColor: NSColor.black])
+        let numberWidth = ceil(number.size().width)
+        let width = 17 + 6 + numberWidth + 2 + ceil(unit.size().width)
+        let image = NSImage(size: NSSize(width: width, height: 18), flipped: false) { _ in
+            boarImage.draw(in: NSRect(x: 0, y: 0.5, width: 17, height: 17))
+            number.draw(at: NSPoint(x: 23, y: 2))
+            unit.draw(at: NSPoint(x: 23 + numberWidth + 2, y: 2))
+            return true
+        }
+        image.isTemplate = true
+        return image
     }
 
     static let boarImage: NSImage = {

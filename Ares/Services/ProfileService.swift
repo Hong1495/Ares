@@ -247,7 +247,7 @@ class ProfileService: ObservableObject {
         // Actual activation still requires full validation before changing the running core.
         guard let snapshot = try? SubscriptionSnapshot.parse(content) else { return (false, false) }
         guard !snapshot.nodes.isEmpty || snapshot.providerCount > 0 else { return (false, false) }
-        for filename in ["Country.mmdb", "geoip.dat", "geosite.dat", "ASN.mmdb"] {
+        for filename in ["geoip.metadb", "Country.mmdb", "GeoIP.dat", "GeoSite.dat", "ASN.mmdb"] {
             for mode in [false, true] {
                 let resource = await ConfigService.shared.getConfigDir(tunEnabled: mode).appendingPathComponent(filename)
                 if FileManager.default.fileExists(atPath: resource.path) {

@@ -9,6 +9,8 @@ mkdir -p "$APP/Contents/MacOS"
 SOURCES=(
   "$ROOT/Ares/UI/DesignSystem/DesignSystem.swift"
   "$ROOT/Ares/UI/DesignSystem/WorkspaceChrome.swift"
+  "$ROOT/Ares/UI/DesignSystem/ActivityViewPicker.swift"
+  "$ROOT/Ares/UI/DesignSystem/AresMenuBarLabel.swift"
   "$ROOT/Ares/UI/DesignSystem/WindowUpdateIndicator.swift"
   "$ROOT/Ares/UI/DesignSystem/OverviewPresentation.swift"
   "$ROOT/Ares/UI/DesignSystem/ProxyNodeTile.swift"

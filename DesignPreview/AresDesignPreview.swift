@@ -13,6 +13,11 @@ struct AresDesignPreview: App {
         .defaultSize(width: 1180, height: 780)
         .windowStyle(.titleBar)
         .commands { PreviewCommands() }
+        MenuBarExtra {
+            Text("Ares preview · No network services")
+        } label: {
+            AresMenuBarLabel(showsLatency: true, latency: 639)
+        }
     }
 }
 
@@ -72,6 +77,13 @@ struct PreviewWorkspace: View {
             .frame(minWidth: 650, minHeight: 540)
             .background(DS.canvas)
             .navigationTitle(page)
+            .toolbar {
+                if page == "Activity" {
+                    ToolbarItem(placement: .primaryAction) {
+                        ActivityViewPicker(selection: $tab)
+                    }
+                }
+            }
         }
         .toolbarBackground(.hidden, for: .windowToolbar)
         .background(SidebarToolbarAppearance())
@@ -186,7 +198,6 @@ struct PreviewWorkspace: View {
                 DSPageTabs(titles: ["General", "Network", "TUN", "MITM", "Rules"], selection: $tab)
                 settingsPage
             } else if page == "Activity" {
-                DSPageTabs(titles: ["Topology", "Connections"], selection: $tab)
                 if tab == 0 {
                     ContentUnavailableView("No active connections", systemImage: "point.3.connected.trianglepath.dotted", description: Text("Applications and their connections appear here."))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)

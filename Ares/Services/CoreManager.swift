@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import SubscriptionKit
 
 nonisolated struct CoreVersionInfo: Equatable {
     let displayVersion: String
@@ -113,12 +114,27 @@ actor CoreManager {
         guard FileManager.default.fileExists(atPath: path) else { throw CoreManagerError.binaryNotExecutable }
         var arguments = ["-t", "-d", configDir.path]
         if let configFile { arguments += ["-f", configFile.path] }
-        let result = try await ProcessManager().run(executable: path, arguments: arguments, timeout: 15)
-        if result.exitCode == 0 { return true }
-        if ConfigurationValidationFailure.isResourceFailure(result.output + result.error) {
-            throw ConfigurationValidationFailure.resourcesUnavailable
+        let content = try String(contentsOf: configFile ?? configDir.appendingPathComponent("config.yaml"), encoding: .utf8)
+        // Do not expose YAML parse errors, which can include subscription credentials.
+        guard let overrides = try? GeoResourceOptions.urls(in: content) else { return false }
+        try await GeoResourceService.shared.prepare(directory: configDir, overrides: overrides)
+        var recovered = Set<String>()
+        while true {
+            let result = try await ProcessManager().run(executable: path, arguments: arguments, timeout: 15, captureOutputOnTimeout: true)
+            if result.exitCode == 0 {
+                await GeoResourceService.shared.remember(directory: configDir, overrides: overrides)
+                return true
+            }
+            let log = result.output + result.error
+            guard let key = ConfigurationValidationFailure.resourceKey(in: log) else {
+                if result.exitCode == -1 { throw URLError(.timedOut) }
+                return false
+            }
+            guard recovered.insert(key).inserted,
+                  try await GeoResourceService.shared.recover(log: log, directory: configDir, overrides: overrides) else {
+                throw ConfigurationValidationFailure.resourcesUnavailable
+            }
         }
-        return false
     }
 
     func latestRelease() async -> CoreReleaseInfo? {

@@ -21,7 +21,8 @@ actor ProcessManager {
     func run(
         executable: String,
         arguments: [String],
-        timeout: TimeInterval? = nil
+        timeout: TimeInterval? = nil,
+        captureOutputOnTimeout: Bool = false
     ) async throws -> CommandResult {
         let worker = Task.detached {
             let process = Process()
@@ -54,6 +55,12 @@ actor ProcessManager {
                     if process.isRunning { _ = Darwin.kill(process.processIdentifier, SIGKILL) }
                     process.waitUntilExit()
                     if cancelled { throw CancellationError() }
+                    if captureOutputOnTimeout {
+                        return CommandResult(
+                            output: String(decoding: try Data(contentsOf: outURL), as: UTF8.self),
+                            error: String(decoding: try Data(contentsOf: errURL), as: UTF8.self),
+                            exitCode: -1)
+                    }
                     throw URLError(.timedOut)
                 }
                 try? await Task.sleep(for: .milliseconds(20))

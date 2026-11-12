@@ -17,7 +17,7 @@
 
 ## Country database
 
-The historical `Country.mmdb` has no verified provenance in this repository. It has been removed from the source tree and is excluded from the 1.0.0 distribution. GeoIP resources are managed by the core when required by the selected configuration; availability may depend on network access.
+The historical `Country.mmdb` has no verified provenance in this repository and is not distributed. When required, Ares downloads the core's default datasets from [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat), with a jsDelivr mirror of that project's release branch as a fallback. The upstream project publishes its license and data-source notices. Custom `geox-url` sources are preserved. Validated resources are cached locally and reused for normal and TUN configurations. No geodata is bundled with Ares.
 
 ## Yams
 
