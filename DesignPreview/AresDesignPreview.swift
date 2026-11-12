@@ -41,7 +41,7 @@ struct PreviewWorkspace: View {
     @State private var theme = 0
 
     private let destinations = [
-        WorkspaceDestination(id: "Activity", title: "Activity", icon: "arrow.up.arrow.down", section: "Workspace"),
+        WorkspaceDestination(id: "Activity", title: "Activity", icon: "arrow.up.arrow.down", section: "Monitoring"),
         WorkspaceDestination(id: "Proxies", title: "Proxies", icon: "network", section: "Proxy"),
         WorkspaceDestination(id: "Rules", title: "Rules", icon: "list.bullet.indent", section: "Proxy"),
         WorkspaceDestination(id: "Subscriptions", title: "Subscriptions", icon: "rectangle.stack", section: "Proxy"),
