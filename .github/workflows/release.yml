@@ -91,6 +91,7 @@ jobs:
           printf '%s' "$SIGNING_KEY" | .build/sparkle-tools/bin/sign_update --ed-key-file - -p "$ARCHIVE" > .build/signature
           python3 scripts/create-appcast.py --repository "$REPOSITORY" --tag "$TAG" \
             --version "$VERSION" --build "$BUILD_NUMBER" --archive "$ARCHIVE" \
+            --notes-file "docs/release-$VERSION.md" \
             --signature-file .build/signature --output "artifacts/appcast-$ARCH.xml"
           printf '%s' "$SIGNING_KEY" | .build/sparkle-tools/bin/sign_update --ed-key-file - "artifacts/appcast-$ARCH.xml"
           cp -R "$APP" .build/staging/

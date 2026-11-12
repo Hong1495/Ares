@@ -3,6 +3,7 @@
 import argparse
 import base64
 import datetime
+import html
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -10,6 +11,37 @@ from urllib.parse import quote
 
 SPARKLE = 'http://www.andymatuschak.org/xml-namespaces/sparkle'
 ET.register_namespace('sparkle', SPARKLE)
+
+
+def release_notes_html(markdown):
+    """Render our release-note headings, paragraphs and bullets as safe inline HTML."""
+    blocks, paragraph, bullets = [], [], []
+
+    def flush():
+        if paragraph:
+            blocks.append('<p>' + ' '.join(paragraph) + '</p>')
+            paragraph.clear()
+        if bullets:
+            blocks.append('<ul>' + ''.join('<li>' + line + '</li>' for line in bullets) + '</ul>')
+            bullets.clear()
+
+    for line in markdown.splitlines():
+        line = line.strip()
+        if not line:
+            flush()
+        elif line.startswith('# '):
+            flush()
+            blocks.append('<h2>' + html.escape(line[2:]) + '</h2>')
+        elif line.startswith('- '):
+            if paragraph:
+                flush()
+            bullets.append(html.escape(line[2:]))
+        else:
+            if bullets:
+                flush()
+            paragraph.append(html.escape(line))
+    flush()
+    return '\n'.join(blocks)
 
 
 def appcast(repository, tag, version, build, archive, signature, notes=''):
@@ -33,7 +65,7 @@ def appcast(repository, tag, version, build, archive, signature, notes=''):
     ET.SubElement(item, f'{{{SPARKLE}}}version').text = str(build)
     ET.SubElement(item, f'{{{SPARKLE}}}shortVersionString').text = version
     ET.SubElement(item, f'{{{SPARKLE}}}minimumSystemVersion').text = '14.0'
-    ET.SubElement(item, 'description').text = notes or f'Ares {version}'
+    ET.SubElement(item, 'description').text = release_notes_html(notes) if notes.strip() else f'Ares {version}'
     ET.SubElement(item, 'enclosure', {
         'url': f'https://github.com/{repository}/releases/download/{quote(tag, safe="")}/{quote(archive.name, safe="")}',
         'length': str(archive.stat().st_size),

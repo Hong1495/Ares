@@ -39,8 +39,19 @@ class AppcastTests(unittest.TestCase):
     def test_release_notes_are_escaped(self):
         notes = '<script>bad</script> & details'
         root = ET.fromstring(module.appcast(**self.args, notes=notes))
-        self.assertEqual(root.find('channel/item/description').text, notes)
+        self.assertEqual(root.find('channel/item/description').text, '<p>&lt;script&gt;bad&lt;/script&gt; &amp; details</p>')
         self.assertIsNone(root.find('.//script'))
+
+    def test_release_notes_show_headings_and_bullets(self):
+        notes = '# Ares 1.1.0\n\nChanges:\n\n- First change\n- Second & third\n'
+        root = ET.fromstring(module.appcast(**self.args, notes=notes))
+        description = root.find('channel/item/description').text
+        self.assertIn('<h2>Ares 1.1.0</h2>', description)
+        self.assertIn('<ul><li>First change</li><li>Second &amp; third</li></ul>', description)
+
+    def test_release_workflow_passes_notes_file(self):
+        workflow = (Path(__file__).parents[2] / '.github/workflows/release.yml').read_text()
+        self.assertIn('--notes-file "docs/release-$VERSION.md"', workflow)
 
     def test_empty_archive_rejected(self):
         self.archive.write_bytes(b'')

@@ -1,0 +1,63 @@
+name: Repair published update notes
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing stable release tag
+        required: true
+        default: v1.0.8
+permissions:
+  contents: write
+jobs:
+  repair:
+    runs-on: macos-15
+    env:
+      TAG: ${{ inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+      SIGNING_KEY: ${{ secrets.ARES_UPDATE_PRIVATE_KEY }}
+      ARES_UPDATE_PUBLIC_KEY: ${{ vars.ARES_UPDATE_PUBLIC_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare and validate notes
+        run: |
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          tag = os.environ['TAG']
+          assert re.fullmatch(r'v\d+\.\d+\.\d+', tag)
+          assert Path(f'docs/release-{tag[1:]}.md').read_text().strip()
+          PY
+          printf '%s' "$SIGNING_KEY" | swift scripts/verify-update-key.swift
+          mkdir -p .build/notes-repair/tools
+          gh release download "$TAG" --pattern appcast-arm64.xml --pattern SHA256SUMS-arm64.txt --dir .build/notes-repair
+          curl --fail --location --retry 3 https://github.com/sparkle-project/Sparkle/releases/download/2.9.6/Sparkle-2.9.6.tar.xz -o .build/notes-repair/sparkle.tar.xz
+          echo "52bf9e88cdd972fc0c81501377a880e90d47031bd8ca5462488f843e2609e192  .build/notes-repair/sparkle.tar.xz" | shasum -a 256 -c -
+          tar -xf .build/notes-repair/sparkle.tar.xz -C .build/notes-repair/tools
+      - name: Update only feed description and re-sign
+        run: |
+          python3 - <<'PY'
+          import importlib.util, os, xml.etree.ElementTree as ET
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location('appcast', 'scripts/create-appcast.py')
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          path = Path('.build/notes-repair/appcast-arm64.xml')
+          root = ET.fromstring(path.read_bytes())
+          item = root.find('channel/item')
+          assert item.find('{' + module.SPARKLE + '}shortVersionString').text == os.environ['TAG'][1:]
+          item.find('description').text = module.release_notes_html(Path(f'docs/release-{os.environ["TAG"][1:]}.md').read_text())
+          ET.indent(root)
+          path.write_bytes(ET.tostring(root, encoding='utf-8', xml_declaration=True))
+          PY
+          printf '%s' "$SIGNING_KEY" | .build/notes-repair/tools/bin/sign_update --ed-key-file - .build/notes-repair/appcast-arm64.xml
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          folder = Path('.build/notes-repair')
+          digest = hashlib.sha256((folder / 'appcast-arm64.xml').read_bytes()).hexdigest()
+          sums = folder / 'SHA256SUMS-arm64.txt'
+          lines = sums.read_text().splitlines()
+          assert sum(line.endswith('  appcast-arm64.xml') for line in lines) == 1
+          sums.write_text('\n'.join(f'{digest}  appcast-arm64.xml' if line.endswith('  appcast-arm64.xml') else line for line in lines) + '\n')
+          PY
+          gh release upload "$TAG" .build/notes-repair/appcast-arm64.xml .build/notes-repair/SHA256SUMS-arm64.txt --clobber
