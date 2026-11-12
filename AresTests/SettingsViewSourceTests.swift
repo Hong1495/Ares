@@ -127,10 +127,10 @@ final class SettingsViewSourceTests: XCTestCase {
         let analysis = try String(contentsOf: projectRoot.appendingPathComponent("Ares/UI/AnalysisView.swift"))
         let logs = try String(contentsOf: projectRoot.appendingPathComponent("Ares/UI/LogsView.swift"))
         let activity = try String(contentsOf: projectRoot.appendingPathComponent("Ares/UI/ConnectionsView.swift"))
-        let routing = try String(contentsOf: projectRoot.appendingPathComponent("Ares/UI/RouteMapPageView.swift"))
+        let routing = try String(contentsOf: projectRoot.appendingPathComponent("Ares/UI/DesignSystem/RoutingPresentation.swift"))
         XCTAssertTrue(analysis.contains("ContentUnavailableView"))
         XCTAssertTrue(logs.contains("ContentUnavailableView"))
         XCTAssertTrue(activity.contains("ContentUnavailableView"))
-        XCTAssertTrue(routing.contains("endpoint positions are not geolocated"))
+        XCTAssertTrue(routing.contains("not measured network hops"))
     }
 }

@@ -1,0 +1,3 @@
+MapLibre GL JS 5.12.0 — BSD-3-Clause; see routing-maplibre-LICENSE.txt.
+Natural Earth 5.1.2 1:110m admin-0 geometry and label points — public domain. https://www.naturalearthdata.com/about/terms-of-use/
+Country label points represent country-level estimates, never observed endpoint coordinates.
