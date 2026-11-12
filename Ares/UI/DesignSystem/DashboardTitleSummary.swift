@@ -4,6 +4,9 @@ struct DashboardTitleSummary: View {
     let country: String?
     let ip: String
     let latency: Int?
+    var showsRisk = false
+    var risk: Int? = nil
+    var riskHelp = ""
 
     private var countryName: String {
         guard let country, !country.isEmpty else { return "—" }
@@ -16,6 +19,10 @@ struct DashboardTitleSummary: View {
             HStack(alignment: .firstTextBaseline, spacing: 18) {
                 item(countryName, label: "Country")
                 item(ExitIdentity.isAddress(ip) ? ip : "—", label: "Exit IP")
+                if showsRisk {
+                    item(risk.map(String.init) ?? "—", label: "IP Risk")
+                        .help(riskHelp)
+                }
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text(latency.flatMap { $0 > 0 ? String($0) : nil } ?? "—")
                         .font(.system(size: 18, weight: .medium, design: .rounded)).monospacedDigit()

@@ -14,93 +14,45 @@ struct ConnectivityCard: View {
     }
 
     private let sites: [Site] = [
-        .init(id: "google", name: "Google", url: "https://www.google.com", icon: "globe"),
+        .init(id: "google", name: "Google", url: "https://www.google.com", icon: "magnifyingglass"),
         .init(id: "github", name: "GitHub", url: "https://github.com", icon: "chevron.left.forwardslash.chevron.right"),
         .init(id: "gemini", name: "Gemini", url: "https://gemini.google.com", icon: "sparkles")
     ]
 
     var body: some View {
-        DSCard(padding: 0, spacing: DS.Space.sm) {
-            DSCardHeader("Reachability", icon: "antenna.radiowaves.left.and.right", tint: .seriesUp) {
-                Button {
-                    Task { await testAll() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(DS.Typography.metadata.weight(.semibold))
-                }
-                .buttonStyle(.borderless)
-                .help("Re-test all")
-            }
-
-            ForEach(sites) { site in
-                row(for: site)
-                if site.id != sites.last?.id {
-                    Divider().opacity(0.35)
-                }
-            }
-        }
-        .task { await testAll() }
-    }
-
-    private func row(for site: Site) -> some View {
-        HStack(spacing: DS.Space.sm) {
-            Image(systemName: site.icon)
-                .font(DS.Typography.metadata.weight(.medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 18)
-
-            Text(site.name)
-                .font(DS.Typography.secondary.weight(.medium))
-
-            Spacer(minLength: DS.Space.sm)
-
-            if loading.contains(site.id) {
-                ProgressView().controlSize(.mini)
-            } else if let ms = results[site.id] {
-                if ms < 0 {
-                    Text("Unreachable")
-                        .font(DS.Typography.metadata.weight(.medium))
-                        .foregroundStyle(Color.statusBad)
-                } else {
-                    HStack(spacing: 5) {
-                        Circle()
-                            .fill(Color.latency(ms))
-                            .frame(width: 5, height: 5)
-                        Text("\(ms) ms")
-                            .font(DS.Typography.metadata.monospaced().weight(.medium))
-                            .foregroundStyle(.primary)
-                    }
-                }
-            } else {
-                Text("—")
-                    .font(DS.Typography.metadata)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .padding(.vertical, 3)
-        .contentShape(Rectangle())
-        .onTapGesture { Task { await test(site) } }
+        OverviewReachability(
+            items: sites.map { .init(id: $0.id, name: $0.name, icon: $0.icon,
+                                    latency: results[$0.id], loading: loading.contains($0.id)) }
+        )
+        .task { await monitor() }
     }
 
     // MARK: - Probing
 
+    private func monitor() async {
+        let clock = ContinuousClock()
+        while !Task.isCancelled {
+            let nextCheck = clock.now.advanced(by: .seconds(30))
+            await testAll()
+            do {
+                try await clock.sleep(until: nextCheck)
+            } catch {
+                return
+            }
+        }
+    }
+
     private func testAll() async {
         await withTaskGroup(of: Void.self) { group in
             for site in sites {
-                group.addTask { await test(site) }
+                group.addTask { await probe(site) }
             }
         }
     }
 
     @MainActor
-    private func test(_ site: Site) async {
-        guard !ClashViewModel.shared.isRunning else { return await probe(site) }
-        await probe(site)
-    }
-
-    @MainActor
     private func probe(_ site: Site) async {
-        guard !loading.contains(site.id) else { return }
+        guard !Task.isCancelled, !loading.contains(site.id) else { return }
         loading.insert(site.id)
         defer { loading.remove(site.id) }
 
@@ -113,16 +65,21 @@ struct ConnectivityCard: View {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 4
         let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
 
-        let start = Date()
+        let clock = ContinuousClock()
+        let start = clock.now
         do {
             let (_, response) = try await session.data(for: request)
+            guard !Task.isCancelled else { return }
             if let http = response as? HTTPURLResponse, (200...499).contains(http.statusCode) {
-                results[site.id] = Int(Date().timeIntervalSince(start) * 1000)
+                let elapsed = start.duration(to: clock.now).components
+                results[site.id] = Int(elapsed.seconds * 1000 + elapsed.attoseconds / 1_000_000_000_000_000)
             } else {
                 results[site.id] = -1
             }
         } catch {
+            guard !Task.isCancelled else { return }
             results[site.id] = -1
         }
     }

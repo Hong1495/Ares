@@ -112,22 +112,8 @@ class TrafficGraphViewModel: ObservableObject {
 
     private var cancellables = Set<AnyCancellable>()
 
-    init() {
-        // Initialize with 60 data points
-        let now = Date()
-        dataPoints = (0..<60).map { i in
-            TrafficDataPoint(
-                time: now.addingTimeInterval(Double(i - 60)),
-                upload: 0,
-                download: 0
-            )
-        }
-    }
-
     func startMonitoring() {
-        // Immediately update with current data if available
-        let current = ClashController.shared.traffic
-        updateTraffic(up: current.up, down: current.down)
+        guard cancellables.isEmpty else { return }
 
         // Observe ClashController traffic updates
         ClashController.shared.$traffic
@@ -155,9 +141,10 @@ class TrafficGraphViewModel: ObservableObject {
         )
 
         self.dataPoints.append(newPoint)
-        // 保持固定大小的数据点数组
-        if self.dataPoints.count > 60 {
-            self.dataPoints.removeFirst()
+        // Keep the full time window and one preceding sample for the left edge.
+        let cutoff = newPoint.time.addingTimeInterval(-60)
+        while dataPoints.count > 2 && dataPoints[1].time < cutoff {
+            dataPoints.removeFirst()
         }
     }
 }

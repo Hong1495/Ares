@@ -45,6 +45,8 @@ struct SettingsView: View {
     @AppStorage(DefaultsKeys.theme) private var theme = "system"
     @AppStorage(DefaultsKeys.menuBarShowsLatency) private var menuBarShowsLatency = false
 
+    @AppStorage(DefaultsKeys.ipReputationEnabled) private var ipReputationEnabled = false
+
     @State private var settingsError: String?
     @State private var applying = false
     @State private var needsProxyRetry = false
@@ -191,6 +193,17 @@ struct SettingsView: View {
             DSCard {
                 SettingsSectionTitle("Menu Bar", icon: "menubar.rectangle")
                 settingToggle("Show latency next to Ares", isOn: $menuBarShowsLatency)
+            }
+
+            DSCard {
+                SettingsSectionTitle("Exit IP Reputation", icon: "checkmark.shield")
+                settingToggle("Automatically check IP risk", isOn: $ipReputationEnabled)
+                    .onChange(of: ipReputationEnabled) { _, enabled in
+                        if !enabled { IPReputationService.shared.clear() }
+                    }
+                settingNote("Checks the exit IP shown on Dashboard using proxycheck.io. Shares that IP with the provider. Checks when Dashboard is open; refreshes after an IP change or every 6 hours. Risk is 0–100, lower is better; VPN and hosting status can raise it.")
+                Link("About the risk score", destination: URL(string: "https://proxycheck.io/api/")!)
+                    .font(.system(size: 12))
             }
 
             DSCard {

@@ -21,34 +21,13 @@ struct DashboardComposition<Traffic: View, Controls: View, Details: View>: View 
     @ViewBuilder var details: () -> Details
 
     var body: some View {
-        GeometryReader { geometry in
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 0) {
-                    if geometry.size.width >= 850 {
-                        HStack(alignment: .top, spacing: 28) {
-                            traffic().frame(maxWidth: .infinity)
-                            Rectangle().fill(DS.line).frame(width: 0.5)
-                            controls().frame(width: 230)
-                        }.fixedSize(horizontal: false, vertical: true)
-                    } else {
-                        VStack(spacing: 28) {
-                            traffic()
-                            controls()
-                        }
-                    }
-                    Rectangle().fill(DS.line).frame(height: 0.5).padding(.vertical, 24)
-                    details()
-                        .frame(maxWidth: 380, alignment: .leading)
-                        .environment(\.flatSurfaces, true)
-
-                }
-                .padding(.horizontal, 28)
-                .padding(.bottom, 28)
-                .padding(.top, DS.Space.pageTop)
-                .frame(maxWidth: 1240)
-                .frame(maxWidth: .infinity, minHeight: geometry.size.height, alignment: .top)
-            }
+        VStack(spacing: 20) {
+            controls().fixedSize(horizontal: false, vertical: true)
+            traffic().frame(maxWidth: .infinity, maxHeight: .infinity)
+            details().fixedSize(horizontal: false, vertical: true)
         }
+        .padding(.horizontal, 28).padding(.vertical, 20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(DS.canvas)
     }
 }
@@ -62,45 +41,106 @@ struct OverviewConnectionCard: View {
     var busy = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 21) {
-            VStack(spacing: 19) {
-                DSToggleRow(icon: "globe", title: "System proxy", tint: .accentColor, isOn: $systemProxy)
-                DSToggleRow(icon: "bolt.shield", title: "TUN mode", tint: .accentColor, isOn: $tun)
-                DSToggleRow(icon: "viewfinder", title: "MITM", tint: .accentColor, isOn: $interception)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 22) {
+                activation
+                Rectangle().fill(DS.line).frame(width: 1, height: 24)
+                modes
+                Spacer(minLength: 0)
             }
-            Divider().opacity(0.5)
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 6) {
-                    modeButton("Rule", symbol: "list.bullet.indent", index: 0)
-                    modeButton("Global", symbol: "globe", index: 1)
-                    modeButton("Direct", symbol: "arrow.up.right", index: 2)
-                }
+            VStack(alignment: .leading, spacing: 16) {
+                HStack { activation; Spacer() }
+                modes
             }
-            Label("\(snapshot.connections.map(String.init) ?? "—") connections", systemImage: "arrow.left.arrow.right")
-                .font(DS.Typography.metadata).foregroundStyle(.secondary)
         }
+        .padding(.vertical, 8)
         .disabled(busy)
     }
 
-    private func modeButton(_ title: String, symbol: String, index: Int) -> some View {
-        Button { mode = index } label: {
-            VStack(spacing: 8) {
-                Image(systemName: symbol).font(.system(size: 18, weight: .light))
-                Text(title).font(DS.Typography.metadata.weight(mode == index ? .medium : .regular))
+    private var activation: some View {
+        HStack(spacing: 18) {
+            capability("System proxy", icon: "power", value: $systemProxy)
+            capability("TUN", icon: "point.topleft.down.to.point.bottomright.curvepath", value: $tun)
+            capability("MITM", icon: "waveform.path", value: $interception)
+        }.fixedSize()
+    }
+
+    private var modes: some View {
+        Picker("Routing mode", selection: $mode) {
+            ForEach(0..<3) { index in
+                Text(["Rule", "Global", "Direct"][index]).tag(index)
             }
-            .foregroundStyle(mode == index ? Color.accentColor : .secondary)
-            .frame(maxWidth: .infinity).padding(.vertical, 12)
-            .background(mode == index ? Color.accentColor.opacity(0.08) : .clear, in: RoundedRectangle(cornerRadius: 8))
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(title) mode")
-        .accessibilityAddTraits(mode == index ? .isSelected : [])
+        .pickerStyle(.segmented).labelsHidden().controlSize(.regular)
+        .font(.system(size: 12)).frame(width: 204)
+    }
+
+    private func capability(_ title: String, icon: String, value: Binding<Bool>) -> some View {
+        Toggle(isOn: value) {
+            HStack(spacing: 7) {
+                DashboardSymbol(name: icon).foregroundStyle(.secondary)
+                Text(title).font(.system(size: 12, weight: .medium))
+            }
+            .foregroundStyle(.primary)
+        }.toggleStyle(.switch).controlSize(.small).tint(DS.accent)
+            .accessibilityLabel(title).accessibilityValue(value.wrappedValue ? "On" : "Off")
+            .help("\(value.wrappedValue ? "Disable" : "Enable") \(title)")
+    }
+}
+
+/// Shared by the production probes and the isolated design preview.
+struct OverviewReachability: View {
+    struct Item: Identifiable {
+        let id: String
+        let name: String
+        let icon: String
+        let latency: Int?
+        let loading: Bool
+    }
+    let items: [Item]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Rectangle().fill(DS.line).frame(height: 0.5)
+            Text("Reachability").font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
+            HStack(spacing: 24) {
+                ForEach(items) { item in
+                    ReachabilityResult(item: item)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+        }
+    }
+}
+
+private struct ReachabilityResult: View {
+    let item: OverviewReachability.Item
+    private var status: String {
+        if item.loading { return "Testing" }
+        guard let ms = item.latency else { return "Not tested" }
+        return ms < 0 ? "Unavailable" : "\(ms) milliseconds"
+    }
+    var body: some View {
+        HStack(spacing: 8) {
+                DashboardSymbol(name: item.icon).foregroundStyle(.secondary)
+                Text(item.name).font(.system(size: 12, weight: .medium))
+                Spacer(minLength: 4)
+                if item.loading && item.latency == nil { ProgressView().controlSize(.mini) }
+                else {
+                    Text(item.latency.flatMap { $0 >= 0 ? String($0) : nil } ?? "—")
+                        .font(.system(size: 18, weight: .medium, design: .rounded))
+                        .monospacedDigit().foregroundStyle(Color.latency(item.latency))
+                    Text("ms").font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+        }.padding(.vertical, 10)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(item.name): \(status)")
+            .help("\(status) · HTTPS response time, checked automatically every 30 seconds.")
     }
 }
 
 struct OverviewTrafficPoint: Identifiable {
-    let id: Int
+    var id: Date { time }
     let time: Date
     let download: Double
     let upload: Double
@@ -111,6 +151,8 @@ struct OverviewTrafficCard: View {
     let download: String
     let upload: String
     @State private var selectedTime: Date?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
 
     private var selectedPoint: OverviewTrafficPoint? {
         guard let selectedTime else { return nil }
@@ -118,49 +160,61 @@ struct OverviewTrafficCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 36) {
-                speed("Download", value: selectedPoint.map { format($0.download) } ?? download, color: .seriesDown, icon: "arrow.down")
-                speed("Upload", value: selectedPoint.map { format($0.upload) } ?? upload, color: .seriesUp, icon: "arrow.up")
-                Spacer(minLength: 0)
-            }
-            Chart {
-                ForEach(points) { point in
-                    AreaMark(x: .value("Time", point.time), y: .value("Download", point.download))
-                        .foregroundStyle(LinearGradient(colors: [Color.seriesDown.opacity(0.14), Color.seriesDown.opacity(0.01)], startPoint: .top, endPoint: .bottom))
-                        .interpolationMethod(.monotone)
-                    LineMark(x: .value("Time", point.time), y: .value("Bytes/s", point.download), series: .value("Direction", "Download"))
-                        .foregroundStyle(Color.seriesDown).lineStyle(StrokeStyle(lineWidth: 1.7)).interpolationMethod(.monotone)
-                    LineMark(x: .value("Time", point.time), y: .value("Bytes/s", point.upload), series: .value("Direction", "Upload"))
-                        .foregroundStyle(Color.seriesUp).lineStyle(StrokeStyle(lineWidth: 1.5, dash: [3, 3])).interpolationMethod(.monotone)
-                }
-                if let selectedTime {
-                    RuleMark(x: .value("Time", selectedTime)).foregroundStyle(Color.secondary.opacity(0.5))
-                        .lineStyle(StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
-                }
-            }
-            .chartLegend(.hidden)
-            .chartXSelection(value: $selectedTime)
-            .chartXAxis(.hidden)
-            .chartYScale(domain: 0...max(1024, points.map { max($0.download, $0.upload) }.max() ?? 1024) * 1.15)
-            .chartYAxis {
-                AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { value in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 4])).foregroundStyle(DS.line)
-                    AxisValueLabel {
-                        if let bytes = value.as(Double.self) {
-                            Text(format(bytes)).font(DS.Typography.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }
-            .frame(height: 176)
-            .accessibilityLabel("Upload and download traffic over the last 60 seconds")
+        VStack(spacing: 18) {
+            lane("Download", value: selectedPoint.map { format($0.download) } ?? download,
+                 color: .seriesDown, uploadLane: false)
+            Rectangle().fill(DS.line).frame(height: 0.5)
+            lane("Upload", value: selectedPoint.map { format($0.upload) } ?? upload,
+                 color: .seriesUp, uploadLane: true)
             HStack {
                 Text("60s ago")
                 Spacer()
                 Text(selectedPoint?.time.formatted(date: .omitted, time: .standard) ?? "Now")
+            }.font(.system(size: 10)).foregroundStyle(.secondary)
+        }
+    }
+
+    private func lane(_ title: String, value: String, color: Color, uploadLane: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 14) {
+                HStack(spacing: 6) {
+                    DashboardSymbol(name: uploadLane ? "arrow.up" : "arrow.down")
+                    Text(title).font(.system(size: 12, weight: .medium))
+                }.foregroundStyle(color)
+                speed(value)
+                Spacer()
             }
-            .font(DS.Typography.caption).foregroundStyle(.secondary)
+            TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion || scenePhase != .active)) { timeline in
+            Chart {
+                ForEach(points) { point in
+                    let value = uploadLane ? point.upload : point.download
+                    AreaMark(x: .value("Time", point.time), y: .value("Bytes/s", value))
+                        .foregroundStyle(LinearGradient(colors: [color.opacity(0.09), color.opacity(0.005)], startPoint: .top, endPoint: .bottom))
+                        .interpolationMethod(.monotone)
+                    LineMark(x: .value("Time", point.time), y: .value("Bytes/s", value))
+                        .foregroundStyle(color).lineStyle(StrokeStyle(lineWidth: 1.4)).interpolationMethod(.monotone)
+                }
+                if let selectedTime {
+                    RuleMark(x: .value("Time", selectedTime)).foregroundStyle(Color.secondary.opacity(0.4))
+                        .lineStyle(StrokeStyle(lineWidth: 0.5, dash: [2, 4]))
+                }
+            }
+            .chartLegend(.hidden).chartXSelection(value: $selectedTime).chartXAxis(.hidden)
+            .chartPlotStyle { plot in plot.clipped() }
+            .chartXScale(domain: timeline.date.addingTimeInterval(-60)...timeline.date)
+            .chartYScale(domain: 0...max(1024, points.map { uploadLane ? $0.upload : $0.download }.max() ?? 1024) * 1.15)
+            .chartYAxis {
+                AxisMarks(position: .trailing, values: .automatic(desiredCount: 2)) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 4])).foregroundStyle(DS.line)
+                    AxisValueLabel {
+                        if let bytes = value.as(Double.self) { Text(format(bytes)).font(.system(size: 10)).foregroundStyle(.secondary) }
+                    }
+                }
+            }
+            .animation(.easeInOut(duration: 0.35), value: points.map { uploadLane ? $0.upload : $0.download }.max())
+            }
+            .frame(minHeight: 40, maxHeight: .infinity)
+            .accessibilityLabel("\(title) bytes per second. Independently scaled, last 60 seconds.")
         }
     }
 
@@ -169,10 +223,24 @@ struct OverviewTrafficCard: View {
         return ByteCountFormatter.string(fromByteCount: Int64(value), countStyle: .file) + "/s"
     }
 
-    private func speed(_ title: String, value: String, color: Color, icon: String) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Label(title, systemImage: icon).font(DS.Typography.metadata).foregroundStyle(color)
-            Text(value).font(DS.Typography.metric).monospacedDigit()
+    private func speed(_ value: String) -> some View {
+        let parts = value.split(separator: " ", maxSplits: 1)
+        return HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text(parts.first.map(String.init) ?? "—")
+                .font(.system(size: 20, weight: .medium, design: .rounded)).monospacedDigit()
+            if parts.count > 1 { Text(String(parts[1])).font(.system(size: 11)).foregroundStyle(.secondary) }
         }
+    }
+}
+
+/// All dashboard symbols share the same optical box and stroke weight.
+private struct DashboardSymbol: View {
+    let name: String
+    var body: some View {
+        Image(systemName: name)
+            .font(.system(size: 13, weight: .regular))
+            .symbolRenderingMode(.monochrome)
+            .frame(width: 16, height: 16)
+            .accessibilityHidden(true)
     }
 }

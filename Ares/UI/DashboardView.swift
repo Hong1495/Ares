@@ -82,8 +82,8 @@ private struct TrafficCard: View {
 
     var body: some View {
         OverviewTrafficCard(
-            points: model.dataPoints.enumerated().map { index, point in
-                OverviewTrafficPoint(id: index, time: point.time, download: Double(point.download), upload: Double(point.upload))
+            points: model.dataPoints.map { point in
+                OverviewTrafficPoint(time: point.time, download: Double(point.download), upload: Double(point.upload))
             },
             download: Self.formatSpeed(model.currentDownload),
             upload: Self.formatSpeed(model.currentUpload)

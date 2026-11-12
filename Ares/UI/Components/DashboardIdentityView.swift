@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct DashboardIdentityView: View {
+    @AppStorage(DefaultsKeys.ipReputationEnabled) private var reputationEnabled = false
+    @ObservedObject private var reputation = IPReputationService.shared
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var clashViewModel: ClashViewModel
     @EnvironmentObject var clashController: ClashController
@@ -12,8 +14,23 @@ struct DashboardIdentityView: View {
 
     var body: some View {
         DashboardTitleSummary(country: appState.countryCode, ip: appState.publicIP,
-            latency: clashViewModel.isRunning && appState.currentMode != .direct ? clashController.primaryLatency : nil)
+            latency: clashViewModel.isRunning && appState.currentMode != .direct ? clashController.primaryLatency : nil,
+            showsRisk: reputationEnabled,
+            risk: reputation.result?.ip == appState.publicIP ? reputation.result?.risk : nil,
+            riskHelp: reputationHelp)
             .task(id: routeKey) { await monitor() }
+            .task(id: "\(reputationEnabled)|\(appState.publicIP)|\(routeKey)") {
+                await reputation.monitor(ip: appState.publicIP, enabled: reputationEnabled && !clashViewModel.isToggling)
+            }
+    }
+
+    private var reputationHelp: String {
+        guard let result = reputation.result, result.ip == appState.publicIP else {
+            return reputation.checking ? "Checking IP risk…" : "IP risk unavailable · proxycheck.io"
+        }
+        let types = result.types.isEmpty ? "No type flags" : result.types.joined(separator: ", ")
+        return "proxycheck.io · \(result.risk)/100 risk (lower is better) · \(types) · Checked \(result.checkedAt.formatted()) · VPN and hosting classification can increase this score; it is not a purity percentage."
+
     }
 
     private func monitor() async {

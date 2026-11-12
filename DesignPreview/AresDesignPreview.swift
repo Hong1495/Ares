@@ -63,7 +63,7 @@ struct PreviewWorkspace: View {
         let start = Date().addingTimeInterval(-60)
         return (0..<60).map { i in
             let wave = max(0, sin(Double(i) * 0.24) * 0.8 + sin(Double(i) * 0.71) * 0.22 + 1.1)
-            return OverviewTrafficPoint(id: i, time: start.addingTimeInterval(Double(i)), download: enabled ? wave * 2_800_000 : 0, upload: enabled ? wave * 240_000 : 0)
+            return OverviewTrafficPoint(time: start.addingTimeInterval(Double(i)), download: enabled ? wave * 2_800_000 : 0, upload: enabled ? wave * 240_000 : 0)
         }
     }
 
@@ -82,7 +82,7 @@ struct PreviewWorkspace: View {
             .toolbar {
                 if page == "Dashboard" {
                     ToolbarItem(placement: .navigation) {
-                        DashboardTitleSummary(country: empty ? nil : "JP", ip: empty ? "—" : "203.0.113.24", latency: empty || mode == 2 ? nil : 38).padding(.leading, 16)
+                        DashboardTitleSummary(country: empty ? nil : "JP", ip: empty ? "—" : "203.0.113.24", latency: empty || mode == 2 ? nil : 38, showsRisk: true, risk: empty || error ? nil : 33, riskHelp: "Preview · 33/100 risk · proxycheck.io").padding(.leading, 16)
                     }.aresUnframed()
                 }
                 if page == "Activity" {
@@ -115,16 +115,10 @@ struct PreviewWorkspace: View {
         } controls: {
             OverviewConnectionCard(snapshot: snapshot, systemProxy: $enabled, tun: $tun, interception: $inspection, mode: $mode)
         } details: {
-            DSCard(padding: 0, spacing: DS.Space.sm) {
-                DSCardHeader("Reachability", icon: "antenna.radiowaves.left.and.right") {
-                    Button { measured.toggle() } label: { Image(systemName: "arrow.clockwise") }.buttonStyle(.borderless).help("Simulate measurement")
-                }
-                ForEach(["Google", "GitHub", "Gemini"], id: \.self) { name in
-                    DSKeyValueRow(label: name, value: error ? "Unreachable" : (measured ? "42 ms" : "38 ms"), valueTint: error ? .statusBad : .secondary)
-                        .padding(.vertical, 3)
-                    if name != "Gemini" { Divider().opacity(0.35) }
-                }
-            }
+            OverviewReachability(
+                items: [("Google", "magnifyingglass"), ("GitHub", "chevron.left.forwardslash.chevron.right"), ("Gemini", "sparkles")].map {
+                    .init(id: $0.0, name: $0.0, icon: $0.1, latency: empty ? nil : (error ? -1 : (measured ? 42 : 38)), loading: false)
+                })
         }
     }
 

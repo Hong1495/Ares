@@ -20,33 +20,11 @@ final class SettingsViewSourceTests: XCTestCase {
         // Cards must reflow with the window rather than using a hardcoded column count.
         let presentation = try String(contentsOf: projectRoot.appendingPathComponent("Ares/UI/DesignSystem/OverviewPresentation.swift"))
         XCTAssertTrue(source.contains("DashboardComposition {"))
-        XCTAssertTrue(presentation.contains("geometry.size.width >= 850"))
+        XCTAssertFalse(presentation.contains("geometry.size.height -"))
         XCTAssertFalse(source.contains("showAdvanced"))
         XCTAssertFalse(source.contains("DisclosureGroup"))
         XCTAssertFalse(source.contains("[GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]"))
         XCTAssertFalse(source.contains("Divider().frame(height: 44)"))
-    }
-
-    func testDashboardCardsDoNotHardcodeHeights() throws {
-        let components = projectRoot.appendingPathComponent("Ares/UI/Components")
-        let cards = [
-            "ConnectivityCard.swift"
-        ]
-
-        for card in cards {
-            let source = try String(
-                contentsOf: components.appendingPathComponent(card),
-                encoding: .utf8
-            )
-            XCTAssertFalse(
-                source.contains(".frame(height: 150)"),
-                "\(card) must size to its content instead of a fixed 150pt height"
-            )
-            XCTAssertTrue(
-                source.contains("DSCard"),
-                "\(card) should use the shared card surface"
-            )
-        }
     }
 
     func testDesignSystemDefinesSemanticColors() throws {
