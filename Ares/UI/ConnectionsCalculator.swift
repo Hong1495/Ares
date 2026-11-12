@@ -3,8 +3,7 @@ import Foundation
 actor ConnectionsCalculator {
     private var previousSnapshots: [String: (up: Int64, down: Int64, time: Date)] = [:]
 
-    func process(rawConnections: [Connection], appSessions: [AppSession], groupingMode: GroupingMode) -> [ActivityNode] {
-        let now = Date()
+    func process(rawConnections: [Connection], appSessions: [AppSession], groupingMode: GroupingMode, now: Date = Date()) -> (connections: [Connection], nodes: [ActivityNode]) {
 
         // 1. Calculate Speeds
         var computedConnections = rawConnections
@@ -13,8 +12,8 @@ actor ConnectionsCalculator {
             if let prev = previousSnapshots[conn.id] {
                 let timeDiff = now.timeIntervalSince(prev.time)
                 if timeDiff > 0 {
-                    computedConnections[i].uploadSpeed = Int64(Double(conn.upload - prev.up) / timeDiff)
-                    computedConnections[i].downloadSpeed = Int64(Double(conn.download - prev.down) / timeDiff)
+                    computedConnections[i].uploadSpeed = Int64(Double(max(0, conn.upload - prev.up)) / timeDiff)
+                    computedConnections[i].downloadSpeed = Int64(Double(max(0, conn.download - prev.down)) / timeDiff)
                 }
             }
         }
@@ -27,7 +26,7 @@ actor ConnectionsCalculator {
         previousSnapshots = newSnapshots
 
         // 2. Grouping Logic
-        return group(connections: computedConnections, sessions: appSessions, mode: groupingMode)
+        return (computedConnections, group(connections: computedConnections, sessions: appSessions, mode: groupingMode))
     }
 
     func regroup(connections: [Connection], sessions: [AppSession], mode: GroupingMode) -> [ActivityNode] {
@@ -37,11 +36,16 @@ actor ConnectionsCalculator {
     private func group(connections: [Connection], sessions: [AppSession], mode: GroupingMode) -> [ActivityNode] {
         switch mode {
         case .app:
-            return sessions.map { ActivityNode.app($0) }
+            let byID = Dictionary(uniqueKeysWithValues: connections.map { ($0.id, $0) })
+            return sessions.map { session in
+                var updated = session
+                updated.activeConnections = session.activeConnections.map { byID[$0.id] ?? $0 }
+                return ActivityNode.app(updated)
+            }
 
         case .proxy:
             let groups = Dictionary(grouping: connections) { conn -> String in
-                conn.chains.last ?? "Direct"
+                conn.chains.first ?? "DIRECT"
             }
             return groups.map { id, conns in
                 ActivityNode.group(ActivityGroup(id: id, title: id, icon: "network", connections: conns))

@@ -4,23 +4,6 @@ import UniformTypeIdentifiers
 
 // MARK: - Grouping
 
-enum GroupingMode: String, CaseIterable, Identifiable {
-    case app = "Application"
-    case proxy = "Proxy Node"
-    case host = "Host / Domain"
-    case rule = "Rule"
-
-    var id: String { rawValue }
-    var icon: String {
-        switch self {
-        case .app: return "app"
-        case .proxy: return "network"
-        case .host: return "globe"
-        case .rule: return "list.bullet.rectangle"
-        }
-    }
-}
-
 // MARK: - Connections View
 
 struct ConnectionsView: View {
@@ -61,10 +44,14 @@ struct ConnectionsView: View {
         }
         .toolbar {
             ActivityTitleToolbar(count: viewModel.groupedNodes.count,
-                                 subtitle: viewModel.groupingMode.rawValue,
+                                 subtitle: "Connections",
                                  download: formatBytes(viewModel.totalDownload),
                                  upload: formatBytes(viewModel.totalUpload))
         }
+        .alert("Activity action failed", isPresented: Binding(get: { viewModel.actionError != nil }, set: { if !$0 { viewModel.actionError = nil } })) {
+            Button("OK") { viewModel.actionError = nil }
+        } message: { Text(viewModel.actionError ?? "") }
+        .onChange(of: viewModel.groupingMode) { _, _ in selectedNodeID = nil }
         .task {
             // Initial Start (Defer slightly to let UI settle)
             try? await Task.sleep(nanoseconds: 200_000_000)
@@ -180,7 +167,7 @@ struct ConnectionsView: View {
                                                     .foregroundStyle(.secondary)
                                             }
                                         } else {
-                                            Text("Terminated")
+                                            Text("Inactive")
                                                 .font(.caption2)
                                                 .foregroundStyle(.secondary)
                                         }
@@ -221,7 +208,7 @@ struct ConnectionsView: View {
                         }
                         .width(ideal: 100)
 
-                        TableColumn("Upload") { node in
+                        TableColumn("Upload", value: \.uploadSortValue) { node in
                             switch node {
                             case .app(let x): trafficCell(bytes: x.totalUpload, speed: x.currentUploadSpeed, color: .seriesUp, arrow: "arrow.up")
                             case .group(let x): trafficCell(bytes: x.upload, speed: x.uploadSpeed, color: .seriesUp, arrow: "arrow.up")
@@ -313,9 +300,7 @@ struct ConnectionsView: View {
 
     // Computed Nodes for Table
     var nodes: [ActivityNode] {
-        let all = viewModel.groupedNodes
-        if searchText.isEmpty { return all.sorted(using: sessionSortOrder) }
-        return all.filter { $0.title.localizedCaseInsensitiveContains(searchText) }.sorted(using: sessionSortOrder)
+        ActivityPresentation.sorted(ActivityPresentation.filter(viewModel.groupedNodes, query: searchText), using: sessionSortOrder)
     }
 
     private func findNode(id: String, nodes: [ActivityNode]) -> ActivityNode? {
@@ -376,14 +361,14 @@ struct ConnectionsView: View {
 
     private func formatBytes(_ bytes: Int64) -> String {
         let formatter = ByteCountFormatter()
-        formatter.allowedUnits = [.useKB, .useMB, .useGB]
+        formatter.allowedUnits = [.useBytes, .useKB, .useMB, .useGB]
         formatter.countStyle = .file
         return formatter.string(fromByteCount: bytes)
     }
 
     private func formatSpeed(_ bytesPerSecond: Int64) -> String {
         let formatter = ByteCountFormatter()
-        formatter.allowedUnits = [.useKB, .useMB, .useGB]
+        formatter.allowedUnits = [.useBytes, .useKB, .useMB, .useGB]
         formatter.countStyle = .file
         let formatted = formatter.string(fromByteCount: bytesPerSecond)
         return formatted == "Zero KB" ? "0 KB/s" : formatted + "/s"
@@ -394,10 +379,19 @@ struct ConnectionsView: View {
         panel.allowedContentTypes = [UTType.commaSeparatedText]
         panel.nameFieldStringValue = "Ares_Activity_Export_\(Date().ISO8601Format()).csv"
 
+        // Export the visible filtered connections, deduplicated across parent rows.
+        var seen = Set<String>()
+        let exportedConnections = nodes.flatMap { node -> [Connection] in
+            switch node {
+            case .app(let session): return session.activeConnections
+            case .group(let group): return group.connections
+            case .connection(let connection): return [connection]
+            }
+        }.filter { seen.insert($0.id).inserted }
         panel.begin { response in
             if response == .OK, let url = panel.url {
                 Task {
-                    await viewModel.exportData(to: url)
+                    await viewModel.exportData(to: url, connections: exportedConnections)
                 }
             }
         }

@@ -163,7 +163,7 @@ struct ConnectionInspectorView: View {
     @ViewBuilder
     private func appDetails(_ session: AppSession) -> some View {
         InfoSection("Statistics") {
-            InfoRow("Status", value: session.isRunning ? "Active" : "Terminated")
+            InfoRow("Status", value: session.isRunning ? "Active" : "Inactive")
             InfoRow("Total Download", value: formatBytes(session.totalDownload))
             InfoRow("Total Upload", value: formatBytes(session.totalUpload))
             InfoRow("Active Connections", value: "\(session.activeConnections.count)")

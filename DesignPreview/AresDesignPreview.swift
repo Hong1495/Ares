@@ -84,7 +84,7 @@ struct PreviewWorkspace: View {
                 if page == "Activity" {
                     ActivityTitleToolbar(count: tab == 0 ? 9 : 13,
                                          topologySummary: tab == 0 ? "9 processes · 3 rule types · 2 routes · 18 targets" : nil,
-                                         subtitle: tab == 0 ? "Topology" : activityGrouping,
+                                         subtitle: tab == 0 ? "Topology" : "Connections",
                                          download: tab == 0 ? nil : "1.3 MB",
                                          upload: tab == 0 ? nil : "3.6 MB")
                     ToolbarItem(placement: .primaryAction) {

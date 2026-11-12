@@ -3,6 +3,8 @@ import Combine
 
 @MainActor
 final class ConnectionsViewModel: ObservableObject {
+    @Published var actionError: String?
+    private var groupingRevision = UUID()
     @Published var groupedNodes: [ActivityNode] = []
 
     // Grouping
@@ -22,9 +24,6 @@ final class ConnectionsViewModel: ObservableObject {
     private var isMonitoring = false
     private var monitoringRevision = UUID()
     private var cancellables = Set<AnyCancellable>()
-    private var lastConnectionsUpdate: Date = .distantPast
-    private let minConnectionsInterval: TimeInterval = 1.0
-    private var isProcessingConnections = false
 
     var totalDownload: Int64 {
         // TrafficAuditManager.shared.sessions is source of truth
@@ -68,14 +67,21 @@ final class ConnectionsViewModel: ObservableObject {
     }
 
     func resetStatistics() {
-        TrafficAuditManager.shared.reset()
+        Task {
+            await TrafficAuditManager.shared.reset()
+            recomputeNodes()
+        }
     }
 
     private func recomputeNodes() {
+        groupingRevision = UUID()
+        let revision = groupingRevision
+        let mode = groupingMode
         Task {
             let sessions = TrafficAuditManager.shared.sessions
-            let nodes = await calculator.regroup(connections: self.lastRawConnections, sessions: sessions, mode: self.groupingMode)
-            self.groupedNodes = nodes
+            let nodes = await calculator.regroup(connections: lastRawConnections, sessions: sessions, mode: mode)
+            guard revision == groupingRevision, mode == groupingMode else { return }
+            groupedNodes = nodes
         }
     }
 
@@ -108,70 +114,47 @@ final class ConnectionsViewModel: ObservableObject {
     }
 
     private func receiveMessages() async {
-        guard AppState.shared.isForeground else {
-            stopMonitoring()
-            return
-        }
-        guard let webSocket = webSocketTask else { return }
+        guard let socket = webSocketTask else { return }
         let revision = monitoringRevision
         do {
-            let message = try await webSocket.receive()
-            guard revision == monitoringRevision else { return }
-            switch message {
-            case .string(let text): parseConnectionsData(text)
-            case .data(let data): if let text = String(data: data, encoding: .utf8) { parseConnectionsData(text) }
-            @unknown default: break
-            }
-            if isMonitoring { await receiveMessages() }
-        } catch {
-            if isMonitoring, revision == monitoringRevision {
-                Task {
-                    try? await Task.sleep(nanoseconds: 1_000_000_000)
-                    guard self.isMonitoring, revision == self.monitoringRevision else { return }
-                    await self.startMonitoring(isRetry: true)
+            while isMonitoring, revision == monitoringRevision, AppState.shared.isForeground {
+                let message = try await socket.receive()
+                guard revision == monitoringRevision else { return }
+                switch message {
+                case .string(let text): await parseConnectionsData(Data(text.utf8), revision: revision)
+                case .data(let data): await parseConnectionsData(data, revision: revision)
+                @unknown default: break
                 }
+            }
+        } catch {
+            guard isMonitoring, revision == monitoringRevision else { return }
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(1))
+                guard let self, self.isMonitoring, revision == self.monitoringRevision else { return }
+                await self.startMonitoring(isRetry: true)
             }
         }
     }
 
-    private func parseConnectionsData(_ jsonString: String) {
-        let now = Date()
-        guard now.timeIntervalSince(lastConnectionsUpdate) >= minConnectionsInterval else { return }
-        guard !isProcessingConnections else { return }
-        lastConnectionsUpdate = now
-        isProcessingConnections = true
-
-        let revision = monitoringRevision
+    private func parseConnectionsData(_ data: Data, revision: UUID) async {
         let generation = ClashController.shared.runtimeGeneration
-        Task.detached(priority: .userInitiated) { [weak self] in
-            guard let self else { return }
-            defer {
-                Task { @MainActor in
-                    self.isProcessingConnections = false
-                }
-            }
-
-            let parsed = ConnectionSnapshot.decode(Data(jsonString.utf8))
-            let resolved = await ConnectionProcessResolver.shared.resolve(parsed)
-            guard generation == (await ClashController.shared.runtimeGeneration) else { return }
-            let filteredConnections = resolved.filter { !$0.identity.isAres }
-
-            // 2. Update Traffic Audit (MainActor, but internal logic is backgrounded)
-            await TrafficAuditManager.shared.update(with: filteredConnections)
-
-            // 3. Process Speed & Grouping (Background Actor)
-            // Fetch latest sessions from MainActor before going to background
-            let sessions = await TrafficAuditManager.shared.sessions
-            let mode = await MainActor.run { self.groupingMode }
-
-            let nodes = await self.calculator.process(rawConnections: filteredConnections, appSessions: sessions, groupingMode: mode)
-
-            // 4. Update UI
-            await MainActor.run {
-                guard revision == self.monitoringRevision, generation == ClashController.shared.runtimeGeneration else { return }
-                self.lastRawConnections = filteredConnections
-                self.groupedNodes = nodes
-            }
+        let parsed = ConnectionSnapshot.decode(data)
+        let resolved = await ConnectionProcessResolver.shared.resolve(parsed)
+        guard generation == ClashController.shared.runtimeGeneration, revision == monitoringRevision else { return }
+        let filtered = resolved.filter { !$0.identity.isAres }
+        await TrafficAuditManager.shared.update(with: filtered)
+        guard generation == ClashController.shared.runtimeGeneration, revision == monitoringRevision else { return }
+        let mode = groupingMode
+        let result = await calculator.process(rawConnections: filtered,
+                                              appSessions: TrafficAuditManager.shared.sessions,
+                                              groupingMode: mode)
+        guard generation == ClashController.shared.runtimeGeneration, revision == monitoringRevision else { return }
+        lastRawConnections = result.connections
+        if mode == groupingMode {
+            groupingRevision = UUID()
+            groupedNodes = result.nodes
+        } else {
+            recomputeNodes()
         }
     }
 
@@ -181,6 +164,9 @@ final class ConnectionsViewModel: ObservableObject {
          guard let url = URL(string: "http://127.0.0.1:\(port)/connections/\(id)") else { return }
          var request = URLRequest(url: url)
          request.httpMethod = "DELETE"
-         _ = try? await URLSession.shared.data(for: request)
+         do {
+             let (_, response) = try await URLSession.shared.data(for: request)
+             try CoreAPIContract.requireSuccess(response)
+         } catch { actionError = "Could not close the connection. Please try again." }
      }
 }

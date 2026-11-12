@@ -32,23 +32,15 @@ actor CoreProcessReaper {
             }
             let roots = ordered.filter { $0.uid == 0 }
             if !roots.isEmpty {
-                // No unrestricted kill permission is added to sudoers. The authorized script
-                // rechecks full command + start time immediately before each signal.
-                var targets: [(pid: Int32, snapshot: String)] = []
-                for identity in roots {
-                    let result = try await runner.run(executable: "/bin/ps", arguments: ["-ww", "-p", String(identity.pid), "-o", "lstart=,command="], timeout: 5)
-                    guard result.exitCode == 0, try await ownedProcesses().contains(identity) else { continue }
-                    let expected = result.output.trimmingCharacters(in: .newlines)
-                    targets.append((identity.pid, expected))
+                // Reuse the narrowly scoped helper installed during TUN authorization.
+                // Older installations migrate once; never authorize an arbitrary kill command.
+                let helper = CoreStopHelper.path(userID: userID)
+                var result = try? await runner.run(executable: "/usr/bin/sudo", arguments: ["-n", helper], timeout: 30)
+                if result?.exitCode != 0 {
+                    guard await PrivilegeService.shared.installSudoers() else { return false }
+                    result = try? await runner.run(executable: "/usr/bin/sudo", arguments: ["-n", helper], timeout: 30)
                 }
-                let command = CoreProcessIdentity.terminationScript(targets)
-                let success = await MainActor.run {
-                    var error: NSDictionary?
-                    let script = NSAppleScript(source: "do shell script \"\(AppleScriptEscaper.stringLiteral(command))\" with administrator privileges")
-                    script?.executeAndReturnError(&error)
-                    return script != nil && error == nil
-                }
-                guard success else { return false }
+                guard result?.exitCode == 0 else { return false }
             }
             // Bounded TERM grace period, then force only the same verified identities.
             for _ in 0..<30 {

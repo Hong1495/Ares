@@ -7,6 +7,12 @@ mkdir -p "$BUNDLE/Contents/MacOS"
 # Explicit allowlist. No app, delegate, singleton services, core executable,
 # network transport, process/privilege manager, or certificate code is linked.
 SOURCES=(
+  "$ROOT/Ares/Models/ActivityModels.swift"
+  "$ROOT/Ares/Models/GroupingMode.swift"
+  "$ROOT/Ares/Utilities/ActivityPresentation.swift"
+  "$ROOT/Ares/Utilities/TrafficAuditor.swift"
+  "$ROOT/Ares/UI/ConnectionsCalculator.swift"
+  "$ROOT/AresTests/ActivityFunctionsTests.swift"
   "$ROOT/Ares/Utilities/ActivityTrafficLedger.swift"
   "$ROOT/AresTests/ActivityTrafficLedgerTests.swift"
   "$ROOT/Ares/Utilities/TopologySnapshot.swift"

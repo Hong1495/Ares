@@ -13,6 +13,10 @@ cc "$OUT/fake.c" -o "$OUT/Ares.app/Contents/Resources/clash-meta"
 cat > "$OUT/main.swift" <<'SWIFT'
 import Foundation
 import Darwin
+final class PrivilegeService: @unchecked Sendable {
+    static let shared = PrivilegeService()
+    func installSudoers() async -> Bool { fatalError("Tests must never request administrator access") }
+}
 @main struct ReaperTest {
     enum Failure: Error { case assertion }
     static func check(_ value: Bool) throws { if !value { throw Failure.assertion } }
@@ -42,6 +46,28 @@ import Darwin
         try check(unrelated.isRunning)
         child.waitUntilExit()
         try check(child.terminationStatus == SIGKILL)
+        let helperChild = Process()
+        helperChild.executableURL = binary
+        helperChild.arguments = ["-d", support.appendingPathComponent("clash_user").path]
+        try helperChild.run()
+        defer { if helperChild.isRunning { kill(helperChild.processIdentifier, SIGKILL) } }
+        let helperFile = root.appendingPathComponent("stop-helper")
+        try CoreStopHelper.script(support: support, userID: getuid()).write(to: helperFile, atomically: true, encoding: .utf8)
+        func helper(_ args: [String], user: String) throws -> Int32 {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/sh")
+            process.arguments = [helperFile.path] + args
+            process.environment = ["SUDO_UID": user, "PATH": "/usr/bin:/bin:/usr/sbin:/sbin"]
+            try process.run(); process.waitUntilExit()
+            return process.terminationStatus
+        }
+        try check(helper([], user: "999999") == 77)
+        try check(helper([String(unrelated.processIdentifier)], user: String(getuid())) == 64)
+        try check(helperChild.isRunning && unrelated.isRunning)
+        try check(helper([], user: String(getuid())) == 0)
+        helperChild.waitUntilExit()
+        try check(!helperChild.isRunning && unrelated.isRunning)
+        print("PASS: fixed helper stops only owned child, rejects arguments and wrong caller")
         let second = await reaper.reap()
         try check(second)
         // Exercise the same shell transaction used for root processes, as this user,
@@ -61,7 +87,7 @@ import Darwin
     }
 }
 SWIFT
-swiftc -parse-as-library "$ROOT/Ares/Utilities/CoreProcessIdentity.swift" \
+swiftc -parse-as-library "$ROOT/Ares/Utilities/CoreProcessIdentity.swift" "$ROOT/Ares/Utilities/CoreStopHelper.swift" \
  "$ROOT/Ares/Utilities/ProcessManager.swift" "$ROOT/Ares/Utilities/AppleScriptEscaper.swift" \
  "$ROOT/Ares/Services/CoreProcessReaper.swift" "$OUT/main.swift" -o "$OUT/test"
 "$OUT/test" "$OUT"

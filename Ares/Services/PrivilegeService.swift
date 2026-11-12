@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import Darwin
 
 /// Service to handle privilege escalation via sudoers
 class PrivilegeService {
@@ -11,12 +12,24 @@ class PrivilegeService {
     func checkPrivileges() async -> Bool {
         let clashPath = await CoreManager.shared.activeBinaryPath()
         guard FileManager.default.isExecutableFile(atPath: clashPath) else { return false }
+        guard stopHelperIsCurrent() else { return false }
         let runner = ProcessManager()
         // Read-only permission checks; never use pkill as a capability probe.
         for arguments in [["-n", clashPath, "-v"], ["-n", "/usr/sbin/lsof", "-v"]] {
             guard let result = try? await runner.run(executable: "/usr/bin/sudo", arguments: arguments, timeout: 5), result.exitCode == 0 else { return false }
         }
         return true
+    }
+
+    private func stopHelperIsCurrent() -> Bool {
+        let helper = CoreStopHelper.path(userID: getuid())
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Ares")
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: helper),
+              attrs[.type] as? FileAttributeType == .typeRegular,
+              (attrs[.ownerAccountID] as? NSNumber)?.uint32Value == 0,
+              let mode = (attrs[.posixPermissions] as? NSNumber)?.intValue, mode & 0o022 == 0,
+              let content = try? String(contentsOfFile: helper, encoding: .utf8) else { return false }
+        return content == CoreStopHelper.script(support: support, userID: getuid()) + "\n"
     }
 
     /// Verify that the sudoers file contains the correct clash-meta binary path.
@@ -126,39 +139,28 @@ class PrivilegeService {
         let clashSudoersPath = SudoersEscaper.commandPath(clashPath)
         let lsofPath = SudoersEscaper.commandPath("/usr/sbin/lsof")
 
+        let helperPath = CoreStopHelper.path(userID: getuid())
+        let helperScript = CoreStopHelper.script(support: scriptPath.deletingLastPathComponent(), userID: getuid())
         let scriptContent = """
         #!/bin/bash
-
-        SUDOERS_FILE="/etc/sudoers.d/ares_rules_v3"
-        OLD_FILE="/etc/sudoers.d/ares_rules_v2"
-        OLD_FILE_V1="/etc/sudoers.d/ares_rules"
-
-        # Cleanup old files
-        if [ -f "$OLD_FILE_V1" ]; then rm "$OLD_FILE_V1"; fi
-        if [ -f "$OLD_FILE" ]; then rm "$OLD_FILE"; fi
-
-        # Always overwrite to ensure paths are up to date
-        if [ -f "$SUDOERS_FILE" ]; then
-            rm "$SUDOERS_FILE"
-        fi
-
-        # Create sudoers content
-        cat > "/tmp/ares_rules" <<'ARES_SUDOERS'
+        set -eu
+        staging=$(/usr/bin/mktemp -d /private/tmp/ares-permissions.XXXXXX)
+        trap '/bin/rm -rf "$staging"' EXIT
+        /bin/cat > "$staging/stop" <<'ARES_STOP_HELPER'
+        \(helperScript)
+        ARES_STOP_HELPER
+        /bin/cat > "$staging/rules" <<'ARES_SUDOERS'
         # Ares Proxy Rules
         \(username) ALL=(root) NOPASSWD: \(networksetupPath)
         \(username) ALL=(root) NOPASSWD: \(clashSudoersPath)
         \(username) ALL=(root) NOPASSWD: \(lsofPath)
+        \(username) ALL=(root) NOPASSWD: \(SudoersEscaper.commandPath(helperPath)) ""
         ARES_SUDOERS
-
-        # Validate before installing to avoid breaking sudoers include parsing
-        /usr/sbin/visudo -cf "/tmp/ares_rules" >/dev/null
-
-        # Move to /etc/sudoers.d (requires root)
-        mv "/tmp/ares_rules" "$SUDOERS_FILE"
-        chown root:wheel "$SUDOERS_FILE"
-        chmod 440 "$SUDOERS_FILE"
-
-        echo "Installation complete"
+        /usr/sbin/visudo -cf "$staging/rules" >/dev/null
+        /bin/mkdir -p /Library/PrivilegedHelperTools /etc/sudoers.d
+        /usr/bin/install -o root -g wheel -m 755 "$staging/stop" \(CoreProcessIdentity.shellQuote(helperPath))
+        /usr/bin/install -o root -g wheel -m 440 "$staging/rules" /etc/sudoers.d/ares_rules_v3
+        /bin/rm -f /etc/sudoers.d/ares_rules_v2 /etc/sudoers.d/ares_rules
         """
 
         do {
@@ -166,9 +168,9 @@ class PrivilegeService {
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath.path)
 
             // Run installer with osascript (password prompt once)
-            let escapedScriptPath = AppleScriptEscaper.stringLiteral(scriptPath.path)
+            let escapedScript = AppleScriptEscaper.stringLiteral(scriptContent)
             let script = """
-            do shell script "'\(escapedScriptPath)'" with administrator privileges
+            do shell script "\(escapedScript)" with administrator privileges
             """
 
             guard let appleScript = NSAppleScript(source: script) else {
