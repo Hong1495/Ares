@@ -18,6 +18,7 @@ jobs:
       - name: Isolated tests
         run: |
           scripts/test-safe-functions.sh
+          scripts/test-proxy-controller.sh
           scripts/test-core-process-reaper.sh
           python3 -m unittest discover -s scripts/tests -p 'test_*.py'
       - name: Build isolated preview

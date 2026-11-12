@@ -90,6 +90,7 @@ extension Color {
     /// Latency quality ramp used by every latency readout in the app.
     static func latency(_ ms: Int?) -> Color {
         guard let ms else { return .statusIdle }
+        if ms <= 0 { return .statusBad }
         if ms < 200 { return .statusGood }
         if ms < 500 { return .statusWarn }
         return .statusBad

@@ -24,7 +24,7 @@ struct SimpleProxyButton: View {
                     }
                     HStack(spacing: 6) {
                         Circle().fill(Color.latency(delay)).frame(width: 5, height: 5)
-                        Text(delay.map { "\($0) ms" } ?? "Not measured")
+                        Text(delay.map { $0 > 0 ? "\($0) ms" : "Unavailable" } ?? "Not measured")
                             .font(DS.Typography.metadata.monospaced()).foregroundStyle(.secondary)
                     }
                 }
@@ -33,7 +33,7 @@ struct SimpleProxyButton: View {
             }
             .buttonStyle(.plain)
             .disabled(!canSelect)
-            .help(canSelect ? "Select \(name)" : "This group selects nodes automatically")
+            .help(canSelect ? "Select \(name)" : "Selection is unavailable while busy or in a load-balancing group")
             .accessibilityLabel("Select \(name)")
             .accessibilityAddTraits(isSelected ? .isSelected : [])
             if isTesting {
@@ -50,7 +50,7 @@ struct SimpleProxyButton: View {
         }
         .padding(14)
         .background(isSelected ? DS.accent.opacity(0.07) : (hovering ? DS.soft : .clear), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(isSelected ? DS.accent.opacity(0.45) : DS.line, lineWidth: DS.hairline))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(delay == nil ? DS.line : Color.latency(delay).opacity(0.65), lineWidth: delay == nil ? DS.hairline : 1))
         .onHover { hovering = $0 }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: hovering)
     }

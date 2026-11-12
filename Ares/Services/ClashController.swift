@@ -50,7 +50,14 @@ class ClashController: ObservableObject {
     }
 
     var selectingProxyGroups: Set<String> = []
-    var runtimeGeneration = UUID()
+    var runtimeGeneration = UUID() {
+        didSet { measuredDelays.removeAll() }
+    }
+    @Published var testingProxyNames: Set<String> = []
+    @Published var isTestingAllProxies = false
+    var measuredDelays: [String: Int] = [:]
+    var automaticLatencyTask: Task<Void, Never>?
+    var proxySession: URLSession = .shared
     @Published var traffic = TrafficStats()
     @Published var proxies: [String: Any] = [:]
     @Published var proxyGroups: [ProxyGroup] = []

@@ -25,7 +25,6 @@ struct ProxiesView: View {
     @State private var loadRevision = UUID()
     @State private var selectedTab: ProxyTab = .rule
     @State private var expandedGroups = Set<String>()
-    @State private var testingNodes = Set<String>()
     @State private var searchText = ""
     @State private var sortMode: SortMode = .default
 
@@ -45,7 +44,10 @@ struct ProxiesView: View {
         if showingLive { return clashController.proxyGroups }
         return (savedProfileKey == profileKey ? savedGroups : []).map { group in
             var result = group
-            if let node = profileService.savedNode(group: group.name), group.all.contains(node) { result.now = node }
+            if let node = profileService.savedNode(group: group.name), group.all.contains(node) {
+                result.now = node
+                if group.supportsAutomaticSelection { result.fixed = node }
+            }
             return result
         }
     }
@@ -214,6 +216,20 @@ struct ProxiesView: View {
             }
 
             Button {
+                Task { await clashController.testAllProxyDelays() }
+            } label: {
+                if clashController.isTestingAllProxies {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Image(systemName: "bolt.horizontal")
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(!showingLive || clashController.isTestingAllProxies)
+            .help("Test all nodes · Automatically refreshed every 5 minutes while the core runs")
+            .accessibilityLabel("Test all nodes")
+
+            Button {
                 Task { await refreshProxies() }
             } label: {
                 Image(systemName: "arrow.clockwise")
@@ -269,7 +285,6 @@ struct ProxiesView: View {
                         isExpanded: expandedGroups.contains(group.name) || !searchText.isEmpty, // Auto expand on search
                         searchText: searchText,
                         sortMode: sortMode,
-                        testingNodes: $testingNodes,
                         onToggle: {
                             if expandedGroups.contains(group.name) {
                                 expandedGroups.remove(group.name)
@@ -294,23 +309,41 @@ struct SimpleProxyGroupCard: View {
     let isExpanded: Bool
     let searchText: String
     let sortMode: ProxiesView.SortMode
-    @Binding var testingNodes: Set<String>
     let onToggle: () -> Void
 
     @EnvironmentObject var clashController: ClashController
     @EnvironmentObject var profileService: ProfileService
     @EnvironmentObject var clashViewModel: ClashViewModel
+    @EnvironmentObject var appState: AppState
 
     var body: some View {
         DSCard(padding: 0, spacing: 0, radius: DS.Radius.card) {
-            Button {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                    onToggle()
+            HStack(spacing: 0) {
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        onToggle()
+                    }
+                } label: {
+                    headerRow
                 }
-            } label: {
-                headerRow
+                .buttonStyle(.plain)
+
+                if group.supportsAutomaticSelection {
+                    Button {
+                        Task {
+                            do { try await profileService.clearNodeSelection(group: group) }
+                            catch { AppState.shared.reportError(error.localizedDescription) }
+                        }
+                    } label: {
+                        Label("Auto", systemImage: group.manualSelection == nil ? "checkmark" : "arrow.triangle.2.circlepath")
+                            .font(DS.Typography.metadata)
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(group.manualSelection == nil || clashViewModel.isToggling || appState.isPerformingNetworkOperation)
+                    .help("Let this group choose nodes automatically")
+                    .padding(.trailing, DS.Space.md)
+                }
             }
-            .buttonStyle(.plain)
 
             if isExpanded {
                 Rectangle()
@@ -382,8 +415,8 @@ struct SimpleProxyGroupCard: View {
             case .name:
                 return a.localizedCaseInsensitiveCompare(b) == .orderedAscending
             case .delay:
-                let delayA = nodes[a]?.delay ?? 99999
-                let delayB = nodes[b]?.delay ?? 99999
+                let delayA = nodes[a]?.delay.flatMap { $0 > 0 ? $0 : nil } ?? Int.max
+                let delayB = nodes[b]?.delay.flatMap { $0 > 0 ? $0 : nil } ?? Int.max
                 return delayA < delayB
             }
         }
@@ -396,10 +429,10 @@ struct SimpleProxyGroupCard: View {
                 ForEach(sortedItems, id: \.self) { itemName in
                     SimpleProxyButton(
                         name: itemName,
-                        isSelected: group.now == itemName,
+                        isSelected: group.manualSelection == itemName,
                         delay: nodes[itemName]?.delay,
-                        isTesting: testingNodes.contains(itemName),
-                        canSelect: group.type == "Selector" && !clashViewModel.isToggling,
+                        isTesting: clashController.testingProxyNames.contains(itemName),
+                        canSelect: group.supportsManualSelection && !clashViewModel.isToggling && !appState.isPerformingNetworkOperation,
                         canTest: allowsRuntimeActions,
                         onSelect: {
                             Task {
@@ -409,10 +442,8 @@ struct SimpleProxyGroupCard: View {
                         },
                         onTest: {
                             guard allowsRuntimeActions else { return }
-                            testingNodes.insert(itemName)
                             Task {
                                 _ = try? await clashController.testProxyDelay(name: itemName)
-                                testingNodes.remove(itemName)
                             }
                         }
                     )

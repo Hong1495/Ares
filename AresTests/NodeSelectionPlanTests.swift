@@ -10,13 +10,34 @@ final class NodeSelectionPlanTests: XCTestCase {
         XCTAssertEqual(restored.choices(for: first)["Proxy"], "Node B")
         XCTAssertEqual(restored.choices(for: second)["Proxy"], "Node C")
     }
-    func testStartupAndTUNRestartRestoreOnlyValidManualChoices() async throws {
-        let groups = [ProxyGroup(name: "Proxy", type: "Selector", now: "A", all: ["A", "B"]), ProxyGroup(name: "Auto", type: "URLTest", now: "A", all: ["A", "B"])]
+    func testStartupAndTUNRestartRestoreValidManualChoicesAndResetStaleAutomaticChoice() async throws {
+        let groups = [ProxyGroup(name: "Proxy", type: "Selector", now: "A", all: ["A", "B"]), ProxyGroup(name: "Auto", type: "URLTest", now: "A", all: ["A", "B"]), ProxyGroup(name: "Fallback", type: "Fallback", now: "A", fixed: "A", all: ["A", "B"])]
         for _ in 0..<2 {
-            var applied: [String] = []
-            try await NodeSelectionPlan.restore(["Proxy": "B", "Auto": "B", "Removed": "B"], groups: groups) { group, node in applied.append("\(group):\(node)") }
-            XCTAssertEqual(applied, ["Proxy:B"])
+            var applied: [String] = [], reset: [String] = []
+            try await NodeSelectionPlan.restore(["Proxy": "B", "Auto": "B", "Removed": "B"], groups: groups, reset: { reset.append($0) }) { group, node in applied.append("\(group):\(node)") }
+            XCTAssertEqual(applied, ["Proxy:B", "Auto:B"])
+            XCTAssertEqual(reset, ["Fallback"])
         }
+    }
+
+    func testSelectorAndAutoGroupManualSelectionSemantics() {
+        let selector = ProxyGroup(name: "S", type: "Selector", now: "A", fixed: "B", all: ["A", "B"])
+        let auto = ProxyGroup(name: "A", type: "URLTest", now: "A", fixed: "B", all: ["A", "B"])
+        XCTAssertTrue(selector.confirmsSelection("A"))
+        XCTAssertFalse(selector.confirmsSelection("B"))
+        XCTAssertTrue(auto.confirmsSelection("B"))
+        XCTAssertFalse(auto.confirmsSelection("A"))
+        XCTAssertTrue(ProxyGroup(name: "L", type: "LoadBalance").supportsManualSelection == false)
+    }
+
+    func testClearChoiceRemovesOnlyThatGroup() {
+        let profile = UUID()
+        var plan = NodeSelectionPlan()
+        plan.select(profile: profile, group: "A", node: "one")
+        plan.select(profile: profile, group: "B", node: "two")
+        plan.clear(profile: profile, group: "A")
+        XCTAssertNil(plan.choices(for: profile)["A"])
+        XCTAssertEqual(plan.choices(for: profile)["B"], "two")
     }
     func testFailedSelectionPreventsActivationSuccess() async {
         do {

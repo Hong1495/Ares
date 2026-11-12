@@ -14,6 +14,7 @@ extension ClashController {
                     Task {
                         try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s
                         if let self = self, ClashViewModel.shared.runtimeState == .running, !ClashViewModel.shared.isToggling {
+                            self.startAutomaticLatencyTesting()
                             ClashViewModel.shared.addLog("[ClashController] 🟢 Core stable, activating monitors...")
                             if AppState.shared.isForeground {
                                 self.startMonitors()
@@ -68,6 +69,8 @@ extension ClashController {
 
     /// Stop all monitors
     private func stopMonitors() {
+        automaticLatencyTask?.cancel()
+        automaticLatencyTask = nil
         stopTrafficMonitor()
         stopRefreshTimer()
     }

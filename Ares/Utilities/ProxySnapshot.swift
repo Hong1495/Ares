@@ -14,7 +14,7 @@ nonisolated enum ProxySnapshot {
             let history = proxy["history"] as? [[String: Any]]
             nodes[name] = ProxyNode(id: name, name: name, type: type, delay: history?.last?["delay"] as? Int)
             if let all = proxy["all"] as? [String] {
-                groups.append(ProxyGroup(name: name, type: type, now: proxy["now"] as? String, all: all))
+                groups.append(ProxyGroup(name: name, type: type, now: proxy["now"] as? String, fixed: proxy["fixed"] as? String, all: all))
             }
         }
         return (groups.sorted { $0.name < $1.name }, nodes)

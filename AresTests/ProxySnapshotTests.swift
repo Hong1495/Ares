@@ -16,6 +16,13 @@ final class ProxySnapshotTests: XCTestCase {
         XCTAssertEqual(result.groups.first?.name, "Provider")
     }
 
+    func testAutoGroupsPreserveFixedSelection() throws {
+        let data = Data(#"{"proxies":{"Auto":{"type":"URLTest","all":["A","B"],"now":"A","fixed":"B"}}}"#.utf8)
+        let result = try ProxySnapshot.decode(data)
+        XCTAssertEqual(result.groups.first?.fixed, "B")
+        XCTAssertTrue(result.groups.first?.confirmsSelection("B") == true)
+    }
+
     func testMalformedResponseFailsInsteadOfPublishingAnEmptySnapshot() {
         XCTAssertThrowsError(try ProxySnapshot.decode(Data(#"{"message":"error"}"#.utf8)))
     }

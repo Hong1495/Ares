@@ -48,10 +48,7 @@ nonisolated enum ProxyItem: Hashable, Identifiable, Sendable {
     }
     
     var isSelectable: Bool {
-        switch self {
-        case .node, .special: return true
-        case .group: return false  // Groups should open, not select
-        }
+        true // A group is also a valid member of a selector.
     }
 }
 
@@ -61,7 +58,21 @@ nonisolated struct ProxyGroup: Identifiable, Codable, Sendable {
     let name: String
     let type: String
     var now: String?
+    var fixed: String?
     let all: [String]
+
+    var supportsManualSelection: Bool {
+        ["Selector", "URLTest", "Fallback"].contains(type)
+    }
+    var supportsAutomaticSelection: Bool { type == "URLTest" || type == "Fallback" }
+    var manualSelection: String? {
+        if type == "Selector" { return now }
+        return fixed.flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    func confirmsSelection(_ node: String) -> Bool {
+        supportsManualSelection && all.contains(node) && manualSelection == node
+    }
     
     // Computed: classify items in all array
     func classifyItems(groups: [ProxyGroup], nodes: [String: ProxyNode]) -> [ProxyItem] {
@@ -80,9 +91,11 @@ nonisolated struct ProxyGroup: Identifiable, Codable, Sendable {
     func resolveCurrentPath(groups: [ProxyGroup]) -> [String] {
         var path = [name]
         var current = now
+        var visited: Set<String> = [name]
         
         while let currentName = current,
               let nextGroup = groups.first(where: { $0.name == currentName }) {
+            guard visited.insert(currentName).inserted else { return path }
             path.append(nextGroup.name)
             current = nextGroup.now
         }
@@ -96,7 +109,7 @@ nonisolated struct ProxyGroup: Identifiable, Codable, Sendable {
     }
     
     enum CodingKeys: String, CodingKey {
-        case name, type, now, all
+        case name, type, now, fixed, all
     }
     
     init(from decoder: Decoder) throws {
@@ -104,13 +117,15 @@ nonisolated struct ProxyGroup: Identifiable, Codable, Sendable {
         self.name = try container.decode(String.self, forKey: .name)
         self.type = try container.decode(String.self, forKey: .type)
         self.now = try? container.decode(String.self, forKey: .now)
+        self.fixed = try? container.decode(String.self, forKey: .fixed)
         self.all = (try? container.decode([String].self, forKey: .all)) ?? []
     }
     
-    init(name: String, type: String, now: String? = nil, all: [String] = []) {
+    init(name: String, type: String, now: String? = nil, fixed: String? = nil, all: [String] = []) {
         self.name = name
         self.type = type
         self.now = now
+        self.fixed = fixed
         self.all = all
     }
 }

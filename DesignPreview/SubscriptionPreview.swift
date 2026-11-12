@@ -4,6 +4,9 @@ import Combine
 // Only this mock file supplies service types. No production service or app delegate
 // is linked. The actual ProxiesView reads a synthetic subscription from a temp file.
 @MainActor final class ClashController: ObservableObject {
+    @Published var testingProxyNames: Set<String> = []
+    @Published var isTestingAllProxies = false
+    func testAllProxyDelays() async { fatalError("Offline testing must be disabled") }
     @Published var proxyGroups: [ProxyGroup] = []
     @Published var proxyNodes: [String: ProxyNode] = [:]
     func fetchProxiesData() async throws { fatalError("Offline preview must never call the core") }
@@ -26,6 +29,7 @@ struct PreviewProfile {
     @Published private var choices: [String: String] = [:]
     var activeProfileRevision: String { activeProfile?.id.uuidString ?? "" }
     func savedNode(group: String) -> String? { choices[group] }
+    func clearNodeSelection(group: ProxyGroup) async throws { choices.removeValue(forKey: group.name) }
     func selectNode(group: ProxyGroup, node: String) async throws { choices[group.name] = node }
     init() {
         let path = FileManager.default.temporaryDirectory.appendingPathComponent("ares-offline-preview-\(UUID()).yaml")

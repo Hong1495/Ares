@@ -27,13 +27,14 @@ class ProfileService: ObservableObject {
     }
 
     func selectNode(group: ProxyGroup, node: String) async throws {
-        guard group.type == "Selector", group.all.contains(node), let id = activeProfileID else { return }
+        guard group.supportsManualSelection, group.all.contains(node), let id = activeProfileID else {
+            throw NSError(domain: "Selection", code: 4, userInfo: [NSLocalizedDescriptionKey: "This node cannot be selected in the current group."])
+        }
         let vm = ClashViewModel.shared
-        guard AppState.shared.beginOperation("Selecting Node") else {
+        guard !vm.isToggling, AppState.shared.beginOperation("Selecting Node") else {
             throw NSError(domain: "Selection", code: 1, userInfo: [NSLocalizedDescriptionKey: "Wait for the current operation to finish."])
         }
-        vm.isToggling = true
-        defer { vm.isToggling = false; AppState.shared.finishOperation() }
+        defer { AppState.shared.finishOperation() }
         if vm.isRunning {
             guard vm.appliedProfileRevision == activeProfileRevision else {
                 throw NSError(domain: "Selection", code: 2, userInfo: [NSLocalizedDescriptionKey: "Apply the selected subscription before changing the running node."])
@@ -44,11 +45,30 @@ class ProfileService: ObservableObject {
         UserDefaults.standard.set(try JSONEncoder().encode(nodeSelections), forKey: "profileNodeSelections")
     }
 
+    func clearNodeSelection(group: ProxyGroup) async throws {
+        guard group.type == "URLTest" || group.type == "Fallback", let id = activeProfileID else { return }
+        let vm = ClashViewModel.shared
+        guard !vm.isToggling, AppState.shared.beginOperation("Resetting Node Selection") else {
+            throw NSError(domain: "Selection", code: 1, userInfo: [NSLocalizedDescriptionKey: "Wait for the current operation to finish."])
+        }
+        defer { AppState.shared.finishOperation() }
+        if vm.isRunning {
+            guard vm.appliedProfileRevision == activeProfileRevision else {
+                throw NSError(domain: "Selection", code: 2, userInfo: [NSLocalizedDescriptionKey: "Apply the selected subscription before changing the running node."])
+            }
+            try await ClashController.shared.clearProxySelection(group: group.name)
+        }
+        nodeSelections.clear(profile: id, group: group.name)
+        UserDefaults.standard.set(try JSONEncoder().encode(nodeSelections), forKey: "profileNodeSelections")
+    }
+
     func restoreNodeSelections() async throws {
         guard let id = activeProfileID else { return }
         let controller = ClashController.shared
         try await controller.fetchProxiesData()
-        try await NodeSelectionPlan.restore(nodeSelections.choices(for: id), groups: controller.proxyGroups) { group, node in
+        try await NodeSelectionPlan.restore(nodeSelections.choices(for: id), groups: controller.proxyGroups, reset: { group in
+            try await controller.clearProxySelection(group: group)
+        }) { group, node in
             try await controller.selectProxy(group: group, proxy: node)
         }
     }
