@@ -98,7 +98,7 @@ class AppState: ObservableObject {
     }
 
     func beginOperation(_ title: String) -> Bool {
-        guard operationStatus == nil, !clashViewModel.isToggling else {
+        guard !AppTerminationCoordinator.shared.isCleaningUp, operationStatus == nil, !clashViewModel.isToggling else {
             clashViewModel.addLog("[AppState] Ignored \(title) while \(operationStatus?.title ?? "another operation") is in progress", level: .warning)
             return false
         }

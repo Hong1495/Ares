@@ -11,6 +11,7 @@ actor ClashServiceActor {
     // MARK: - Dependencies
     private let fileManager = AsyncFileManager()
     private let processManager = ProcessManager()
+    private let processReaper = CoreProcessReaper()
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.ares", category: "ClashServiceActor")
     
     // MARK: - State (Private, Actor-Isolated)
@@ -64,7 +65,24 @@ actor ClashServiceActor {
         }
         
         isRunning = false
-        // Check for conflicts without modifying other processes
+        // Reclaim Ares-owned children left by a crash, update or older build first.
+        do {
+            if try await !processReaper.ownedProcesses().isEmpty {
+                let restored = await MainActor.run { SystemProxyManager.shared.disableAllProxiesSync() }
+                guard restored else {
+                    await MainActor.run { ClashViewModel.shared.markStartFailed("Restore the previous Ares system proxy before recovering its core.") }
+                    return false
+                }
+            }
+        } catch {
+            await MainActor.run { ClashViewModel.shared.markStartFailed("Could not inspect previous Ares processes.") }
+            return false
+        }
+        guard await processReaper.reap() else {
+            await MainActor.run { ClashViewModel.shared.markStartFailed("Could not stop a previous Ares core. Authorize cleanup and try again.") }
+            return false
+        }
+        // Only unrelated listeners may remain now.
         addLog("[ClashServiceActor] Checking required ports...")
         let cleanupSuccess = await cleanupOldProcesses()
         if !cleanupSuccess {
@@ -137,18 +155,18 @@ actor ClashServiceActor {
         guard !lifecycleBusy else { return false }
         lifecycleBusy = true
         defer { lifecycleBusy = false }
-        // Only the Process created by this instance is eligible for signalling.
-        // sudo forwards TERM to its supervised command; never discover kill targets by port.
+        // Includes sudo wrappers and children from earlier app launches.
+        guard await processReaper.reap() else {
+            addLog("[Core] Stop failed: Ares-owned processes remain; restart cancelled")
+            return false
+        }
         if let proc = process, proc.isRunning {
             proc.terminate()
-            for _ in 0..<50 {
+            for _ in 0..<20 {
                 if !proc.isRunning { break }
                 try? await Task.sleep(for: .milliseconds(100))
             }
-            guard !proc.isRunning else {
-                addLog("[Core] Stop failed: the owned process did not exit; restart cancelled")
-                return false
-            }
+            guard !proc.isRunning else { return false }
         }
         process = nil
         pipe?.fileHandleForReading.readabilityHandler = nil

@@ -39,7 +39,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if AppTerminationCoordinator.shared.updateShutdownPrepared { return .terminateNow }
-        guard !isTerminatingAfterCleanup else { return .terminateNow }
+        guard !isTerminatingAfterCleanup else { return .terminateLater }
 
         isTerminatingAfterCleanup = true
         Task { @MainActor in
@@ -50,8 +50,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 NSApp.requestUserAttention(.criticalRequest)
                 let alert = NSAlert()
                 alert.alertStyle = .critical
-                alert.messageText = "Unable to restore network settings"
-                alert.informativeText = "Ares is still running to keep the local proxy available. Disable System Proxy and try quitting again."
+                alert.messageText = "Ares could not finish shutting down"
+                alert.informativeText = "Network restoration or core cleanup did not finish. Complete any authorization prompt, then try quitting again. See Logs for details."
                 alert.addButton(withTitle: "OK")
                 alert.runModal()
             }
@@ -155,7 +155,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 final class AppTerminationCoordinator {
     static let shared = AppTerminationCoordinator()
 
-    private var isCleaningUp = false
+    private(set) var isCleaningUp = false
 
     private init() {}
 
@@ -166,10 +166,16 @@ final class AppTerminationCoordinator {
     }
 
     func prepareForTermination() async -> Bool {
-        guard !isCleaningUp, !ClashViewModel.shared.isToggling, AppState.shared.operationStatus == nil else { return false }
+        guard !isCleaningUp else { return false }
         isCleaningUp = true
         defer { isCleaningUp = false }
 
+        // Block new actions and allow an already-running transition to settle.
+        for _ in 0..<300 {
+            if !ClashViewModel.shared.isToggling && AppState.shared.operationStatus == nil { break }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        guard !ClashViewModel.shared.isToggling, AppState.shared.operationStatus == nil else { return false }
         ClashViewModel.shared.addLog("[AppTermination] Preparing safe shutdown", level: .debug)
 
         guard SystemProxyManager.shared.disableAllProxiesSync() else {

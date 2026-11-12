@@ -71,7 +71,7 @@ class ClashViewModel: ObservableObject {
     // MARK: - Public Methods (UI-facing)
     
     func start(isRestart: Bool = false) async {
-        guard !isToggling else { return }
+        guard !AppTerminationCoordinator.shared.isCleaningUp, !isToggling else { return }
         if isRunning && !isRestart { return }
         isToggling = true
         defer { isToggling = false }
@@ -80,7 +80,7 @@ class ClashViewModel: ObservableObject {
     }
     
     func stop(intendedRestart: Bool = false) async {
-        guard !isToggling else { return }
+        guard !AppTerminationCoordinator.shared.isCleaningUp, !isToggling else { return }
         isToggling = true
         defer { isToggling = false }
         if !intendedRestart {
@@ -164,7 +164,7 @@ class ClashViewModel: ObservableObject {
     
     func restart() async {
         // Global operation gate
-        guard !isToggling else { return }
+        guard !AppTerminationCoordinator.shared.isCleaningUp, !isToggling else { return }
         isToggling = true
         defer { isToggling = false }
         

@@ -11,8 +11,10 @@ final class ProcessOwnershipSourceTests: XCTestCase {
         XCTAssertFalse(core.contains("performPortCleanup"))
         XCTAssertFalse(core.contains("currentProcessPID"))
         XCTAssertTrue(core.contains("if let proc = process, proc.isRunning"))
-        XCTAssertTrue(core.contains("guard !proc.isRunning else"))
+        XCTAssertTrue(core.contains("if !proc.isRunning { break }"))
         XCTAssertTrue(core.contains("guard !lifecycleBusy else"))
+        XCTAssertTrue(core.contains("processReaper.reap()"))
+        XCTAssertFalse(core.contains("sudo.*pkill"))
     }
 
     func testPrivilegeProbeDoesNotExecutePkill() throws {
