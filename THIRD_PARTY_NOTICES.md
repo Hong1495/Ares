@@ -18,3 +18,10 @@
 ## Country database
 
 The historical `Country.mmdb` has no verified provenance in this repository. It has been removed from the source tree and is excluded from the 1.0.0 distribution. GeoIP resources are managed by the core when required by the selected configuration; availability may depend on network access.
+
+## Yams
+
+- Project: https://github.com/jpsim/Yams
+- Version: 5.1.3 (pinned)
+- License: MIT, including the bundled LibYAML notices in [Packages/SubscriptionKit/Yams-LICENSE](Packages/SubscriptionKit/Yams-LICENSE).
+- Parses saved subscription metadata without running a proxy core or making network requests.

@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import SubscriptionKit
 
 enum ProxyTab: String, CaseIterable, Identifiable {
     case rule = "Rule"
@@ -13,8 +14,14 @@ struct ProxiesView: View {
     @EnvironmentObject var clashController: ClashController
     @EnvironmentObject var profileService: ProfileService
     @EnvironmentObject var clashViewModel: ClashViewModel
+    @State private var savedGroups: [ProxyGroup] = []
+    @State private var savedNodes: [String: ProxyNode] = [:]
+    @State private var providerCount = 0
+    @State private var savedProfileKey = ""
+    @State private var liveProfileKey = ""
     @State private var loadError: String?
     @State private var isLoading = false
+    @State private var loadRevision = UUID()
     @State private var selectedTab: ProxyTab = .rule
     @State private var expandedGroups = Set<String>()
     @State private var testingNodes = Set<String>()
@@ -28,26 +35,39 @@ struct ProxiesView: View {
         var id: String { rawValue }
     }
 
+    private var profileKey: String {
+        guard let profile = profileService.activeProfile else { return "" }
+        return "\(profile.id)|\(profile.path?.path ?? "")|\(profile.lastUpdated?.timeIntervalSince1970 ?? 0)"
+    }
+
+    private var showingLive: Bool {
+        clashViewModel.isRunning && !clashViewModel.isToggling && liveProfileKey == profileKey && !liveProfileKey.isEmpty
+    }
+    private var displayGroups: [ProxyGroup] {
+        showingLive ? clashController.proxyGroups : (savedProfileKey == profileKey ? savedGroups : [])
+    }
+    private var displayNodes: [String: ProxyNode] {
+        showingLive ? clashController.proxyNodes : (savedProfileKey == profileKey ? savedNodes : [:])
+    }
     private var nodeCount: Int {
-        let groupNames = Set(clashController.proxyGroups.map(\.name))
+        let groupNames = Set(displayGroups.map(\.name))
         let builtIns = Set(["Direct", "Reject", "RejectDrop", "Pass"])
-        return clashController.proxyNodes.values.filter {
-            !groupNames.contains($0.name) && !builtIns.contains($0.type)
-        }.count
+        return displayNodes.values.filter { !groupNames.contains($0.name) && !builtIns.contains($0.type) }.count
     }
 
     // Filter groups based on selected tab
     var filteredGroups: [ProxyGroup] {
         switch selectedTab {
         case .rule:
-            let allGroups = clashController.proxyGroups.filter { $0.name != "GLOBAL" }
+            let allGroups = displayGroups.filter { $0.name != "GLOBAL" }
             return allGroups.sorted { a, b in
                 if a.name == "🚀 节点选择" { return true }
                 if b.name == "🚀 节点选择" { return false }
                 return a.name < b.name
             }
         case .global:
-            return clashController.proxyGroups.filter { $0.name == "GLOBAL" }
+            if showingLive { return displayGroups.filter { $0.name == "GLOBAL" } }
+            return displayNodes.isEmpty ? [] : [ProxyGroup(name: "GLOBAL", type: "Selector", all: displayNodes.keys.sorted())]
         case .direct:
             return []
         }
@@ -63,24 +83,66 @@ struct ProxiesView: View {
                 content
             }
         }
-        .task(id: clashViewModel.isRunning) {
+        .task(id: "\(profileKey)|\(clashViewModel.isRunning)|\(clashViewModel.isToggling)") {
             await refreshProxies()
         }
-        .onChange(of: clashController.proxyGroups.map(\.name)) { _, names in
+        .onChange(of: displayGroups.map(\.name)) { _, names in
             expandedGroups.formUnion(names)
         }
     }
 
     private func refreshProxies() async {
-        guard clashViewModel.isRunning, !clashViewModel.isToggling else { return }
+        let revision = UUID()
+        loadRevision = revision
+        let key = profileKey
+        let path = profileService.activeProfile?.path
+        liveProfileKey = ""
         isLoading = true
-        defer { isLoading = false }
+        loadError = nil
+        defer { if loadRevision == revision { isLoading = false } }
+        do {
+            let snapshot: SubscriptionSnapshot? = try await Task.detached {
+                guard let path else { return nil }
+                return try SubscriptionSnapshot.parse(String(contentsOf: path, encoding: .utf8))
+            }.value
+            try Task.checkCancellation()
+            guard key == profileKey, loadRevision == revision else { return }
+            let types = ["select": "Selector", "url-test": "URLTest", "fallback": "Fallback", "load-balance": "LoadBalance"]
+            savedNodes = Dictionary(uniqueKeysWithValues: (snapshot?.nodes ?? []).map {
+                ($0.name, ProxyNode(id: $0.name, name: $0.name, type: $0.type))
+            })
+            savedGroups = (snapshot?.groups ?? []).map {
+                ProxyGroup(name: $0.name, type: types[$0.type] ?? $0.type, all: $0.members)
+            }
+            providerCount = snapshot?.providerCount ?? 0
+            savedProfileKey = key
+            expandedGroups = Set(savedGroups.map(\.name)).union(["GLOBAL"])
+        } catch is CancellationError { return }
+        catch {
+            guard key == profileKey, loadRevision == revision else { return }
+            savedNodes = [:]
+            savedGroups = []
+            providerCount = 0
+            savedProfileKey = key
+            // Parser errors can include credentials from YAML; never display them.
+            loadError = "Could not read the saved subscription. Update it in Subscriptions."
+        }
+        guard clashViewModel.isRunning, !clashViewModel.isToggling else { return }
         do {
             try await clashController.fetchProxiesData()
-            loadError = nil
+            try Task.checkCancellation()
+            guard key == profileKey, loadRevision == revision else { return }
+            guard !clashController.proxyGroups.isEmpty else {
+                loadError = "Showing saved nodes. Apply this subscription to load it into the core."
+                return
+            }
+            liveProfileKey = key
             expandedGroups.formUnion(clashController.proxyGroups.map(\.name))
         } catch is CancellationError { }
-        catch { loadError = "Could not load nodes. Try refreshing." }
+        catch {
+            guard key == profileKey, loadRevision == revision else { return }
+            loadError = "Showing saved nodes. Live data is unavailable."
+        }
     }
 
     // MARK: - Toolbar
@@ -136,7 +198,7 @@ struct ProxiesView: View {
             }
             .buttonStyle(.plain)
             .help("Refresh nodes")
-            .disabled(!clashViewModel.isRunning || clashViewModel.isToggling || isLoading)
+            .disabled(isLoading)
 
             Text("\(nodeCount) nodes")
                 .font(DS.Typography.metadata)
@@ -160,20 +222,28 @@ struct ProxiesView: View {
             .frame(maxWidth: .infinity, minHeight: 300)
         } else if filteredGroups.isEmpty {
             ContentUnavailableView {
-                Label(clashViewModel.isRunning ? "No proxy groups" : "Core is stopped", systemImage: "network.slash")
+                Label(isLoading ? "Loading subscription" : "No saved nodes", systemImage: "network.slash")
             } description: {
-                Text(loadError ?? (clashViewModel.isRunning
-                    ? "Apply your subscription from Profiles, then refresh."
-                    : (profileService.activeProfile == nil
-                        ? "Add a subscription in Profiles."
-                        : "Subscription saved. Start the core from Overview to load its nodes.")))
+                Text(loadError ?? (profileService.activeProfile == nil
+                    ? "Add a subscription in Subscriptions."
+                    : "This subscription has no embedded nodes. Update it in Subscriptions."))
             }
             .frame(maxWidth: .infinity, minHeight: 300)
         } else {
             LazyVStack(spacing: DS.Space.md) {
+                if !showingLive {
+                    Text(loadError ?? (providerCount > 0
+                        ? "Saved subscription · Provider nodes load when the core runs."
+                        : "Saved subscription · Start the core to select nodes or test latency."))
+                        .font(DS.Typography.metadata)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
                 ForEach(filteredGroups) { group in
                     SimpleProxyGroupCard(
                         group: group,
+                        nodes: displayNodes,
+                        allowsRuntimeActions: showingLive,
                         isExpanded: expandedGroups.contains(group.name) || !searchText.isEmpty, // Auto expand on search
                         searchText: searchText,
                         sortMode: sortMode,
@@ -197,6 +267,8 @@ struct ProxiesView: View {
 
 struct SimpleProxyGroupCard: View {
     let group: ProxyGroup
+    let nodes: [String: ProxyNode]
+    let allowsRuntimeActions: Bool
     let isExpanded: Bool
     let searchText: String
     let sortMode: ProxiesView.SortMode
@@ -286,8 +358,8 @@ struct SimpleProxyGroupCard: View {
             case .name:
                 return a.localizedCaseInsensitiveCompare(b) == .orderedAscending
             case .delay:
-                let delayA = clashController.proxyNodes[a]?.delay ?? 99999
-                let delayB = clashController.proxyNodes[b]?.delay ?? 99999
+                let delayA = nodes[a]?.delay ?? 99999
+                let delayB = nodes[b]?.delay ?? 99999
                 return delayA < delayB
             }
         }
@@ -301,9 +373,10 @@ struct SimpleProxyGroupCard: View {
                     SimpleProxyButton(
                         name: itemName,
                         isSelected: group.now == itemName,
-                        delay: clashController.proxyNodes[itemName]?.delay,
+                        delay: nodes[itemName]?.delay,
                         isTesting: testingNodes.contains(itemName),
                         onSelect: {
+                            guard allowsRuntimeActions else { return }
                             Task {
                                 do {
                                     try await clashController.selectProxy(
@@ -318,6 +391,7 @@ struct SimpleProxyGroupCard: View {
                             }
                         },
                         onTest: {
+                            guard allowsRuntimeActions else { return }
                             testingNodes.insert(itemName)
                             Task {
                                 _ = try? await clashController.testProxyDelay(name: itemName)
@@ -325,6 +399,7 @@ struct SimpleProxyGroupCard: View {
                             }
                         }
                     )
+                    .disabled(!allowsRuntimeActions)
                 }
             }
             .padding(DS.Space.md)

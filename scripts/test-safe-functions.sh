@@ -45,3 +45,6 @@ xcrun swiftc -emit-library -module-name SafeFunctions \
 xcrun xctest "$BUNDLE" > "$OUT/results.log" 2>&1 || { cat "$OUT/results.log"; exit 1; }
 cat "$OUT/results.log"
 printf '\nLogs: %s\n' "$OUT"
+
+# Pure YAML parsing package: no production services or core are linked.
+swift test --package-path "$ROOT/Packages/SubscriptionKit"

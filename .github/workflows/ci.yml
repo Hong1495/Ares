@@ -20,4 +20,6 @@ jobs:
           scripts/test-safe-functions.sh
           python3 -m unittest discover -s scripts/tests -p 'test_*.py'
       - name: Build isolated preview
-        run: scripts/preview-ui.sh
+        run: |
+          scripts/preview-ui.sh
+          scripts/preview-subscription.sh

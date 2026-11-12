@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
         AAE000000000000000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = AAE000000000000000000003 /* Sparkle */; };
+        AAE000000000000000000011 = {isa = PBXBuildFile; productRef = AAE000000000000000000013; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -34,6 +35,7 @@
 			buildActionMask = 2147483647;
 			files = (
                 AAE000000000000000000001 /* Sparkle in Frameworks */,
+                AAE000000000000000000011,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -86,6 +88,7 @@
 			name = Ares;
 			packageProductDependencies = (
                 AAE000000000000000000003 /* Sparkle */,
+                AAE000000000000000000013,
 			);
 			productName = Ares;
 			productReference = D53132D12EF23B3000640BD9 /* Ares.app */;
@@ -143,7 +146,7 @@
 			mainGroup = D53132C82EF23B3000640BD9;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
-            packageReferences = (AAE000000000000000000002 /* Sparkle */);
+            packageReferences = (AAE000000000000000000002 /* Sparkle */, AAE000000000000000000012);
 			productRefGroup = D53132D22EF23B3000640BD9 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -349,7 +352,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.2;
+				MARKETING_VERSION = 1.0.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ares.Ares;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -384,7 +387,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.2;
+				MARKETING_VERSION = 1.0.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ares.Ares;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -416,7 +419,7 @@
 				);
 				ARCHS = arm64;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.2;
+				MARKETING_VERSION = 1.0.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ares.AresTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -446,7 +449,7 @@
 				);
 				ARCHS = arm64;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.2;
+				MARKETING_VERSION = 1.0.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ares.AresTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -462,6 +465,7 @@
             isa = XCLocalSwiftPackageReference;
             relativePath = Packages/Sparkle;
         };
+        AAE000000000000000000012 = {isa = XCLocalSwiftPackageReference; relativePath = Packages/SubscriptionKit; };
 /* End XCLocalSwiftPackageReference section */
 /* Begin XCSwiftPackageProductDependency section */
         AAE000000000000000000003 /* Sparkle */ = {
@@ -469,6 +473,7 @@
             package = AAE000000000000000000002 /* Sparkle */;
             productName = Sparkle;
         };
+        AAE000000000000000000013 = {isa = XCSwiftPackageProductDependency; package = AAE000000000000000000012; productName = SubscriptionKit; };
 /* End XCSwiftPackageProductDependency section */
 
 /* Begin XCConfigurationList section */

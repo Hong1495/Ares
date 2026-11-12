@@ -35,3 +35,9 @@ scripts/preview-ui.sh --open
 ```
 
 The preview has mock data and no production services. Use a disposable VM for live proxy, privilege, certificate and update-installation tests.
+
+## Saved subscription UI regression
+
+Run `scripts/preview-subscription.sh --open` to exercise the production ProxiesView with mock services, a stopped runtime and a synthetic 32-node subscription. Any call to a core operation traps immediately. No production delegate, service implementation or core binary is linked. Verify both Rule and Global lists, search, group expansion and disabled selection/latency actions.
+
+`swift test --package-path Packages/SubscriptionKit` tests YAML block/flow/JSON forms, anchors, Unicode, duplicates, provider-only profiles and malformed input. The optional `ARES_READONLY_PROFILE` environment variable enables a local 32-node/2-group acceptance fixture; it is never copied into the repository or logged.

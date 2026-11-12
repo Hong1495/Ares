@@ -68,6 +68,7 @@ jobs:
           APP=.build/release/Build/Products/Release/Ares.app
           mkdir -p "$APP/Contents/Resources/Licenses"
           cp artifacts/mihomo-LICENSE.txt "$APP/Contents/Resources/Licenses/"
+          cp Packages/SubscriptionKit/Yams-LICENSE "$APP/Contents/Resources/Licenses/Yams.txt"
           cp Packages/Sparkle/LICENSE "$APP/Contents/Resources/Licenses/Sparkle.txt"
           cp THIRD_PARTY_NOTICES.md "$APP/Contents/Resources/Licenses/"
           gunzip -c .build/core.gz > "$APP/Contents/Resources/clash-meta"
