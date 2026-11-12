@@ -15,6 +15,8 @@ SOURCES=(
   "$ROOT/DesignPreview/SettingsPreview.swift"
   "$ROOT/DesignPreview/CollectionPreview.swift"
   "$ROOT/DesignPreview/LogsPreview.swift"
+  "$ROOT/DesignPreview/MenuBarPreview.swift"
+  "$ROOT/Ares/UI/DesignSystem/MenuBarPresentation.swift"
   "$ROOT/Ares/UI/DesignSystem/DesignSystem.swift"
   "$ROOT/Ares/UI/DesignSystem/WorkspaceChrome.swift"
   "$ROOT/Ares/UI/DesignSystem/ActivityViewPicker.swift"

@@ -7,17 +7,20 @@ import AppKit
 struct AresDesignPreview: App {
     var body: some Scene {
         WindowGroup("Ares · Design Preview") {
-            PreviewWorkspace()
-                .frame(minWidth: 900, minHeight: 650)
+            if CommandLine.arguments.contains("--menu-preview") {
+                MenuBarPreview().preferredColorScheme(.dark)
+            } else {
+                PreviewWorkspace().frame(minWidth: 900, minHeight: 650)
+            }
         }
         .defaultSize(width: 1180, height: 780)
         .windowStyle(.titleBar)
         .commands { PreviewCommands() }
         MenuBarExtra {
-            Text("Ares preview · No network services")
+            MenuBarPreview()
         } label: {
             AresMenuBarLabel(showsLatency: true, latency: 639)
-        }
+        }.menuBarExtraStyle(.window)
     }
 }
 
