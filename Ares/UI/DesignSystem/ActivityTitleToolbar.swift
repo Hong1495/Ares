@@ -4,7 +4,7 @@ import SwiftUI
 struct ActivityTitleToolbar: ToolbarContent {
     var count: Int
     var topologySummary: String? = nil
-    var topologySubtitle: String = "Topology"
+    var subtitle: String = "Topology"
     var download: String? = nil
     var upload: String? = nil
 
@@ -15,7 +15,7 @@ struct ActivityTitleToolbar: ToolbarContent {
                     Text("Activity")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.primary)
-                    Text(download == nil ? topologySubtitle : "Connections")
+                    Text(subtitle)
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }

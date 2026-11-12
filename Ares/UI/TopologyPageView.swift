@@ -24,7 +24,7 @@ struct TopologyPageView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(DS.canvas)
             .toolbar {
-                ActivityTitleToolbar(count: snapshot.processCount, topologySummary: snapshot.summary, topologySubtitle: snapshot.subtitle)
+                ActivityTitleToolbar(count: snapshot.processCount, topologySummary: snapshot.summary, subtitle: snapshot.subtitle)
             }
         .onAppear {
             Task { await clashController.monitorConnections() }

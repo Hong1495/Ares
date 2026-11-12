@@ -31,6 +31,7 @@ struct PreviewWorkspace: View {
     @State private var inspection = false
     @State private var mode = 0
     @State private var tab = 0
+    @State private var activityGrouping = "Application"
     @State private var selectedNode = "Tokyo · 01"
     @State private var search = ""
     @State private var measured = false
@@ -83,6 +84,7 @@ struct PreviewWorkspace: View {
                 if page == "Activity" {
                     ActivityTitleToolbar(count: tab == 0 ? 9 : 13,
                                          topologySummary: tab == 0 ? "9 processes · 3 rule types · 2 routes · 18 targets" : nil,
+                                         subtitle: tab == 0 ? "Topology" : activityGrouping,
                                          download: tab == 0 ? nil : "1.3 MB",
                                          upload: tab == 0 ? nil : "3.6 MB")
                     ToolbarItem(placement: .primaryAction) {
@@ -297,6 +299,15 @@ struct PreviewWorkspace: View {
 
     private var activityPage: some View {
         VStack(spacing: 18) {
+            if page == "Activity" {
+                Picker("Group connections by", selection: $activityGrouping) {
+                    ForEach(["Application", "Proxy Node", "Host / Domain", "Rule"], id: \.self) { title in
+                        Text(title).tag(title)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
             HStack {
                 TextField(page == "Logs" ? "Search logs" : "Search connections", text: $search).textFieldStyle(.roundedBorder).frame(width: 250)
                 Spacer()

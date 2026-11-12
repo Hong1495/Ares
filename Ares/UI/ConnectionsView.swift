@@ -61,6 +61,7 @@ struct ConnectionsView: View {
         }
         .toolbar {
             ActivityTitleToolbar(count: viewModel.groupedNodes.count,
+                                 subtitle: viewModel.groupingMode.rawValue,
                                  download: formatBytes(viewModel.totalDownload),
                                  upload: formatBytes(viewModel.totalUpload))
         }
