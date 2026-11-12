@@ -108,7 +108,6 @@ actor TrafficAuditor {
     // Internal state for diffing
     private var sessionMap: [String: AppSession] = [:]
     private var connectionSnapshots: [String: (up: Int64, down: Int64)] = [:]
-    private var pathCache: [String: String] = [:]
     private var lastUpdateTime: Date = Date()
 
     // Aggregates connections into sessions and calculates speeds
@@ -123,7 +122,8 @@ actor TrafficAuditor {
         var appDeltas: [String: (up: Int64, down: Int64)] = [:]
 
         for conn in connections {
-            let appKey = findMainBundle(conn.metadata.processPath)
+            let identity = conn.identity
+            let appKey = identity.key
             let prev = connectionSnapshots[conn.id] ?? (0, 0)
             let deltaUp = max(0, conn.upload - prev.up)
             let deltaDown = max(0, conn.download - prev.down)
@@ -131,8 +131,7 @@ actor TrafficAuditor {
             connectionSnapshots[conn.id] = (conn.upload, conn.download)
 
             if sessionMap[appKey] == nil {
-                let name = processName(from: appKey)
-                sessionMap[appKey] = AppSession(id: appKey, name: name, iconPath: appKey)
+                sessionMap[appKey] = AppSession(id: appKey, name: identity.name, iconPath: identity.iconPath)
             }
 
             sessionMap[appKey]?.totalUpload += deltaUp
@@ -199,44 +198,6 @@ actor TrafficAuditor {
         connectionSnapshots.removeAll()
     }
 
-    // MARK: - Helpers
-    private func findMainBundle(_ path: String?) -> String {
-        guard let path = path, !path.isEmpty else { return "Unknown" }
-        if let cached = pathCache[path] { return cached }
-
-        let result: String
-        if let appBundle = findEnclosingAppBundle(path) {
-            result = appBundle
-        } else if path.contains(".vscode/extensions") {
-            result = "/Applications/Visual Studio Code.app"
-        } else if path.contains(".cursor/extensions") {
-            result = "/Applications/Cursor.app"
-        } else if path.hasSuffix("language_server_macos_arm") {
-            result = "Code Intelligence (LSP)"
-        } else {
-            result = path
-        }
-
-        pathCache[path] = result
-        if pathCache.count > 1000 { pathCache.removeAll() }
-        return result
-    }
-
-    private func findEnclosingAppBundle(_ path: String) -> String? {
-        if !path.contains(".app") { return nil }
-        let components = path.split(separator: "/")
-        var currentPath = ""
-        for component in components {
-            currentPath += "/" + component
-            if component.hasSuffix(".app") { return currentPath }
-        }
-        return nil
-    }
-
-    private func processName(from path: String) -> String {
-        guard !path.isEmpty && path != "Unknown" else { return "Unknown" }
-        return URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
-    }
 }
 
 

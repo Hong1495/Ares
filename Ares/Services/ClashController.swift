@@ -28,7 +28,7 @@ struct ConnectionChain: Identifiable, Equatable {
     let upload: Int64
 
     static func == (lhs: ConnectionChain, rhs: ConnectionChain) -> Bool {
-        lhs.id == rhs.id && lhs.download == rhs.download && lhs.upload == rhs.upload
+        lhs.id == rhs.id && lhs.download == rhs.download && lhs.upload == rhs.upload && lhs.sourceProcess == rhs.sourceProcess && lhs.host == rhs.host && lhs.chains == rhs.chains && lhs.rule == rhs.rule
     }
 }
 

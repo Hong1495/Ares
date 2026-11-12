@@ -3,7 +3,7 @@ import Foundation
 /// Connection model
 nonisolated struct Connection: Identifiable, Sendable, Hashable {
     let id: String
-    let metadata: ConnectionMetadata
+    var metadata: ConnectionMetadata
     let upload: Int64
     let download: Int64
     let start: Date
@@ -21,23 +21,8 @@ nonisolated struct Connection: Identifiable, Sendable, Hashable {
     
     // Sorting helpers
     var chainsString: String { chains.joined(separator: " / ") }
-    var processName: String {
-        guard let path = metadata.processPath, !path.isEmpty else { return "Unknown" }
-        
-        // Aggregate Helper Processes (Same logic as TrafficAuditManager)
-        if path.contains(".app") {
-            let components = path.split(separator: "/")
-            var currentPath = ""
-            for component in components {
-                currentPath += "/" + component
-                if component.hasSuffix(".app") {
-                    return URL(fileURLWithPath: currentPath).deletingPathExtension().lastPathComponent
-                }
-            }
-        }
-        
-        return URL(fileURLWithPath: path).lastPathComponent
-    }
+    var identity: ConnectionIdentity { ConnectionIdentity(path: metadata.processPath, process: metadata.process, source: metadata.sourceIP) }
+    var processName: String { identity.name }
     var sourceString: String { "\(metadata.sourceIP):\(metadata.sourcePort)" }
     var destinationString: String { "\(metadata.destinationIP):\(metadata.destinationPort)" }
     var typeString: String { "\(metadata.network.uppercased())(\(metadata.type.lowercased()))" }
@@ -59,7 +44,10 @@ nonisolated struct ConnectionMetadata: Codable, Sendable {
     let sourcePort: String
     let destinationPort: String
     let host: String
-    let processPath: String?
+    var processPath: String?
+    var process: String? = nil
+    var inboundIP: String? = nil
+    var inboundPort: String? = nil
    
     enum CodingKeys: String, CodingKey {
         case network, type
@@ -68,6 +56,6 @@ nonisolated struct ConnectionMetadata: Codable, Sendable {
         case sourcePort = "sourcePort"
         case destinationPort = "destinationPort"
         case host
-        case processPath
+        case processPath, process, inboundIP, inboundPort
     }
 }

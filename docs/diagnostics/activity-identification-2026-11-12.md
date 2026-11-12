@@ -1,0 +1,9 @@
+# Activity and topology attribution
+
+The pre-redesign baseline (`fed3329`) already grouped nested app helpers and editor extensions. Those rules were retained, but both process fields in the observed normal-mode mihomo snapshot were empty. Activity used only `processPath`; topology used `processPath ?? process`, which does not fall back for an empty string. Missing-path connections could also disappear entirely.
+
+Activity, connection details, and topology now share a decoder and identity model. Core process paths take precedence. When absent, a read-only local `lsof` snapshot matches protocol, source endpoint and peer endpoint, followed by `proc_pidpath` for the matching PID. Ambiguous sockets are rejected. No root privileges, process termination, proxy changes or core startup are used for attribution. Process names remain a fallback; unidentified connections retain their source address and do not use a fake file icon.
+
+Nested helper apps aggregate to the outer application. Existing Cursor/VS Code extension and language-server classifications remain. Topology equality now includes application identity and route changes, so identification can refresh without a change in byte counters. Activity reconnects on runtime/TUN transitions and discards obsolete stream results.
+
+Validation: 82 isolated tests passed, including helper aggregation, process-only records, numeric ports, unknown sources, ambiguous/wrong-peer sockets and IPv6 TUN matching. Production resolver code, compiled without the app or core launcher, identified all 9 connections in one read-only live snapshot as 5 distinct app/process identities with 5 bundle icon paths. This is a point-in-time observation, not guaranteed coverage of all traffic: closed sockets, other users' processes, forwarded LAN traffic and unconnected UDP sockets may remain unidentified. Release build passed. No production app was launched or network settings changed for this validation.

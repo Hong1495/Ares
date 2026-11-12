@@ -20,9 +20,10 @@ final class ConnectionsViewModel: ObservableObject {
     private let calculator = ConnectionsCalculator()
     private var webSocketTask: URLSessionWebSocketTask?
     private var isMonitoring = false
+    private var monitoringRevision = UUID()
     private var cancellables = Set<AnyCancellable>()
     private var lastConnectionsUpdate: Date = .distantPast
-    private let minConnectionsInterval: TimeInterval = 0.25
+    private let minConnectionsInterval: TimeInterval = 1.0
     private var isProcessingConnections = false
 
     var totalDownload: Int64 {
@@ -45,7 +46,19 @@ final class ConnectionsViewModel: ObservableObject {
 
         NotificationCenter.default.publisher(for: .appDidWakeUp)
             .receive(on: RunLoop.main)
-            .sink { _ in }
+            .sink { [weak self] _ in
+                Task { await self?.startMonitoring() }
+            }
+            .store(in: &cancellables)
+
+        ClashViewModel.shared.$runtimeState.combineLatest(ClashViewModel.shared.$isToggling)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] state, toggling in
+                self?.stopMonitoring()
+                if state == .running && !toggling {
+                    Task { await self?.startMonitoring() }
+                }
+            }
             .store(in: &cancellables)
     }
 
@@ -64,7 +77,7 @@ final class ConnectionsViewModel: ObservableObject {
     // MARK: - Monitoring
 
     func startMonitoring(isRetry: Bool = false) async {
-        guard AppState.shared.isForeground else { return }
+        guard AppState.shared.isForeground, ClashViewModel.shared.isRunning, !ClashViewModel.shared.isToggling else { return }
         if !isRetry {
             guard !isMonitoring else { return }
             isMonitoring = true
@@ -74,6 +87,7 @@ final class ConnectionsViewModel: ObservableObject {
         let port = tunEnabled ? ClashPorts.apiTun : ClashPorts.apiNormal
         guard let url = URL(string: "ws://127.0.0.1:\(port)/connections") else { return }
 
+        monitoringRevision = UUID()
         webSocketTask?.cancel()
         webSocketTask = URLSession.shared.webSocketTask(with: url)
         webSocketTask?.resume()
@@ -83,6 +97,7 @@ final class ConnectionsViewModel: ObservableObject {
 
     func stopMonitoring() {
         isMonitoring = false
+        monitoringRevision = UUID()
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
     }
@@ -93,8 +108,10 @@ final class ConnectionsViewModel: ObservableObject {
             return
         }
         guard let webSocket = webSocketTask else { return }
+        let revision = monitoringRevision
         do {
             let message = try await webSocket.receive()
+            guard revision == monitoringRevision else { return }
             switch message {
             case .string(let text): parseConnectionsData(text)
             case .data(let data): if let text = String(data: data, encoding: .utf8) { parseConnectionsData(text) }
@@ -102,9 +119,10 @@ final class ConnectionsViewModel: ObservableObject {
             }
             if isMonitoring { await receiveMessages() }
         } catch {
-            if isMonitoring {
+            if isMonitoring, revision == monitoringRevision {
                 Task {
                     try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    guard self.isMonitoring, revision == self.monitoringRevision else { return }
                     await self.startMonitoring(isRetry: true)
                 }
             }
@@ -118,6 +136,8 @@ final class ConnectionsViewModel: ObservableObject {
         lastConnectionsUpdate = now
         isProcessingConnections = true
 
+        let revision = monitoringRevision
+        let generation = ClashController.shared.runtimeGeneration
         Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
             defer {
@@ -126,17 +146,10 @@ final class ConnectionsViewModel: ObservableObject {
                 }
             }
 
-            // 1. Parse JSON (Pure func)
-            let parsedConnections = Self.parseJSON(jsonString)
-
-            // Critical: Filter out "Ares" self-traffic
-            let filteredConnections = parsedConnections.filter { conn in
-                guard let path = conn.metadata.processPath else { return false }
-                let process = (path as NSString).lastPathComponent
-                return !(process.localizedCaseInsensitiveContains("Ares") ||
-                         process.localizedCaseInsensitiveContains("com.herastudio.ares") ||
-                         path.contains("/Ares.app/"))
-            }
+            let parsed = ConnectionSnapshot.decode(Data(jsonString.utf8))
+            let resolved = await ConnectionProcessResolver.shared.resolve(parsed)
+            guard generation == (await ClashController.shared.runtimeGeneration) else { return }
+            let filteredConnections = resolved.filter { !$0.identity.isAres }
 
             // 2. Update Traffic Audit (MainActor, but internal logic is backgrounded)
             await TrafficAuditManager.shared.update(with: filteredConnections)
@@ -150,76 +163,11 @@ final class ConnectionsViewModel: ObservableObject {
 
             // 4. Update UI
             await MainActor.run {
+                guard revision == self.monitoringRevision, generation == ClashController.shared.runtimeGeneration else { return }
                 self.lastRawConnections = filteredConnections
                 self.groupedNodes = nodes
             }
         }
-    }
-
-    // Shared formatter to avoid expensive allocation in loop
-    nonisolated(unsafe) private static let sharedDateFormatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
-
-    nonisolated private static func parseJSON(_ jsonString: String) -> [Connection] {
-         guard let data = jsonString.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let connectionsDict = json["connections"] as? [[String: Any]] else {
-            return []
-        }
-
-        var connections: [Connection] = []
-
-        for connData in connectionsDict {
-            guard let id = connData["id"] as? String,
-                  let metadataDict = connData["metadata"] as? [String: Any],
-                  let network = metadataDict["network"] as? String,
-                  let type = metadataDict["type"] as? String,
-                  let sourceIP = metadataDict["sourceIP"] as? String,
-                  let destIP = metadataDict["destinationIP"] as? String,
-                  let sourcePort = metadataDict["sourcePort"] as? String,
-                  let destPort = metadataDict["destinationPort"] as? String,
-                  let host = metadataDict["host"] as? String else {
-                continue
-            }
-
-            let metadata = ConnectionMetadata(
-                network: network,
-                type: type,
-                sourceIP: sourceIP,
-                destinationIP: destIP,
-                sourcePort: sourcePort,
-                destinationPort: destPort,
-                host: host,
-                processPath: metadataDict["processPath"] as? String
-            )
-
-            let upload = connData["upload"] as? Int64 ?? 0
-            let download = connData["download"] as? Int64 ?? 0
-            let chains = connData["chains"] as? [String] ?? []
-            let rule = connData["rule"] as? String ?? ""
-            let rulePayload = connData["rulePayload"] as? String ?? ""
-
-            var startDate = Date()
-            if let startStr = connData["start"] as? String {
-                startDate = Self.sharedDateFormatter.date(from: startStr) ?? Date()
-            }
-
-            let connection = Connection(
-                id: id,
-                metadata: metadata,
-                upload: upload,
-                download: download,
-                start: startDate,
-                chains: chains,
-                rule: rule,
-                rulePayload: rulePayload
-            )
-            connections.append(connection)
-        }
-        return connections
     }
 
     func closeConnection(id: String) async {
