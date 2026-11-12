@@ -52,15 +52,16 @@ struct ClashConfig: Codable {
     init() {}
 
     /// Initialize from UserDefaults
-    init(fromUserDefaults: Bool) {
+    init(fromUserDefaults: Bool, defaults: UserDefaults = .standard) {
         if fromUserDefaults {
-            let defaults = UserDefaults.standard
             // Use current preferences or defaults
             // Note: Keys must match AppStorage in SettingsView
             // Fix: httpPort default should be 7892 to avoid conflict with mixedPort (7890)
             self.httpPort = Int(defaults.string(forKey: DefaultsKeys.httpPort) ?? "\(ClashPorts.defaultHttp)") ?? ClashPorts.defaultHttp
             self.socksPort = Int(defaults.string(forKey: DefaultsKeys.socksPort) ?? "\(ClashPorts.defaultSocks)") ?? ClashPorts.defaultSocks
             self.mixedPort = Int(defaults.string(forKey: DefaultsKeys.mixedPort) ?? "\(ClashPorts.defaultMixed)") ?? ClashPorts.defaultMixed // Default 7890
+            self.tunMTU = defaults.object(forKey: DefaultsKeys.tunMTU) == nil ? 1400 : defaults.integer(forKey: DefaultsKeys.tunMTU)
+            self.tunDevice = defaults.string(forKey: DefaultsKeys.tunDevice) ?? ""
             self.tunStack = defaults.string(forKey: DefaultsKeys.tunStack) ?? "system"
             self.tunAutoRoute = defaults.bool(forKey: DefaultsKeys.tunAutoRoute)
             self.tunAutoDetectInterface = defaults.bool(forKey: DefaultsKeys.tunAutoDetectInterface)
@@ -75,9 +76,6 @@ struct ClashConfig: Codable {
             self.keepAliveInterval = defaults.integer(forKey: DefaultsKeys.keepAliveInterval)
             self.udpTimeout = defaults.integer(forKey: DefaultsKeys.udpTimeout)
 
-            if defaults.object(forKey: DefaultsKeys.tunMTU) == nil {
-                self.tunMTU = 1400
-            }
             if defaults.object(forKey: DefaultsKeys.keepAliveInterval) == nil {
                 self.keepAliveInterval = 15
             }
@@ -107,6 +105,13 @@ struct ClashConfig: Codable {
             }
 
         }
+    }
+
+    private func yamlString(_ value: String) -> String {
+        // JSON strings are valid YAML scalars, including quotes and punctuation.
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .withoutEscapingSlashes
+        return String(data: try! encoder.encode(value), encoding: .utf8)!
     }
 
     /// Generate YAML representation for config.yaml
@@ -176,7 +181,7 @@ struct ClashConfig: Codable {
             if !tunDevice.isEmpty {
                 yaml += """
 
-              device: \(tunDevice)
+              device: \(yamlString(tunDevice))
             """
             }
 
@@ -198,7 +203,7 @@ struct ClashConfig: Codable {
 
         // The DNS settings are shared by normal and TUN configurations.
         if !skipDNS {
-            let dnsEntries = dnsServers.map { "    - \($0)" }.joined(separator: "\n")
+            let dnsEntries = dnsServers.map { "    - \(yamlString($0))" }.joined(separator: "\n")
             yaml += """
 
             # DNS Configuration
@@ -215,7 +220,8 @@ struct ClashConfig: Codable {
                 - "localhost"
                 - "*.localhost"
               default-nameserver:
-            \(dnsEntries)
+                - 223.5.5.5
+                - 119.29.29.29
               nameserver:
             \(dnsEntries)
               fallback:

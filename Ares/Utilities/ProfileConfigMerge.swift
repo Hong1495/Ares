@@ -6,7 +6,7 @@ nonisolated enum ProfileConfigMerge {
         "mixed-port", "socks-port", "port", "mode", "log-level", "allow-lan",
         "ipv6", "external-controller", "secret", "keep-alive-interval",
         "tcp-concurrent", "unified-delay", "global-client-fingerprint",
-        "find-process-mode",
+        "find-process-mode", "udp-timeout", "mptcp",
         "tun", "profile", "dns", "sniffer"
     ]
 

@@ -118,7 +118,7 @@ final class SettingsViewSourceTests: XCTestCase {
     func testSettingsUseRuntimeMITMAndSharedDNSPreference() throws {
         let settings = try String(contentsOf: projectRoot.appendingPathComponent("Ares/UI/SettingsView.swift"))
         let config = try String(contentsOf: projectRoot.appendingPathComponent("Ares/Models/ClashConfig.swift"))
-        XCTAssertTrue(settings.contains("@AppStorage(DefaultsKeys.dnsServers)"))
+        XCTAssertTrue(settings.contains("DefaultsKeys.dnsServers"))
         XCTAssertFalse(settings.contains("@AppStorage(DefaultsKeys.mitmEnabled)"))
         XCTAssertTrue(config.contains("DefaultsKeys.dnsServers"))
     }

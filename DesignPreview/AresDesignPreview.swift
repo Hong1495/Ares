@@ -75,7 +75,7 @@ struct PreviewWorkspace: View {
             .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 260)
         } detail: {
             Group {
-                if page == "Dashboard" { dashboard } else { secondaryPage }
+                if page == "Dashboard" { dashboard } else if page == "Settings" { SettingsPreview() } else { secondaryPage }
             }
             .frame(minWidth: 650, minHeight: 540)
             .background(DS.canvas)
@@ -201,9 +201,7 @@ struct PreviewWorkspace: View {
         VStack(alignment: .leading, spacing: 22) {
             if ["Proxies", "Rules", "Subscriptions"].contains(page) {
                 proxyPage
-            } else if page == "Settings" {
-                DSPageTabs(titles: ["General", "Network", "TUN", "MITM", "Rules"], selection: $tab)
-                settingsPage
+
             } else if page == "Activity" {
                 if tab == 0 {
                     ContentUnavailableView("No active connections", systemImage: "point.3.connected.trianglepath.dotted", description: Text("Applications and their connections appear here."))
@@ -269,30 +267,6 @@ struct PreviewWorkspace: View {
                 DSKeyValueRow(label: "Nodes", value: "12")
                 DSKeyValueRow(label: "Usage", value: "28.4 GB / 200 GB")
                 ProgressView(value: 0.142).tint(DS.accent)
-            }
-        }
-    }
-
-    private var settingsPage: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                DSCard(padding: 24, spacing: 24) {
-                    DSCardHeader(["Startup & Appearance", "Traffic", "Interface", "Interception", "Custom routing"][tab], icon: "slider.horizontal.3")
-                    DSToggleRow(icon: "power", title: ["Start with macOS", "Allow LAN", "Auto route", "Enable inspection", "Custom rules"][tab], isOn: $autoScroll)
-                    Divider().opacity(0.5)
-                    HStack {
-                        Text(tab == 0 ? "Theme" : "Mode").font(DS.Typography.secondary)
-                        Spacer()
-                        Picker("Theme", selection: $theme) { Text("System").tag(0); Text("Light").tag(1); Text("Dark").tag(2) }.labelsHidden().frame(width: 150)
-                            .onChange(of: theme) { _, value in dark = value == 2 }
-                    }
-                    DSKeyValueRow(label: "Configuration", value: "Preview session only")
-                }
-                DSCard(padding: 24, spacing: 20) {
-                    DSCardHeader("About this preview", icon: "info.circle")
-                    Text("Shared Ares presentation components with sample data. Controls affect this preview only.")
-                        .font(DS.Typography.secondary).foregroundStyle(.secondary)
-                }
             }
         }
     }

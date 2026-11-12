@@ -177,21 +177,7 @@ actor ConfigService {
         let bypassItems = bypassRules.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         
         for item in bypassItems {
-            // Smart Parsing for macOS defaults
-            if item == "10.*" {
-                rulesToInject.append("- IP-CIDR,10.0.0.0/8,DIRECT")
-            } else if item == "127.*" {
-                rulesToInject.append("- IP-CIDR,127.0.0.0/8,DIRECT")
-            } else if item == "192.168.*" {
-                rulesToInject.append("- IP-CIDR,192.168.0.0/16,DIRECT")
-            } else if item == "172.16.*" {
-                rulesToInject.append("- IP-CIDR,172.16.0.0/12,DIRECT")
-            } else if item.contains("/") {
-                rulesToInject.append("- IP-CIDR,\(item),DIRECT")
-            } else {
-                let domain = item.replacingOccurrences(of: "*.", with: "")
-                rulesToInject.append("- DOMAIN-SUFFIX,\(domain),DIRECT")
-            }
+            rulesToInject.append("- \(SettingsRouting.predicate(for: item)),DIRECT")
         }
         
         // 3. Generate MITM Rules (If Enabled in TUN mode)
@@ -208,7 +194,7 @@ actor ConfigService {
             if !whitelistDomains.isEmpty {
                 // Whitelist mode
                 for domain in whitelistDomains {
-                    rulesToInject.append("- AND,((DOMAIN-SUFFIX,\(domain)),(NOT,((PROCESS-NAME,Ares)))),MITM-Intercept")
+                    rulesToInject.append("- AND,((\(SettingsRouting.predicate(for: domain))),(NOT,((PROCESS-NAME,Ares)))),MITM-Intercept")
                 }
             } else {
                 // Legacy mode: Intercept ports
@@ -321,15 +307,21 @@ actor ConfigService {
             return clashConfig.toYAML()
         }
         
+        let dynamicRules = await MainActor.run {
+            let defaults = UserDefaults.standard
+            return (defaults.string(forKey: DefaultsKeys.bypassRules) ?? "",
+                    defaults.string(forKey: DefaultsKeys.localRules) ?? "")
+        }
+        let fallback = injectDynamicRules(into: "proxies: []\nproxy-groups: []\nrules:\n  - MATCH,DIRECT",
+            tunEnabled: tunEnabled, mitmEnabled: false, mitmPort: 0,
+            bypassRules: dynamicRules.0, localRules: dynamicRules.1, mitmPortsString: "", mitmHosts: "")
         let config = """
         \(configYAML)
         
         # Safe Fallback Configuration
         # No active profile selected
         
-        proxies: []
-        proxy-groups: []
-        rules: []
+        \(fallback)
         """
         
         try await writeValidatedConfig(config, to: targetPath, directory: targetDir)

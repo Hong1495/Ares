@@ -74,8 +74,17 @@ final class CertificateManager: ObservableObject {
 
     @MainActor
     func checkRootCA() {
-        isRootCAInstalled = fileManager.fileExists(atPath: caCertPath.path) &&
-                            fileManager.fileExists(atPath: caKeyPath.path)
+        isRootCAInstalled = false
+        guard fileManager.fileExists(atPath: caKeyPath.path),
+              let pem = try? String(contentsOf: caCertPath, encoding: .utf8),
+              let der = Data(base64Encoded: pem.components(separatedBy: .newlines)
+                .filter { !$0.hasPrefix("-----") }.joined()),
+              let certificate = SecCertificateCreateWithData(nil, der as CFData) else { return }
+        var trust: SecTrust?
+        guard SecTrustCreateWithCertificates(certificate, SecPolicyCreateSSL(true, nil), &trust) == errSecSuccess,
+              let trust else { return }
+        SecTrustSetNetworkFetchAllowed(trust, false)
+        isRootCAInstalled = SecTrustEvaluateWithError(trust, nil)
     }
 
     /// Cleans up old host certificates to force regeneration (fixes SAN issues)
@@ -406,7 +415,7 @@ final class CertificateManager: ObservableObject {
             let errorString = String(data: errorData, encoding: .utf8) ?? "Unknown error"
             
             // If it already exists, that's okay
-            if !errorString.contains("already exists") && !errorString.contains("SEC_ERROR_") {
+            if !errorString.contains("already exists") {
                 throw NSError(
                     domain: "CertificateManager",
                     code: Int(process.terminationStatus),
@@ -415,6 +424,10 @@ final class CertificateManager: ObservableObject {
             }
         }
         
-        await MainActor.run { checkRootCA() }
+        let trusted = await MainActor.run { checkRootCA(); return isRootCAInstalled }
+        guard trusted else {
+            throw NSError(domain: "CertificateManager", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "The certificate was not trusted. Check Keychain Access."])
+        }
     }
 }

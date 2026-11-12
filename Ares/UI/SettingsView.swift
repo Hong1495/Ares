@@ -34,23 +34,6 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
     }
 }
 
-// MARK: - Row style
-
-/// Label left, control flush right — the alignment `LabeledContent` only gets
-/// for free inside a `Form`, which this screen no longer uses.
-private struct SettingRowStyle: LabeledContentStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        HStack(spacing: DS.Space.md) {
-            configuration.label
-                .font(DS.Typography.body.weight(.medium))
-            Spacer(minLength: DS.Space.md)
-            configuration.content
-        }
-        .frame(minHeight: 22)
-        .frame(maxWidth: .infinity)
-    }
-}
-
 // MARK: - View
 
 struct SettingsView: View {
@@ -62,38 +45,41 @@ struct SettingsView: View {
     @AppStorage(DefaultsKeys.theme) private var theme = "system"
     @AppStorage(DefaultsKeys.menuBarShowsLatency) private var menuBarShowsLatency = false
 
-    // Debounce task for auto-applying Custom Routing Rules
-    @State private var localRulesRestartTask: Task<Void, Never>?
+    @State private var settingsError: String?
+    @State private var applying = false
+    @State private var needsProxyRetry = false
+    @State private var updatingLogLevel = false
+    @State private var confirmReset = false
 
-    // Clash Config - Persisted
-    @AppStorage(DefaultsKeys.socksPort) private var socksPort = "\(ClashPorts.defaultSocks)"
-    @AppStorage(DefaultsKeys.httpPort) private var httpPort = "\(ClashPorts.defaultHttp)" // Changed from 7890 to avoid conflict with mixed
-    @AppStorage(DefaultsKeys.mixedPort) private var mixedPort = "\(ClashPorts.defaultMixed)" // Changed from 7897 to standard 7890
-    @AppStorage(DefaultsKeys.allowLan) private var allowLan = false
-    @AppStorage(DefaultsKeys.ipv6) private var ipv6 = false
+    // Network edits remain local until Apply Changes validates them.
+    @State private var socksPort = UserDefaults.standard.string(forKey: DefaultsKeys.socksPort) ?? "\(ClashPorts.defaultSocks)"
+    @State private var httpPort = UserDefaults.standard.string(forKey: DefaultsKeys.httpPort) ?? "\(ClashPorts.defaultHttp)"
+    @State private var mixedPort = UserDefaults.standard.string(forKey: DefaultsKeys.mixedPort) ?? "\(ClashPorts.defaultMixed)"
+    @State private var allowLan = UserDefaults.standard.object(forKey: DefaultsKeys.allowLan) as? Bool ?? false
+    @State private var ipv6 = UserDefaults.standard.object(forKey: DefaultsKeys.ipv6) as? Bool ?? false
     @AppStorage(DefaultsKeys.logLevel) private var logLevel = "info"
-    @AppStorage(DefaultsKeys.dnsServers) private var dnsServers = "223.5.5.5, 119.29.29.29"
+    @State private var dnsServers = UserDefaults.standard.string(forKey: DefaultsKeys.dnsServers) ?? "223.5.5.5, 119.29.29.29"
 
     // TUN Mode
-    @AppStorage(DefaultsKeys.tunStack) private var tunStack = "system"
-    @AppStorage(DefaultsKeys.tunMTU) private var tunMTU = 1400
-    @AppStorage(DefaultsKeys.tunDevice) private var tunDevice = ""
-    @AppStorage(DefaultsKeys.tunAutoRoute) private var tunAutoRoute = true
-    @AppStorage(DefaultsKeys.tunAutoDetectInterface) private var tunAutoDetectInterface = true
-    @AppStorage(DefaultsKeys.keepAliveInterval) private var keepAliveInterval = 15
-    @AppStorage(DefaultsKeys.udpTimeout) private var udpTimeout = 120
+    @State private var tunStack = UserDefaults.standard.string(forKey: DefaultsKeys.tunStack) ?? "system"
+    @State private var tunMTU = UserDefaults.standard.object(forKey: DefaultsKeys.tunMTU) as? Int ?? 1400
+    @State private var tunDevice = UserDefaults.standard.string(forKey: DefaultsKeys.tunDevice) ?? ""
+    @State private var tunAutoRoute = UserDefaults.standard.object(forKey: DefaultsKeys.tunAutoRoute) as? Bool ?? true
+    @State private var tunAutoDetectInterface = UserDefaults.standard.object(forKey: DefaultsKeys.tunAutoDetectInterface) as? Bool ?? true
+    @State private var keepAliveInterval = UserDefaults.standard.object(forKey: DefaultsKeys.keepAliveInterval) as? Int ?? 15
+    @State private var udpTimeout = UserDefaults.standard.object(forKey: DefaultsKeys.udpTimeout) as? Int ?? 120
 
     // System Proxy Bypass
-    @AppStorage(DefaultsKeys.bypassRules) private var bypassRules = "localhost,127.*,10.*,172.16.*,172.31.*,192.168.*"
+    @State private var bypassRules = UserDefaults.standard.string(forKey: DefaultsKeys.bypassRules) ?? "localhost,127.*,10.*,172.16.0.0/12,192.168.*"
 
     // Custom Routing Rules (highest priority, injected at top of `rules:` — survives subscription updates)
-    @AppStorage(DefaultsKeys.localRules) private var localRules = ""
+    @State private var localRules = UserDefaults.standard.string(forKey: DefaultsKeys.localRules) ?? ""
 
     // MITM Settings
     @ObservedObject private var certManager = CertificateManager.shared
-    @AppStorage(DefaultsKeys.mitmPorts) private var mitmPorts = "80, 443, 8080, 8443"
-    @AppStorage(DefaultsKeys.mitmHosts) private var mitmHosts = ""  // Empty = intercept all hosts
-    @AppStorage(DefaultsKeys.tlsFingerprint) private var tlsFingerprint = "none"
+    @State private var mitmPorts = UserDefaults.standard.string(forKey: DefaultsKeys.mitmPorts) ?? "80, 443, 8080, 8443"
+    @State private var mitmHosts = UserDefaults.standard.string(forKey: DefaultsKeys.mitmHosts) ?? ""
+    @State private var tlsFingerprint = UserDefaults.standard.string(forKey: DefaultsKeys.tlsFingerprint) ?? "none"
 
     @State private var pane: SettingsPane = .general
 
@@ -101,19 +87,44 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            DSPageTabs(titles: SettingsPane.allCases.map(\.title), selection: Binding(
-                get: { SettingsPane.allCases.firstIndex(of: pane) ?? 0 },
-                set: { pane = SettingsPane.allCases[$0] }
-            ))
-            .padding(.horizontal, 30)
+            HStack(spacing: DS.Space.md) {
+                SettingsTabs(titles: SettingsPane.allCases.map(\.title), selection: Binding(
+                    get: { SettingsPane.allCases.firstIndex(of: pane) ?? 0 },
+                    set: { pane = SettingsPane.allCases[$0] }
+                ))
+                Spacer(minLength: DS.Space.sm)
+                if pane != .general {
+                    Button("Discard") { loadNetworkSettings() }
+                        .buttonStyle(.borderless).disabled(!hasPendingChanges)
+                    Button(applying ? "Applying…" : "Apply Changes") { applyChanges() }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(applying || !hasPendingChanges)
+                }
+            }
+            .padding(DS.Space.md)
+            .background(DSSurfaceBackground())
+            .padding(.horizontal, DS.Space.lg)
             .padding(.top, DS.Space.pageTop)
-            .padding(.bottom, 12)
+            .padding(.bottom, DS.Space.md)
+            .frame(maxWidth: 820)
+            .frame(maxWidth: .infinity)
             paneDetail
         }
         .navigationTitle("Settings")
         .frame(minWidth: 640)
         .frame(maxWidth: .infinity)
-        .disabled(appState.isPerformingNetworkOperation)
+        .disabled(appState.isPerformingNetworkOperation || applying)
+        .controlSize(.small)
+        .onAppear { if savedNetworkValues.isEmpty { savedNetworkValues = networkValues }; autoStart = LaunchService.shared.isEnabled(); certManager.checkRootCA() }
+        .alert("Settings could not be applied", isPresented: Binding(get: { settingsError != nil }, set: { if !$0 { settingsError = nil } })) {
+            Button("OK") { settingsError = nil }
+        } message: { Text(settingsError ?? "") }
+        .confirmationDialog("Reset settings to defaults?", isPresented: $confirmReset) {
+            Button("Reset Settings", role: .destructive) { resetSettings() }
+        } message: {
+            Text("This resets preferences and restarts the running core. Subscriptions, trusted certificates and the current TUN state are kept.")
+        }
     }
 
     // MARK: - Detail
@@ -131,9 +142,10 @@ struct SettingsView: View {
 
                 Color.clear.frame(height: DS.Space.xs)
             }
-            .padding(DS.Space.xl)
+            .padding(.horizontal, DS.Space.lg)
+            .padding(.bottom, DS.Space.lg)
             .frame(maxWidth: 820, alignment: .leading)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, alignment: .center)
         }
         .scrollIndicators(.never)
         .background(DS.canvas)
@@ -143,20 +155,20 @@ struct SettingsView: View {
 
     private var generalPane: some View {
         VStack(alignment: .leading, spacing: DS.Space.lg) {
-            paneHeader("General", subtitle: "Startup, appearance and diagnostics")
 
             DSCard {
-                DSCardHeader("Startup & Appearance", icon: "power", subtitle: "Launch behaviour and theme")
+                SettingsSectionTitle("Startup & Appearance", icon: "power")
 
                 VStack(alignment: .leading, spacing: DS.Space.md) {
-                    settingToggle("Start with macOS", isOn: $autoStart)
-                        .onChange(of: autoStart) { _, newValue in
-                            Task {
-                                try? LaunchService.shared.setLaunchAtLogin(enabled: newValue)
-                            }
-                        }
+                    settingToggle("Start with macOS", isOn: Binding(get: { autoStart }, set: { value in
+                        do {
+                            try LaunchService.shared.setLaunchAtLogin(enabled: value)
+                            autoStart = LaunchService.shared.isEnabled()
+                            if value && !autoStart { settingsError = "Allow Ares in System Settings → General → Login Items." }
+                        } catch { settingsError = "Could not change the login item. Check System Settings → General → Login Items." }
+                    }))
 
-                    settingToggle("Silent Start", isOn: $silentStart)
+                    settingToggle("Open in menu bar only", isOn: $silentStart)
 
                     settingRow("Theme") {
                         Picker("Theme", selection: $theme) {
@@ -177,16 +189,25 @@ struct SettingsView: View {
             }
 
             DSCard {
-                DSCardHeader("Menu Bar", icon: "menubar.rectangle")
+                SettingsSectionTitle("Menu Bar", icon: "menubar.rectangle")
                 settingToggle("Show latency next to Ares", isOn: $menuBarShowsLatency)
             }
 
             DSCard {
-                DSCardHeader("Logging", icon: "doc.text.magnifyingglass", subtitle: "Core log verbosity")
+                SettingsSectionTitle("Logging", icon: "doc.text.magnifyingglass")
 
                 VStack(alignment: .leading, spacing: DS.Space.md) {
                     settingRow("Log Level") {
-                        Picker("Log Level", selection: $logLevel) {
+                        Picker("Log Level", selection: Binding(get: { logLevel }, set: { value in
+                            updatingLogLevel = true
+                            Task {
+                                defer { updatingLogLevel = false }
+                                do {
+                                    if clashViewModel.isRunning { try await ClashController.shared.setLogLevel(value) }
+                                    logLevel = value
+                                } catch { settingsError = "Could not update the log level. Previous setting was kept." }
+                            }
+                        })) {
                             Text("Silent").tag("silent")
                             Text("Error").tag("error")
                             Text("Warning").tag("warning")
@@ -196,17 +217,13 @@ struct SettingsView: View {
                         .labelsHidden()
                         .pickerStyle(.menu)
                         .frame(width: 150)
-                        .onChange(of: logLevel) { _, newValue in
-                            Task {
-                                try? await ClashController.shared.setLogLevel(newValue)
-                            }
-                        }
+                        .disabled(updatingLogLevel)
                     }
                 }
             }
 
             DSCard {
-                DSCardHeader("Software Update", icon: "arrow.down.circle")
+                SettingsSectionTitle("Software Update", icon: "arrow.down.circle")
                 settingToggle("Automatically check for updates", isOn: $appUpdates.automaticallyChecks)
                 settingRow("Ares \(appUpdates.currentVersion)") {
                     Button(appUpdates.availableVersion.map { "Update to \($0)…" } ?? "Check for Updates…") {
@@ -219,12 +236,7 @@ struct SettingsView: View {
 
             // Maintenance is isolated and tinted so it never reads as a normal setting.
             DSCard {
-                DSCardHeader(
-                    "Maintenance",
-                    icon: "wrench.and.screwdriver",
-                    subtitle: "Destructive actions",
-                    tint: .statusBad
-                )
+                SettingsSectionTitle("Maintenance", icon: "wrench.and.screwdriver")
 
                 HStack(spacing: DS.Space.sm) {
                     Button("Clear Cache") {
@@ -233,7 +245,7 @@ struct SettingsView: View {
                     .buttonStyle(.bordered)
 
                     Button("Reset to Defaults") {
-                        resetSettings()
+                        confirmReset = true
                     }
                     .buttonStyle(.bordered)
                     .tint(.statusBad)
@@ -241,7 +253,7 @@ struct SettingsView: View {
                     Spacer(minLength: 0)
                 }
 
-                settingNote("Clearing the cache removes cached rule and subscription data. Resetting restores default ports, rules and appearance, then restarts the core.")
+                settingNote("Clears downloaded response cache. Subscriptions and routing data are kept.")
             }
         }
     }
@@ -250,18 +262,9 @@ struct SettingsView: View {
 
     private var networkPane: some View {
         VStack(alignment: .leading, spacing: DS.Space.lg) {
-            paneHeader("Network", subtitle: "Local proxy ports, DNS and fingerprinting") {
-                Button("Restart Clash Core") {
-                    Task {
-                        await clashViewModel.restart()
-                    }
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-            }
 
             DSCard {
-                DSCardHeader("Local Ports", icon: "network", subtitle: "Listeners exposed on this machine")
+                SettingsSectionTitle("Local Ports", icon: "network")
 
                 VStack(alignment: .leading, spacing: DS.Space.md) {
                     settingRow("HTTP Port") {
@@ -275,11 +278,11 @@ struct SettingsView: View {
                     }
                 }
 
-                settingNote("Port changes require a core restart to take effect.")
+                settingNote(tunEnabled ? "TUN uses dedicated ports. These ports apply in normal proxy mode." : "Apply Changes restarts the running core.")
             }
 
             DSCard {
-                DSCardHeader("Traffic", icon: "globe", subtitle: "How the core accepts connections")
+                SettingsSectionTitle("Traffic", icon: "globe")
 
                 VStack(alignment: .leading, spacing: DS.Space.md) {
                     settingToggle("Allow LAN", isOn: $allowLan)
@@ -288,7 +291,7 @@ struct SettingsView: View {
             }
 
             DSCard {
-                DSCardHeader("DNS", icon: "server.rack", subtitle: "Resolvers used by the core")
+                SettingsSectionTitle("DNS", icon: "server.rack")
 
                 VStack(alignment: .leading, spacing: DS.Space.sm) {
                     settingRow("DNS Servers") {
@@ -299,12 +302,12 @@ struct SettingsView: View {
                             .frame(width: 300)
                     }
 
-                    settingNote("Comma-separated resolvers, e.g. 223.5.5.5, 119.29.29.29. Requires a core restart.")
+                    settingNote("Separate resolvers with commas.")
                 }
             }
 
             DSCard {
-                DSCardHeader("TLS Fingerprint", icon: "hand.raised", subtitle: "Browser impersonation")
+                SettingsSectionTitle("TLS Fingerprint", icon: "hand.raised")
 
                 VStack(alignment: .leading, spacing: DS.Space.sm) {
                     settingRow("Profile") {
@@ -318,16 +321,10 @@ struct SettingsView: View {
                         .labelsHidden()
                         .pickerStyle(.menu)
                         .frame(width: 190)
-                        .onChange(of: tlsFingerprint) { _, _ in
-                            Task {
-                                if clashViewModel.isRunning {
-                                    await clashViewModel.restart()
-                                }
-                            }
-                        }
+
                     }
 
-                    settingNote("Mimic browser fingerprints to bypass DPI and reduce drops for AI models.")
+                    settingNote("Default for supported nodes without their own TLS fingerprint.")
                 }
             }
         }
@@ -337,14 +334,13 @@ struct SettingsView: View {
 
     private var tunPane: some View {
         VStack(alignment: .leading, spacing: DS.Space.lg) {
-            paneHeader("TUN", subtitle: "Capture traffic at the network layer")
 
             DSCard {
                 HStack(spacing: DS.Space.md) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Enable TUN Support")
                             .font(DS.Typography.body.weight(.semibold))
-                        Text("All traffic is routed through the core without per-app proxy settings.")
+                        Text("Route device traffic through a virtual interface.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -353,7 +349,10 @@ struct SettingsView: View {
 
                     Toggle("", isOn: Binding(
                         get: { tunEnabled },
-                        set: { _ in appState.toggleTUN() }
+                        set: { _ in
+                            if hasPendingChanges { settingsError = "Apply or discard your changes before switching TUN." }
+                            else { appState.toggleTUN() }
+                        }
                     ))
                     .labelsHidden()
                     .toggleStyle(.switch)
@@ -363,7 +362,7 @@ struct SettingsView: View {
             }
 
             DSCard {
-                DSCardHeader("Interface", icon: "bolt.shield", subtitle: "Stack, MTU and routing")
+                SettingsSectionTitle("Interface", icon: "bolt.shield")
 
                 VStack(alignment: .leading, spacing: DS.Space.md) {
                     settingRow("Network Stack") {
@@ -376,16 +375,16 @@ struct SettingsView: View {
                         .pickerStyle(.menu)
                         .frame(width: 200)
                     }
-                    .disabled(!tunEnabled)
 
-                    settingRow("TUN MTU") {
+
+                    settingRow("MTU (bytes)") {
                         TextField("", value: $tunMTU, format: .number)
                             .textFieldStyle(.roundedBorder)
                             .multilineTextAlignment(.trailing)
                             .font(DS.Typography.body.monospaced())
                             .frame(width: 84)
                     }
-                    .disabled(!tunEnabled)
+
 
                     settingRow("TUN Device") {
                         TextField("Auto", text: $tunDevice)
@@ -394,20 +393,20 @@ struct SettingsView: View {
                             .font(DS.Typography.secondary.monospaced())
                             .frame(width: 120)
                     }
-                    .disabled(!tunEnabled)
 
-                    settingToggle("Auto Route", isOn: $tunAutoRoute, isEnabled: tunEnabled)
-                    settingToggle("Auto Detect Interface", isOn: $tunAutoDetectInterface, isEnabled: tunEnabled)
+
+                    settingToggle("Auto Route", isOn: $tunAutoRoute, isEnabled: true)
+                    settingToggle("Auto Detect Interface", isOn: $tunAutoDetectInterface, isEnabled: true)
                 }
 
-                settingNote("TUN settings are inert until TUN support is enabled.")
+                settingNote("Administrator access is required to enable TUN. Apply Changes restarts the active core.")
             }
 
             DSCard {
-                DSCardHeader("Connection Tuning", icon: "timer", subtitle: "Keep-alive and UDP handling")
+                SettingsSectionTitle("Connection Tuning", icon: "timer")
 
                 VStack(alignment: .leading, spacing: DS.Space.md) {
-                    settingRow("Keep-Alive Interval") {
+                    settingRow("Keep-Alive Interval (s)") {
                         TextField("", value: $keepAliveInterval, format: .number)
                             .textFieldStyle(.roundedBorder)
                             .multilineTextAlignment(.trailing)
@@ -415,7 +414,7 @@ struct SettingsView: View {
                             .frame(width: 84)
                     }
 
-                    settingRow("UDP Timeout") {
+                    settingRow("UDP Timeout (s)") {
                         TextField("", value: $udpTimeout, format: .number)
                             .textFieldStyle(.roundedBorder)
                             .multilineTextAlignment(.trailing)
@@ -425,16 +424,7 @@ struct SettingsView: View {
                 }
             }
 
-            DSCard {
-                DSCardHeader("Notes", icon: "info.circle", subtitle: "Before you enable TUN")
 
-                VStack(alignment: .leading, spacing: DS.Space.sm) {
-                    DSKeyValueRow(label: "Privileges", value: "Administrator required", monospaced: false)
-                    DSKeyValueRow(label: "Mixed stack", value: "System TCP + gVisor UDP", monospaced: false)
-                    DSKeyValueRow(label: "MTU", value: "1400 recommended", monospaced: false)
-                    DSKeyValueRow(label: "Changes", value: "Core restart required", monospaced: false)
-                }
-            }
         }
     }
 
@@ -442,22 +432,22 @@ struct SettingsView: View {
 
     private var mitmPane: some View {
         VStack(alignment: .leading, spacing: DS.Space.lg) {
-            paneHeader("MITM", subtitle: "TLS interception for request inspection")
 
             DSCard {
-                DSCardHeader("Certificate Authority", icon: "lock.shield", subtitle: "Root CA used to sign intercepted hosts")
+                SettingsSectionTitle("Certificate Authority", icon: "lock.shield")
 
                 HStack(spacing: DS.Space.sm) {
                     DSStatusPill(
-                        text: certManager.isRootCAInstalled ? "Installed" : "Not installed",
+                        text: certManager.isRootCAInstalled ? "Trusted" : "Not trusted",
                         status: certManager.isRootCAInstalled ? .good : .critical
                     )
 
                     Spacer(minLength: DS.Space.sm)
 
-                    Button("Install to System") {
+                    Button("Trust Certificate…") {
                         Task {
-                            try? await certManager.installToKeychain()
+                            do { try await certManager.installToKeychain() }
+                            catch { settingsError = "Could not install the certificate. Check the authorization and try again." }
                         }
                     }
                     .buttonStyle(.bordered)
@@ -471,28 +461,28 @@ struct SettingsView: View {
                     .controlSize(.small)
                 }
 
-                settingNote("Interception only works once the Ares root certificate is trusted by the system keychain.")
+                settingNote("Interception only works once the Ares root certificate is trusted in your login keychain.")
             }
 
             DSCard {
-                DSCardHeader("Interception", icon: "arrow.left.arrow.right", subtitle: "What gets decrypted")
+                SettingsSectionTitle("Interception", icon: "arrow.left.arrow.right")
 
                 VStack(alignment: .leading, spacing: DS.Space.sm) {
                     Text("Intercept Ports")
-                        .font(DS.Typography.body.weight(.medium))
+                        .font(DS.Typography.body)
                     TextField("Ports", text: $mitmPorts)
                         .textFieldStyle(.roundedBorder)
                         .font(DS.Typography.secondary.monospaced())
-                    settingNote("Comma-separated ports to intercept, e.g. 80, 443, 8888.")
+                    settingNote("TUN interception ports. Used when the host list is empty.")
                 }
 
                 VStack(alignment: .leading, spacing: DS.Space.sm) {
                     Text("Host Whitelist")
-                        .font(DS.Typography.body.weight(.medium))
+                        .font(DS.Typography.body)
                     TextField("Hosts (empty = all)", text: $mitmHosts)
                         .textFieldStyle(.roundedBorder)
                         .font(DS.Typography.secondary.monospaced())
-                    settingNote("Comma-separated hosts and IPs to intercept, e.g. 10.10.25.251, api.example.com. Leave empty to intercept everything.")
+                    settingNote("Filters captured hosts in proxy mode; controls routing in TUN mode. Empty means all hosts.")
                 }
             }
         }
@@ -502,16 +492,9 @@ struct SettingsView: View {
 
     private var rulesPane: some View {
         VStack(alignment: .leading, spacing: DS.Space.lg) {
-            paneHeader("Rules", subtitle: "Bypass list and custom routing") {
-                Button("Apply Proxy Rules") {
-                    applyProxyRules()
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-            }
 
             DSCard {
-                DSCardHeader("Bypass Domains", icon: "arrow.uturn.left", subtitle: "Traffic that skips the proxy")
+                SettingsSectionTitle("Bypass Domains", icon: "arrow.uturn.left")
 
                 codeEditor($bypassRules, height: 100)
 
@@ -519,51 +502,17 @@ struct SettingsView: View {
             }
 
             DSCard {
-                DSCardHeader("Custom Routing Rules", icon: "list.bullet.rectangle", subtitle: "Highest priority, applied to the top of `rules:`")
+                SettingsSectionTitle("Custom Routing Rules", icon: "list.bullet.rectangle")
 
                 codeEditor($localRules, height: 120)
-                    .onChange(of: localRules) { _, _ in
-                        // Debounce: cancel any pending restart, schedule a new one 1.5s after typing stops.
-                        localRulesRestartTask?.cancel()
-                        localRulesRestartTask = Task {
-                            try? await Task.sleep(nanoseconds: 1_500_000_000)
-                            if Task.isCancelled { return }
-                            if clashViewModel.isRunning {
-                                await clashViewModel.restart()
-                            }
-                        }
-                    }
 
-                settingNote("One rule per line in mihomo syntax, e.g. `DOMAIN-SUFFIX,z.ai,DIRECT`. Survives subscription updates and applies automatically 1.5s after you stop typing.")
+
+                settingNote("One rule per line, e.g. DOMAIN-SUFFIX,example.com,DIRECT. Takes priority over subscription rules. Use Apply Changes to activate.")
             }
         }
     }
 
     // MARK: - Building blocks
-
-    private func paneHeader<Trailing: View>(
-        _ title: String,
-        subtitle: String,
-        @ViewBuilder trailing: () -> Trailing
-    ) -> some View {
-        HStack(spacing: DS.Space.md) {
-            VStack(alignment: .leading, spacing: DS.Space.xxs) {
-                Text(title)
-                    .font(DS.Typography.sectionTitle.weight(.semibold))
-                Text(subtitle)
-                    .font(DS.Typography.metadata)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer(minLength: DS.Space.md)
-
-            trailing()
-        }
-    }
-
-    private func paneHeader(_ title: String, subtitle: String) -> some View {
-        paneHeader(title, subtitle: subtitle) { EmptyView() }
-    }
 
     private func settingRow<Control: View>(
         _ title: String,
@@ -574,17 +523,14 @@ struct SettingsView: View {
         } label: {
             Text(title)
         }
-        .labeledContentStyle(SettingRowStyle())
+        .labeledContentStyle(SettingsRowStyle())
     }
 
     private func settingToggle(_ title: String, isOn: Binding<Bool>, isEnabled: Bool = true) -> some View {
-        Toggle(isOn: isOn) {
-            Text(title)
-                .font(DS.Typography.body.weight(.medium))
-        }
-        .toggleStyle(.switch)
-        .controlSize(.small)
-        .disabled(!isEnabled)
+        LabeledContent(title) {
+            Toggle(title, isOn: isOn).labelsHidden().toggleStyle(.switch)
+                .controlSize(.small).disabled(!isEnabled)
+        }.labeledContentStyle(SettingsRowStyle())
     }
 
     private func settingNote(_ text: String) -> some View {
@@ -625,63 +571,155 @@ struct SettingsView: View {
         panel.begin { response in
             if response == .OK, let url = panel.url {
                 Task {
-                    try? await certManager.exportRootCA(to: url)
+                    do { try await certManager.exportRootCA(to: url) }
+                    catch { settingsError = "Could not export the certificate to this location." }
                 }
             }
         }
     }
 
-    private func applyProxyRules() {
+    private var networkValues: [String: Any] {
+        [
+            DefaultsKeys.socksPort: socksPort.trimmingCharacters(in: .whitespaces),
+            DefaultsKeys.httpPort: httpPort.trimmingCharacters(in: .whitespaces),
+            DefaultsKeys.mixedPort: mixedPort.trimmingCharacters(in: .whitespaces),
+            DefaultsKeys.allowLan: allowLan,
+            DefaultsKeys.ipv6: ipv6,
+            DefaultsKeys.dnsServers: dnsServers,
+            DefaultsKeys.tunStack: tunStack,
+            DefaultsKeys.tunMTU: tunMTU,
+            DefaultsKeys.tunDevice: tunDevice,
+            DefaultsKeys.tunAutoRoute: tunAutoRoute,
+            DefaultsKeys.tunAutoDetectInterface: tunAutoDetectInterface,
+            DefaultsKeys.keepAliveInterval: keepAliveInterval,
+            DefaultsKeys.udpTimeout: udpTimeout,
+            DefaultsKeys.bypassRules: bypassRules,
+            DefaultsKeys.localRules: localRules,
+            DefaultsKeys.mitmPorts: mitmPorts,
+            DefaultsKeys.mitmHosts: mitmHosts,
+            DefaultsKeys.tlsFingerprint: tlsFingerprint
+        ]
+    }
+
+    private var hasPendingChanges: Bool {
+        needsProxyRetry || !NSDictionary(dictionary: networkValues).isEqual(to: savedNetworkValues)
+    }
+
+    @State private var savedNetworkValues: [String: Any] = [:]
+
+    private func loadNetworkSettings() {
+        if let value = savedNetworkValues[DefaultsKeys.socksPort] as? String { socksPort = value }
+        if let value = savedNetworkValues[DefaultsKeys.httpPort] as? String { httpPort = value }
+        if let value = savedNetworkValues[DefaultsKeys.mixedPort] as? String { mixedPort = value }
+        if let value = savedNetworkValues[DefaultsKeys.allowLan] as? Bool { allowLan = value }
+        if let value = savedNetworkValues[DefaultsKeys.ipv6] as? Bool { ipv6 = value }
+        if let value = savedNetworkValues[DefaultsKeys.dnsServers] as? String { dnsServers = value }
+        if let value = savedNetworkValues[DefaultsKeys.tunStack] as? String { tunStack = value }
+        if let value = savedNetworkValues[DefaultsKeys.tunMTU] as? Int { tunMTU = value }
+        if let value = savedNetworkValues[DefaultsKeys.tunDevice] as? String { tunDevice = value }
+        if let value = savedNetworkValues[DefaultsKeys.tunAutoRoute] as? Bool { tunAutoRoute = value }
+        if let value = savedNetworkValues[DefaultsKeys.tunAutoDetectInterface] as? Bool { tunAutoDetectInterface = value }
+        if let value = savedNetworkValues[DefaultsKeys.keepAliveInterval] as? Int { keepAliveInterval = value }
+        if let value = savedNetworkValues[DefaultsKeys.udpTimeout] as? Int { udpTimeout = value }
+        if let value = savedNetworkValues[DefaultsKeys.bypassRules] as? String { bypassRules = value }
+        if let value = savedNetworkValues[DefaultsKeys.localRules] as? String { localRules = value }
+        if let value = savedNetworkValues[DefaultsKeys.mitmPorts] as? String { mitmPorts = value }
+        if let value = savedNetworkValues[DefaultsKeys.mitmHosts] as? String { mitmHosts = value }
+        if let value = savedNetworkValues[DefaultsKeys.tlsFingerprint] as? String { tlsFingerprint = value }
+    }
+
+    private func applyChanges() {
+        if let error = SettingsValidation.error(http: httpPort, socks: socksPort, mixed: mixedPort,
+                                                mtu: tunMTU, keepAlive: keepAliveInterval, udpTimeout: udpTimeout,
+                                                mitmPorts: mitmPorts, dns: dnsServers, device: tunDevice) {
+            settingsError = error
+            return
+        }
+        guard appState.beginOperation("Applying Settings") else { return }
+        applying = true
+        clashViewModel.isToggling = true
+        let previous = savedNetworkValues
+        let proposed = networkValues
         Task {
-            // 0. Refresh MITM Backend whitelist (for display filtering and connection bypass)
+            defer {
+                applying = false
+                clashViewModel.isToggling = false
+                appState.finishOperation()
+            }
+            let defaults = UserDefaults.standard
+            proposed.forEach { defaults.set($0.value, forKey: $0.key) }
+            do {
+                // Validate before touching the running core or its system proxy routes.
+                try await ConfigService.shared.buildConfig(tunEnabled: tunEnabled)
+            } catch {
+                previous.forEach { defaults.set($0.value, forKey: $0.key) }
+                settingsError = "Configuration validation failed. The running core was kept unchanged. Review Logs for details."
+                return
+            }
+            if clashViewModel.isRunning {
+                guard await clashViewModel.stopCore(intendedRestart: true) else {
+                    previous.forEach { defaults.set($0.value, forKey: $0.key) }
+                    try? await ConfigService.shared.buildConfig(tunEnabled: tunEnabled)
+                    settingsError = "Could not stop the core. Previous settings were restored."
+                    return
+                }
+                await clashViewModel.startCore(isRestart: true)
+                guard clashViewModel.runtimeState.isAPIReady else {
+                    guard await clashViewModel.stopCore(intendedRestart: true) else {
+                        settingsError = "The failed core could not be stopped. Review Logs before retrying."
+                        return
+                    }
+                    previous.forEach { defaults.set($0.value, forKey: $0.key) }
+                    await clashViewModel.startCore(isRestart: true)
+                    settingsError = clashViewModel.runtimeState.isAPIReady
+                        ? "The new settings could not start. Previous settings were restored."
+                        : "The core could not restart or recover. Review Logs before enabling the proxy."
+                    return
+                }
+            }
+            needsProxyRetry = false
+            savedNetworkValues = proposed
+            loadNetworkSettings()
             await MITMBackend.shared.refreshDisplayWhitelist()
-
-            // 1. Refresh system proxy with new rules if currently enabled
-            if appState.systemProxyEnabled {
-                _ = await appState.enableSystemProxy()
-            }
-
-            // 2. If TUN mode is active, we MUST restart Clash to rebuild config with new MITM domain rules
-            if tunEnabled {
-                let wasMITMRunning = NetworkMITMService.shared.isRunning
-
-                // Stop MITM first to prevent errors during Clash restart
-                if wasMITMRunning {
-                    await NetworkMITMService.shared.stop()
-                }
-
-                await clashViewModel.restart()
-
-                // Restart MITM only when it was actually running before the rebuild.
-                if wasMITMRunning {
-                    try? await Task.sleep(nanoseconds: 1_000_000_000) // 1s wait for Core stability
-                    await NetworkMITMService.shared.start()
+            if NetworkMITMService.shared.isRunning {
+                guard await NetworkMITMService.shared.updateUpstream(tunEnabled: tunEnabled) else {
+                    settingsError = "Could not update the MITM upstream port."; return
                 }
             }
-
-            clashViewModel.addLog("[Settings] ✅ Proxy rules applied")
+            if appState.systemProxyEnabled, !(await appState.enableSystemProxy()) {
+                settingsError = "Core settings were applied, but the system proxy could not be updated. Retry Apply Changes."
+                needsProxyRetry = true // Keep retry available.
+            }
         }
     }
 
     private func clearCache() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let cacheDir = appSupport.appendingPathComponent("Ares/cache")
-        try? FileManager.default.removeItem(at: cacheDir)
+        URLCache.shared.removeAllCachedResponses()
+        do {
+            if FileManager.default.fileExists(atPath: cacheDir.path) { try FileManager.default.removeItem(at: cacheDir) }
+        } catch { settingsError = "Could not clear the temporary cache."; return }
         clashViewModel.addLog("[Settings] Cache cleared", level: .debug)
     }
 
     private func resetSettings() {
+        do {
+            if LaunchService.shared.isEnabled() { try LaunchService.shared.setLaunchAtLogin(enabled: false) }
+            autoStart = LaunchService.shared.isEnabled()
+        } catch { settingsError = "Could not reset the login item."; return }
         httpPort = "\(ClashPorts.defaultHttp)"
         socksPort = "\(ClashPorts.defaultSocks)"
         mixedPort = "\(ClashPorts.defaultMixed)"
         allowLan = false
         ipv6 = false
         logLevel = "info"
-        autoStart = false
         silentStart = true
         theme = "system"
+        ThemeService.shared.theme = "system"
+        appUpdates.automaticallyChecks = true
         menuBarShowsLatency = false
-        bypassRules = "localhost,127.*,10.*,172.16.*,172.31.*,192.168.*"
+        bypassRules = "localhost,127.*,10.*,172.16.0.0/12,192.168.*"
         localRules = ""
         tunStack = "system"
         tunMTU = 1400
@@ -692,8 +730,9 @@ struct SettingsView: View {
         udpTimeout = 120
         dnsServers = "223.5.5.5, 119.29.29.29"
 
-        Task {
-            await clashViewModel.restart()
-        }
+        mitmPorts = "80, 443, 8080, 8443"
+        mitmHosts = ""
+        tlsFingerprint = "none"
+        applyChanges()
     }
 }

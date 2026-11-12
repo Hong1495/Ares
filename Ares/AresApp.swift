@@ -22,7 +22,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         registerWorkspaceObservers()
 
         // Handle Silent Start
-        let silent = UserDefaults.standard.bool(forKey: DefaultsKeys.silentStart)
+        let silent = UserDefaults.standard.object(forKey: DefaultsKeys.silentStart) as? Bool ?? true
         if silent {
             ClashViewModel.shared.addLog("[AppDelegate] Silent start enabled - hiding application", level: .debug)
             // Hide the entire application from foreground
