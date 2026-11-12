@@ -27,7 +27,7 @@ SOURCES=(
   "$ROOT/Ares/UI/DesignSystem/ProxyNodeTile.swift"
   "$ROOT/DesignPreview/AresDesignPreview.swift"
 )
-if rg -n 'AppState|ClashController|ClashViewModel|AppDelegate|URLSession|NWListener|Process\(|UserDefaults|AppStorage|CertificateManager|SystemProxyManager|NetworkMITMService' "${SOURCES[@]}"; then
+if /usr/bin/grep -nE 'AppState|ClashController|ClashViewModel|AppDelegate|URLSession|NWListener|Process\(|UserDefaults|AppStorage|CertificateManager|SystemProxyManager|NetworkMITMService' "${SOURCES[@]}"; then
   echo "Preview isolation check failed: production dependency found." >&2
   exit 1
 fi
