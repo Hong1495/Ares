@@ -1,14 +1,12 @@
 import SwiftUI
 
-/// Primary proxy group with live latency. Reads the adaptive group so it works
+/// Primary proxy group. Reads the adaptive group so it works
 /// across subscription naming conventions.
 struct CurrentProxyCard: View {
     @EnvironmentObject var clashController: ClashController
     @EnvironmentObject var clashViewModel: ClashViewModel
     @EnvironmentObject var appState: AppState
 
-    @State private var latency: Int?
-    @State private var isTesting = false
 
     var body: some View {
         DSCard(padding: 0, spacing: DS.Space.md) {
@@ -16,17 +14,7 @@ struct CurrentProxyCard: View {
                 "Proxy",
                 icon: "server.rack",
                 tint: .seriesDown
-            ) {
-                Button {
-                    Task { await testNow() }
-                } label: {
-                    Image(systemName: "bolt.horizontal")
-                        .font(DS.Typography.metadata.weight(.semibold))
-                }
-                .buttonStyle(.borderless)
-                .disabled(isTesting || !clashViewModel.isRunning)
-                .help("Measure latency")
-            }
+            )
 
             if appState.currentMode == .direct {
                 HStack(spacing: DS.Space.sm) {
@@ -53,19 +41,7 @@ struct CurrentProxyCard: View {
 
                     Spacer(minLength: DS.Space.sm)
 
-                    if isTesting {
-                        ProgressView().controlSize(.mini)
-                    } else {
-                        HStack(alignment: .lastTextBaseline, spacing: 2) {
-                            Text(latency.map(String.init) ?? "--")
-                                .font(DS.Typography.metric)
-                                .monospacedDigit()
-                                .foregroundStyle(Color.latency(latency))
-                            Text("ms")
-                                .font(DS.Typography.caption.weight(.medium))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
+
                 }
             } else {
                 HStack(spacing: DS.Space.sm) {
@@ -81,7 +57,6 @@ struct CurrentProxyCard: View {
 
 
         }
-        .task { await pollLatency() }
     }
 
     // MARK: - Data
@@ -98,21 +73,4 @@ struct CurrentProxyCard: View {
         return groups.first { $0.type == "Selector" }
     }
 
-    private func pollLatency() async {
-        while !Task.isCancelled {
-            await testNow()
-            try? await Task.sleep(nanoseconds: 10_000_000_000)
-        }
-    }
-
-    private func testNow() async {
-        guard clashViewModel.isRunning, !clashViewModel.isToggling else { return }
-        guard let node = group?.now else { return }
-        await MainActor.run { isTesting = true }
-        let result = try? await clashController.testProxyDelay(name: node, timeout: 2000)
-        await MainActor.run {
-            withAnimation(.easeOut(duration: 0.2)) { latency = result }
-            isTesting = false
-        }
-    }
 }

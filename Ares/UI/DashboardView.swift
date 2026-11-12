@@ -18,7 +18,6 @@ struct DashboardView: View {
                 ControlCenterCard()
             } details: {
                 CurrentProxyCard()
-                ExitIdentityCard()
                 ConnectivityCard()
             } advanced: {
                 SubscriptionCard()
@@ -29,7 +28,12 @@ struct DashboardView: View {
                 SystemInfoCard()
             }
         }
-        .navigationTitle("Dashboard")
+        .navigationTitle("")
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                DashboardIdentityView().padding(.leading, 16)
+            }.aresUnframed()
+        }
     }
 
     private var runtimeStatus: DSStatus {

@@ -11,7 +11,6 @@ extension AppState.NavigationItem {
         case .rules: return "list.bullet.indent"
         case .subscriptions: return "rectangle.stack"
         case .topology: return "point.3.connected.trianglepath.dotted"
-        case .routeMap: return "globe.americas"
         case .analysis: return "waveform.path.ecg.rectangle"
         case .logs: return "text.alignleft"
         case .settings: return "gearshape"
@@ -24,9 +23,9 @@ struct DSSidebarSection: Identifiable {
     let items: [AppState.NavigationItem]
 
     static let all: [DSSidebarSection] = [
-        .init(id: "Monitoring", items: [.connections, .routeMap]),
+        .init(id: "Monitoring", items: [.dashboard, .connections]),
         .init(id: "Proxy", items: [.proxies, .rules, .subscriptions]),
         .init(id: "Developer", items: [.analysis, .logs]),
-        .init(id: "Preferences", items: [.dashboard, .settings])
+        .init(id: "Preferences", items: [.settings])
     ]
 }

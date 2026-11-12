@@ -35,7 +35,7 @@ struct MainView: View {
             detail
                 .frame(minWidth: 680, minHeight: 540)
                 .background(DS.canvas)
-                .navigationTitle(appState.selection == .connections || appState.selection == .topology ? "" : appState.selection.displayName)
+                .navigationTitle(appState.selection == .dashboard || appState.selection == .connections || appState.selection == .topology ? "" : appState.selection.displayName)
         }
         .toolbarBackground(.hidden, for: .windowToolbar)
         .background(SidebarToolbarAppearance())
@@ -69,8 +69,6 @@ struct MainView: View {
             ActivityWorkspaceView()
         case .topology:
             ActivityWorkspaceView()
-        case .routeMap:
-            RouteMapPageView()
         case .analysis:
             AnalysisView()
         case .logs:

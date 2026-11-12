@@ -24,7 +24,7 @@ struct AresDesignPreview: App {
 struct PreviewWorkspace: View {
     @State private var showUpdate = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
-    @State private var page = "Activity"
+    @State private var page = "Dashboard"
     @State private var dark = false
     @State private var enabled = true
     @State private var tun = false
@@ -41,14 +41,13 @@ struct PreviewWorkspace: View {
     @State private var theme = 0
 
     private let destinations = [
+        WorkspaceDestination(id: "Dashboard", title: "Dashboard", icon: "gauge.with.dots.needle.50percent", section: "Monitoring"),
         WorkspaceDestination(id: "Activity", title: "Activity", icon: "arrow.up.arrow.down", section: "Monitoring"),
-        WorkspaceDestination(id: "Routing", title: "Routing", icon: "globe.americas", section: "Monitoring"),
         WorkspaceDestination(id: "Proxies", title: "Proxies", icon: "network", section: "Proxy"),
         WorkspaceDestination(id: "Rules", title: "Rules", icon: "list.bullet.indent", section: "Proxy"),
         WorkspaceDestination(id: "Subscriptions", title: "Subscriptions", icon: "rectangle.stack", section: "Proxy"),
         WorkspaceDestination(id: "Analysis", title: "Analysis", icon: "waveform.path.ecg.rectangle", section: "Developer"),
         WorkspaceDestination(id: "Logs", title: "Logs", icon: "text.alignleft", section: "Developer"),
-        WorkspaceDestination(id: "Dashboard", title: "Dashboard", icon: "gauge.with.dots.needle.50percent", section: "Preferences"),
         WorkspaceDestination(id: "Settings", title: "Settings", icon: "slider.horizontal.3", section: "Preferences")
     ]
 
@@ -79,8 +78,13 @@ struct PreviewWorkspace: View {
             }
             .frame(minWidth: 650, minHeight: 540)
             .background(DS.canvas)
-            .navigationTitle(page == "Activity" ? "" : page)
+            .navigationTitle(page == "Activity" || page == "Dashboard" ? "" : page)
             .toolbar {
+                if page == "Dashboard" {
+                    ToolbarItem(placement: .navigation) {
+                        DashboardTitleSummary(country: empty ? nil : "JP", ip: empty ? "—" : "203.0.113.24", latency: empty || mode == 2 ? nil : 38).padding(.leading, 16)
+                    }.aresUnframed()
+                }
                 if page == "Activity" {
                     ActivityTitleToolbar(count: tab == 0 ? 9 : 13,
                                          topologySummary: tab == 0 ? "9 processes · 3 rule types · 2 routes · 18 targets" : nil,
@@ -112,32 +116,14 @@ struct PreviewWorkspace: View {
             OverviewConnectionCard(snapshot: snapshot, systemProxy: $enabled, tun: $tun, interception: $inspection, mode: $mode)
         } details: {
             DSCard(padding: 0) {
-                DSCardHeader("Proxy", icon: "server.rack") {
-                    Button { measured.toggle() } label: { Image(systemName: "bolt.horizontal") }.buttonStyle(.borderless).help("Measure latency")
-                }
+                DSCardHeader("Proxy", icon: "server.rack")
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(mode == 2 ? "Direct connection" : (empty ? "No active proxy" : selectedNode)).font(DS.Typography.body.weight(.semibold))
                         if mode != 2 { Text("Automatic selection").font(DS.Typography.metadata).foregroundStyle(.secondary) }
                     }
                     Spacer()
-                    if mode != 2 {
-                        HStack(alignment: .lastTextBaseline, spacing: 2) {
-                            Text(empty ? "—" : (measured ? "42" : "38")).font(DS.Typography.metric).foregroundStyle(Color.statusGood)
-                            Text("ms").font(DS.Typography.caption).foregroundStyle(.secondary)
-                        }
-                    }
                 }
-            }
-            DSCard(padding: 0) {
-                DSCardHeader("IP address", icon: "globe.americas") {
-                    Button { measured.toggle() } label: { Image(systemName: "arrow.clockwise") }.buttonStyle(.borderless).help("Refresh public IP")
-                }
-                HStack {
-                    Text(empty ? "—" : "203.0.113.24").font(DS.Typography.title.monospaced().weight(.semibold))
-                    if !empty { DSTag(text: "JP", tint: .secondary) }
-                }
-                DSKeyValueRow(label: "Local", value: "192.0.2.10 · Wi-Fi")
             }
             DSCard(padding: 0, spacing: DS.Space.sm) {
                 DSCardHeader("Reachability", icon: "antenna.radiowaves.left.and.right") {
@@ -207,9 +193,6 @@ struct PreviewWorkspace: View {
                     ContentUnavailableView("No active connections", systemImage: "point.3.connected.trianglepath.dotted", description: Text("Applications and their connections appear here."))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else { activityPage }
-            } else if page == "Routing" {
-                ContentUnavailableView("No active routes", systemImage: "point.3.connected.trianglepath.dotted", description: Text("Route activity appears here while connections are open."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity).background(DSSurfaceBackground())
             } else {
                 activityPage
             }
@@ -227,7 +210,6 @@ struct PreviewWorkspace: View {
         case "Settings": return "Make Ares feel at home on your Mac."
         case "Logs": return "A quiet record of what happens along the way."
         case "Topology": return "Follow the connections between apps and destinations."
-        case "Routing": return "A wider view of where your traffic travels."
         default: return "Look closer at the requests behind each connection."
         }
     }

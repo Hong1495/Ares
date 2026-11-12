@@ -22,7 +22,6 @@ class AppState: ObservableObject {
         case connections
         case analysis
         case topology
-        case routeMap
         case logs
         case settings
 
@@ -35,13 +34,12 @@ class AppState: ObservableObject {
             case .connections: return "Activity"
             case .analysis: return "Analysis"
             case .topology: return "Topology"
-            case .routeMap: return "Routing"
             case .logs: return "Logs"
             case .settings: return "Settings"
             }
         }
     }
-    @Published var selection: NavigationItem = .connections
+    @Published var selection: NavigationItem = .dashboard
     @Published var animationsEnabled: Bool = true
     var isForeground = true
     var didSendInitialWake = false
