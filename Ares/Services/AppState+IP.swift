@@ -8,7 +8,7 @@ extension AppState {
         // Do not pair a newly observed IP with the previous exit country.
         if let newCountry = country {
             countryCode = newCountry
-        } else if changed || ip == "Offline" {
+        } else if changed || !ExitIdentity.isAddress(ip) {
             countryCode = nil
         }
     }

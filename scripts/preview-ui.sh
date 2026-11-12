@@ -7,6 +7,7 @@ mkdir -p "$APP/Contents/MacOS"
 # Explicit allowlist: never compile AresApp, AppDelegate, services, models,
 # production page wrappers, resources, or core binaries into this executable.
 SOURCES=(
+  "$ROOT/Ares/Utilities/ExitIdentity.swift"
   "$ROOT/Ares/UI/DesignSystem/DashboardTitleSummary.swift"
   "$ROOT/Ares/UI/DesignSystem/SettingsPresentation.swift"
   "$ROOT/DesignPreview/SettingsPreview.swift"

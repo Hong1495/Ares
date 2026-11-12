@@ -49,7 +49,7 @@ class AppState: ObservableObject {
     @Published var tunEnabled = false
 
     // IP Information (Shared across components)
-    @Published var publicIP: String = "Fetching..."
+    @Published var publicIP: String = "—"
     @Published var countryCode: String?
 
     // Toggle state guards to prevent race conditions during fast switching
