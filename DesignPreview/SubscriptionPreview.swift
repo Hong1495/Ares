@@ -35,16 +35,24 @@ struct PreviewProfile {
     func reportError(_ message: String) { assertionFailure(message) }
 }
 @main struct SubscriptionPreview: App {
+    @State private var showingSettings = false
+    @Environment(\.openWindow) private var openWindow
     @StateObject private var controller = ClashController()
     @StateObject private var profiles = ProfileService()
     @StateObject private var runtime = ClashViewModel()
     var body: some Scene {
-        WindowGroup("Ares · Offline subscription preview") {
+        WindowGroup("Ares · Offline subscription preview", id: "main") {
             ProxiesView()
                 .environmentObject(controller)
                 .environmentObject(profiles)
                 .environmentObject(runtime)
                 .frame(minWidth: 1000, minHeight: 700)
+                .alert("Settings preview", isPresented: $showingSettings) {
+                    Button("Done", role: .cancel) { }
+                } message: { Text("Native Settings menu action received. No production service is running.") }
         }.defaultSize(width: 1100, height: 760)
+        .commands {
+            WorkspaceCommands(showSettings: { showingSettings = true }, showMainWindow: { openWindow(id: "main") })
+        }
     }
 }

@@ -65,13 +65,16 @@ final class SettingsViewSourceTests: XCTestCase {
         XCTAssertTrue(source.contains("static func adaptive("))
     }
 
-    func testAppRunsAsMenuBarAgent() throws {
+    func testAppShowsNativeMenuAndRemainsRunningWhenWindowCloses() throws {
         let projectSource = try String(contentsOf: projectRoot.appendingPathComponent("Ares.xcodeproj/project.pbxproj"))
         let appSource = try String(contentsOf: projectRoot.appendingPathComponent("Ares/AresApp.swift"))
-        let setting = "INFOPLIST_KEY_LSUIElement = YES;"
+        let setting = "INFOPLIST_KEY_LSUIElement = NO;"
 
         XCTAssertEqual(projectSource.components(separatedBy: setting).count - 1, 2)
         XCTAssertTrue(appSource.contains("ProcessInfo.processInfo.disableAutomaticTermination"))
+        XCTAssertFalse(projectSource.contains("INFOPLIST_KEY_LSUIElement = YES;"))
+        XCTAssertTrue(appSource.contains("func applicationShouldTerminateAfterLastWindowClosed"))
+        XCTAssertTrue(appSource.contains("WorkspaceCommands("))
     }
 
     func testAppSourcesDoNotUseConsolePrint() throws {

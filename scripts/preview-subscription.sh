@@ -15,6 +15,7 @@ xcrun swiftc -parse-as-library -target arm64-apple-macosx14.0 \
   "$ROOT/Ares/Models/ProxyModels.swift" \
   "$ROOT/Ares/UI/DesignSystem/DesignSystem.swift" \
   "$ROOT/Ares/UI/DesignSystem/ProxyNodeTile.swift" \
+  "$ROOT/Ares/UI/DesignSystem/WorkspaceCommands.swift" \
   "$ROOT/Ares/UI/ProxiesView.swift" \
   "$ROOT/DesignPreview/SubscriptionPreview.swift" \
   "${OBJECTS[@]}" -o "$APP/Contents/MacOS/SubscriptionPreview"

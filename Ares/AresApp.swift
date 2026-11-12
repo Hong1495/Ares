@@ -32,6 +32,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        // Closing the workspace must not interrupt the proxy service.
+        false
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if AppTerminationCoordinator.shared.updateShutdownPrepared { return .terminateNow }
         guard !isTerminatingAfterCleanup else { return .terminateNow }
@@ -263,6 +268,10 @@ struct AresApp: App {
                 }
         }
         .commands {
+            WorkspaceCommands(
+                showSettings: { WindowAccessor.showMainWindow(selection: .settings) },
+                showMainWindow: { WindowAccessor.showMainWindow(selection: nil) }
+            )
             // Disable "New Window" to enforce single window behavior
             CommandGroup(replacing: .newItem) { }
             CommandGroup(after: .appInfo) {
