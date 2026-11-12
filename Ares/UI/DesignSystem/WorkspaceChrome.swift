@@ -158,7 +158,12 @@ final class SidebarToolbarAppearanceView: NSView {
 
     func scheduleUpdate() {
         DispatchQueue.main.async { [weak self] in
-            guard let toolbar = self?.window?.toolbar else { return }
+            guard let window = self?.window else { return }
+            // Let the content canvas continue through the native title bar.
+            window.titlebarAppearsTransparent = true
+            window.titlebarSeparatorStyle = .none
+            window.backgroundColor = NSColor(DS.canvas)
+            guard let toolbar = window.toolbar else { return }
             for item in toolbar.items where item.itemIdentifier == .toggleSidebar || item.itemIdentifier.rawValue == "com.apple.SwiftUI.navigationSplitView.toggleSidebar" {
                 item.isBordered = false
                 if !(item.view is NSButton) {

@@ -37,6 +37,7 @@ struct MainView: View {
                 .background(DS.canvas)
                 .navigationTitle(appState.selection.displayName)
         }
+        .toolbarBackground(.hidden, for: .windowToolbar)
         .background(SidebarToolbarAppearance())
         .background(WindowUpdateIndicator(version: appUpdates.availableVersion, action: appUpdates.checkForUpdates))
         .alert("Operation failed", isPresented: Binding(

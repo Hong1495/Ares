@@ -73,6 +73,7 @@ struct PreviewWorkspace: View {
             .background(DS.canvas)
             .navigationTitle(page)
         }
+        .toolbarBackground(.hidden, for: .windowToolbar)
         .background(SidebarToolbarAppearance())
         .background(WindowUpdateIndicator(version: "1.1") { showUpdate = true })
         .alert("Ares 1.1 is available", isPresented: $showUpdate) {
