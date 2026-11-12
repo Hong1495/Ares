@@ -7,7 +7,9 @@ extension AppState.NavigationItem {
         switch self {
         case .dashboard: return "gauge.with.dots.needle.50percent"
         case .connections: return "arrow.up.arrow.down"
-        case .policies: return "slider.horizontal.3"
+        case .proxies: return "network"
+        case .rules: return "list.bullet.indent"
+        case .subscriptions: return "rectangle.stack"
         case .topology: return "point.3.connected.trianglepath.dotted"
         case .routeMap: return "globe.americas"
         case .analysis: return "waveform.path.ecg.rectangle"
@@ -22,7 +24,8 @@ struct DSSidebarSection: Identifiable {
     let items: [AppState.NavigationItem]
 
     static let all: [DSSidebarSection] = [
-        .init(id: "Workspace", items: [.connections, .policies]),
+        .init(id: "Workspace", items: [.connections]),
+        .init(id: "Proxy", items: [.proxies, .rules, .subscriptions]),
         .init(id: "Explore", items: [.routeMap]),
         .init(id: "Developer", items: [.analysis, .logs]),
         .init(id: "Preferences", items: [.dashboard, .settings])

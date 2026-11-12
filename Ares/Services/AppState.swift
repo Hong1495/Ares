@@ -16,7 +16,9 @@ class AppState: ObservableObject {
     // Navigation State
     enum NavigationItem: Hashable {
         case dashboard
-        case policies
+        case proxies
+        case rules
+        case subscriptions
         case connections
         case analysis
         case topology
@@ -27,7 +29,9 @@ class AppState: ObservableObject {
         var displayName: String {
             switch self {
             case .dashboard: return "Dashboard"
-            case .policies: return "Proxy & Rules"
+            case .proxies: return "Proxies"
+            case .rules: return "Rules"
+            case .subscriptions: return "Subscriptions"
             case .connections: return "Activity"
             case .analysis: return "Analysis"
             case .topology: return "Topology"

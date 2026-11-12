@@ -2,68 +2,20 @@ import SwiftUI
 
 struct TopologyPageView: View {
     @EnvironmentObject var clashController: ClashController
-    @EnvironmentObject var appState: AppState
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider().opacity(0.6)
-
-            TopologyView()
-                .padding(DS.Space.lg)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(DS.canvas)
-        }
-        .background(DS.canvas)
-
+        TopologyView()
+            .padding(DS.Space.lg)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(DS.canvas)
+            .toolbar {
+                ActivityTitleToolbar(count: Set(clashController.activeChains.map(\.sourceProcess)).count)
+            }
         .onAppear {
             Task { await clashController.monitorConnections() }
         }
     }
 
-    private var header: some View {
-        HStack(spacing: DS.Space.lg) {
-            HStack(spacing: 5) {
-                Text("Processes")
-                    .font(DS.Typography.metadata)
-                    .foregroundStyle(.secondary)
-                Text("\(Set(clashController.activeChains.map(\.sourceProcess)).count)")
-                    .font(DS.Typography.metadata.monospaced().weight(.semibold))
-            }
-
-            Divider().frame(height: 12)
-
-            HStack(spacing: 5) {
-                Circle().fill(Color.seriesDown).frame(width: 6, height: 6)
-                Text("Download")
-                    .font(DS.Typography.metadata)
-                    .foregroundStyle(.secondary)
-            }
-
-            HStack(spacing: 5) {
-                Circle().fill(Color.seriesUp).frame(width: 6, height: 6)
-                Text("Upload")
-                    .font(DS.Typography.metadata)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer(minLength: 0)
-
-            Button {
-                appState.animationsEnabled.toggle()
-            } label: {
-                Label(
-                    appState.animationsEnabled ? "Pause" : "Animate",
-                    systemImage: appState.animationsEnabled ? "pause.fill" : "play.fill"
-                )
-                .font(DS.Typography.metadata.weight(.medium))
-            }
-            .buttonStyle(.borderless)
-            .help("Toggle traffic animation")
-        }
-        .padding(.horizontal, DS.Space.xl)
-        .padding(.vertical, DS.Space.md)
-    }
 }
 
 /// Kept for compatibility with call sites that render a compact stat chip.

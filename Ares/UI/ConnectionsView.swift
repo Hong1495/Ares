@@ -57,7 +57,11 @@ struct ConnectionsView: View {
                     .frame(minWidth: 280, maxWidth: 400)
             }
         }
-        .navigationTitle("Activity")
+        .toolbar {
+            ActivityTitleToolbar(count: viewModel.groupedNodes.count,
+                                 download: formatBytes(viewModel.totalDownload),
+                                 upload: formatBytes(viewModel.totalUpload))
+        }
         .task {
             // Initial Start (Defer slightly to let UI settle)
             try? await Task.sleep(nanoseconds: 200_000_000)
@@ -93,45 +97,6 @@ struct ConnectionsView: View {
             .pickerStyle(.segmented)
             .controlSize(.small)
             .frame(minWidth: 240, idealWidth: 320)
-
-            // Stats Summary
-            HStack(spacing: DS.Space.md) {
-                HStack(spacing: DS.Space.xs) {
-                    Text("\(viewModel.groupedNodes.count)")
-                        .font(DS.Typography.secondary.monospaced().weight(.medium))
-                        .monospacedDigit()
-                        .foregroundStyle(.primary)
-                    Text("items")
-                        .font(DS.Typography.metadata)
-                        .foregroundStyle(.secondary)
-                }
-
-                Divider().frame(height: 14)
-
-                HStack(spacing: DS.Space.xs) {
-                    Image(systemName: "arrow.down")
-                        .font(DS.Typography.caption.weight(.semibold))
-                        .foregroundStyle(Color.seriesDown)
-                    Text(formatBytes(viewModel.totalDownload))
-                        .font(DS.Typography.secondary.monospaced().weight(.medium))
-                        .monospacedDigit()
-                        .foregroundStyle(.primary)
-                }
-                .help("Total download")
-
-                Divider().frame(height: 14)
-
-                HStack(spacing: DS.Space.xs) {
-                    Image(systemName: "arrow.up")
-                        .font(DS.Typography.caption.weight(.semibold))
-                        .foregroundStyle(Color.seriesUp)
-                    Text(formatBytes(viewModel.totalUpload))
-                        .font(DS.Typography.secondary.monospaced().weight(.medium))
-                        .monospacedDigit()
-                        .foregroundStyle(.primary)
-                }
-                .help("Total upload")
-            }
 
             Spacer(minLength: DS.Space.sm)
 

@@ -40,7 +40,7 @@ struct ProfilesView: View {
         }
         .scrollIndicators(.never)
         .background(DS.canvas)
-        .navigationTitle("Profiles")
+        .navigationTitle("Subscriptions")
         .sheet(isPresented: $showingAddSheet) {
             AddProfileSheet(
                 name: $newProfileName,

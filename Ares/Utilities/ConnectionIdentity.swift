@@ -33,7 +33,7 @@ nonisolated struct ConnectionIdentity: Equatable, Sendable {
     }
 
     var isAres: Bool {
-        name == "Ares" || name == "clash-meta" || name == "com.herastudio.ares" || name == "com.ares.Ares"
+        name == "Ares" || name == "clash-meta" || name == "mihomo" || name == "com.herastudio.ares" || name == "com.ares.Ares"
     }
 }
 

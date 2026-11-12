@@ -12,11 +12,11 @@ struct ActivityWorkspaceView: View {
                 ConnectionsView()
             }
         }
-        .navigationTitle("Activity")
+        .navigationTitle("")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 ActivityViewPicker(selection: $selection)
-            }
+            }.aresUnframed()
         }
     }
 }

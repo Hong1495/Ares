@@ -35,7 +35,7 @@ struct MainView: View {
             detail
                 .frame(minWidth: 680, minHeight: 540)
                 .background(DS.canvas)
-                .navigationTitle(appState.selection.displayName)
+                .navigationTitle(appState.selection == .connections || appState.selection == .topology ? "" : appState.selection.displayName)
         }
         .toolbarBackground(.hidden, for: .windowToolbar)
         .background(SidebarToolbarAppearance())
@@ -59,8 +59,12 @@ struct MainView: View {
         switch appState.selection {
         case .dashboard:
             DashboardView()
-        case .policies:
-            PoliciesView()
+        case .proxies:
+            ProxiesView()
+        case .rules:
+            RulesView()
+        case .subscriptions:
+            ProfilesView()
         case .connections:
             ActivityWorkspaceView()
         case .topology:

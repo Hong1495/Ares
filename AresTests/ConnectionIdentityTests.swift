@@ -1,6 +1,14 @@
 import XCTest
 
 final class ConnectionIdentityTests: XCTestCase {
+    func testProxyCoreTrafficIsExcludedFromActivity() {
+        for path in ["/Users/example/Library/Application Support/Ares/Core/mihomo", "/Applications/Ares.app/Contents/Resources/clash-meta", "/usr/local/bin/mihomo"] {
+            XCTAssertTrue(ConnectionIdentity(path: path, process: nil, source: "127.0.0.1").isAres)
+        }
+        XCTAssertTrue(ConnectionIdentity(path: nil, process: "mihomo", source: "127.0.0.1").isAres)
+        XCTAssertFalse(ConnectionIdentity(path: "/Applications/mihomo-tools.app/Contents/MacOS/helper", process: "helper", source: "").isAres)
+        XCTAssertFalse(ConnectionIdentity(path: nil, process: "mihomo-helper", source: "").isAres)
+    }
     func testHelperUsesOuterAppAndProcessNameFallback() {
         let helper = ConnectionIdentity(path: "/Applications/Browser.app/Contents/Frameworks/Helper.app/Contents/MacOS/Helper", process: "Helper", source: "127.0.0.1")
         XCTAssertEqual(helper.name, "Browser")

@@ -41,7 +41,9 @@ struct PreviewWorkspace: View {
 
     private let destinations = [
         WorkspaceDestination(id: "Activity", title: "Activity", icon: "arrow.up.arrow.down", section: "Workspace"),
-        WorkspaceDestination(id: "Proxy & Rules", title: "Proxy & Rules", icon: "slider.horizontal.3", section: "Workspace"),
+        WorkspaceDestination(id: "Proxies", title: "Proxies", icon: "network", section: "Proxy"),
+        WorkspaceDestination(id: "Rules", title: "Rules", icon: "list.bullet.indent", section: "Proxy"),
+        WorkspaceDestination(id: "Subscriptions", title: "Subscriptions", icon: "rectangle.stack", section: "Proxy"),
         WorkspaceDestination(id: "Routing", title: "Routing", icon: "globe.americas", section: "Explore"),
         WorkspaceDestination(id: "Analysis", title: "Analysis", icon: "waveform.path.ecg.rectangle", section: "Developer"),
         WorkspaceDestination(id: "Logs", title: "Logs", icon: "text.alignleft", section: "Developer"),
@@ -76,12 +78,15 @@ struct PreviewWorkspace: View {
             }
             .frame(minWidth: 650, minHeight: 540)
             .background(DS.canvas)
-            .navigationTitle(page)
+            .navigationTitle(page == "Activity" ? "" : page)
             .toolbar {
                 if page == "Activity" {
+                    ActivityTitleToolbar(count: tab == 0 ? 9 : 13,
+                                         download: tab == 0 ? nil : "1.3 MB",
+                                         upload: tab == 0 ? nil : "3.6 MB")
                     ToolbarItem(placement: .primaryAction) {
                         ActivityViewPicker(selection: $tab)
-                    }
+                    }.aresUnframed()
                 }
             }
         }
@@ -191,8 +196,7 @@ struct PreviewWorkspace: View {
 
     private var secondaryPage: some View {
         VStack(alignment: .leading, spacing: 22) {
-            if page == "Proxy & Rules" {
-                DSPageTabs(titles: ["Proxies", "Rules", "Subscriptions"], selection: $tab)
+            if ["Proxies", "Rules", "Subscriptions"].contains(page) {
                 proxyPage
             } else if page == "Settings" {
                 DSPageTabs(titles: ["General", "Network", "TUN", "MITM", "Rules"], selection: $tab)
@@ -226,7 +230,7 @@ struct PreviewWorkspace: View {
     }
 
     @ViewBuilder private var proxyPage: some View {
-        if tab == 0 {
+        if page == "Proxies" {
             HStack {
                 TextField("Search nodes", text: $search).textFieldStyle(.roundedBorder).frame(width: 240)
                 Spacer()
@@ -247,7 +251,7 @@ struct PreviewWorkspace: View {
                     }
                 }
             }
-        } else if tab == 1 {
+        } else if page == "Rules" {
             DSCard {
                 DSCardHeader("Routing rules", icon: "list.bullet.indent")
                 ForEach(["DOMAIN-SUFFIX · apple.com", "DOMAIN-SUFFIX · github.com", "GEOIP · LAN", "MATCH"], id: \.self) { rule in

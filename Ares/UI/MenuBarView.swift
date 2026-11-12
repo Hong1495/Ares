@@ -188,7 +188,7 @@ struct MenuBarView: View {
             }
 
             MenuActionButton(icon: "slider.horizontal.3", title: "Proxies") {
-                WindowAccessor.showMainWindow(selection: .policies, openWindow: openWindow)
+                WindowAccessor.showMainWindow(selection: .proxies, openWindow: openWindow)
             }
 
             MenuActionButton(icon: "gearshape", title: "Settings") {
