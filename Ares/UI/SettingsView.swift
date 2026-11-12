@@ -60,6 +60,7 @@ struct SettingsView: View {
     @AppStorage(DefaultsKeys.autoStart) private var autoStart = false
     @AppStorage(DefaultsKeys.silentStart) private var silentStart = true
     @AppStorage(DefaultsKeys.theme) private var theme = "system"
+    @AppStorage(DefaultsKeys.menuBarShowsLatency) private var menuBarShowsLatency = false
 
     // Debounce task for auto-applying Custom Routing Rules
     @State private var localRulesRestartTask: Task<Void, Never>?
@@ -172,6 +173,11 @@ struct SettingsView: View {
                         }
                     }
                 }
+            }
+
+            DSCard {
+                DSCardHeader("Menu Bar", icon: "menubar.rectangle")
+                settingToggle("Show latency next to Ares", isOn: $menuBarShowsLatency)
             }
 
             DSCard {
@@ -673,6 +679,7 @@ struct SettingsView: View {
         autoStart = false
         silentStart = true
         theme = "system"
+        menuBarShowsLatency = false
         bypassRules = "localhost,127.*,10.*,172.16.*,172.31.*,192.168.*"
         localRules = ""
         tunStack = "system"

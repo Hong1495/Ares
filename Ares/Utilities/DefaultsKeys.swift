@@ -15,6 +15,7 @@ enum DefaultsKeys {
     nonisolated static let logLevel = "logLevel"
     nonisolated static let activeProfileID = "activeProfileID"
     nonisolated static let theme = "theme"
+    nonisolated static let menuBarShowsLatency = "menuBarShowsLatency"
 
     nonisolated static let tunStack = "tunStack"
     nonisolated static let tunMTU = "tunMTU"
