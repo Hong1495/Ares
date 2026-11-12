@@ -61,8 +61,16 @@ extension AppState {
 
         clashViewModel.addLog("[AppState] 🔄 Switching mode to: \(mode.rawValue.uppercased())")
 
+        if !clashViewModel.isRunning {
+            currentMode = mode
+            UserDefaults.standard.set(mode.rawValue, forKey: DefaultsKeys.clashMode)
+            return
+        }
         do {
             try await clashController.setMode(mode)
+            guard try await clashController.getCurrentMode() == mode else {
+                throw NSError(domain: "Mode", code: 1, userInfo: [NSLocalizedDescriptionKey: "Core did not confirm the requested mode"])
+            }
             currentMode = mode
             UserDefaults.standard.set(mode.rawValue, forKey: DefaultsKeys.clashMode)
             clashViewModel.addLog("[AppState] ✅ Mode switched to \(mode.rawValue.uppercased())")

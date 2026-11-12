@@ -13,6 +13,7 @@ enum ProxyTab: String, CaseIterable, Identifiable {
 struct ProxiesView: View {
     @EnvironmentObject var clashController: ClashController
     @EnvironmentObject var profileService: ProfileService
+    @EnvironmentObject var appState: AppState
     @EnvironmentObject var clashViewModel: ClashViewModel
     @State private var savedGroups: [ProxyGroup] = []
     @State private var savedNodes: [String: ProxyNode] = [:]
@@ -35,23 +36,25 @@ struct ProxiesView: View {
         var id: String { rawValue }
     }
 
-    private var profileKey: String {
-        guard let profile = profileService.activeProfile else { return "" }
-        return "\(profile.id)|\(profile.path?.path ?? "")|\(profile.lastUpdated?.timeIntervalSince1970 ?? 0)"
-    }
+    private var profileKey: String { profileService.activeProfileRevision }
 
     private var showingLive: Bool {
-        clashViewModel.isRunning && !clashViewModel.isToggling && liveProfileKey == profileKey && !liveProfileKey.isEmpty
+        clashViewModel.isRunning && !clashViewModel.isToggling && clashViewModel.appliedProfileRevision == profileKey && liveProfileKey == profileKey && !liveProfileKey.isEmpty
     }
     private var displayGroups: [ProxyGroup] {
-        showingLive ? clashController.proxyGroups : (savedProfileKey == profileKey ? savedGroups : [])
+        if showingLive { return clashController.proxyGroups }
+        return (savedProfileKey == profileKey ? savedGroups : []).map { group in
+            var result = group
+            if let node = profileService.savedNode(group: group.name), group.all.contains(node) { result.now = node }
+            return result
+        }
     }
     private var displayNodes: [String: ProxyNode] {
         showingLive ? clashController.proxyNodes : (savedProfileKey == profileKey ? savedNodes : [:])
     }
     private var nodeCount: Int {
         let groupNames = Set(displayGroups.map(\.name))
-        let builtIns = Set(["Direct", "Reject", "RejectDrop", "Pass"])
+        let builtIns = Set(["Direct", "Reject", "RejectDrop", "Pass", "Compatible", "PassRule"])
         return displayNodes.values.filter { !groupNames.contains($0.name) && !builtIns.contains($0.type) }.count
     }
 
@@ -61,13 +64,14 @@ struct ProxiesView: View {
         case .rule:
             let allGroups = displayGroups.filter { $0.name != "GLOBAL" }
             return allGroups.sorted { a, b in
+                if (a.type == "Selector") != (b.type == "Selector") { return a.type == "Selector" }
                 if a.name == "🚀 节点选择" { return true }
                 if b.name == "🚀 节点选择" { return false }
                 return a.name < b.name
             }
         case .global:
             if showingLive { return displayGroups.filter { $0.name == "GLOBAL" } }
-            return displayNodes.isEmpty ? [] : [ProxyGroup(name: "GLOBAL", type: "Selector", all: displayNodes.keys.sorted())]
+            return displayNodes.isEmpty ? [] : [ProxyGroup(name: "GLOBAL", type: "Selector", now: profileService.savedNode(group: "GLOBAL"), all: displayNodes.keys.sorted())]
         case .direct:
             return []
         }
@@ -82,6 +86,10 @@ struct ProxiesView: View {
             ScrollView(showsIndicators: false) {
                 content
             }
+        }
+        .onAppear { selectedTab = ProxyTab(rawValue: appState.currentMode.rawValue.capitalized) ?? .rule }
+        .onChange(of: appState.currentMode) { _, mode in
+            selectedTab = ProxyTab(rawValue: mode.rawValue.capitalized) ?? .rule
         }
         .task(id: "\(profileKey)|\(clashViewModel.isRunning)|\(clashViewModel.isToggling)") {
             await refreshProxies()
@@ -132,7 +140,7 @@ struct ProxiesView: View {
             try await clashController.fetchProxiesData()
             try Task.checkCancellation()
             guard key == profileKey, loadRevision == revision else { return }
-            guard !clashController.proxyGroups.isEmpty else {
+            guard clashViewModel.appliedProfileRevision == key, !clashController.proxyGroups.isEmpty else {
                 loadError = "Showing saved nodes. Apply this subscription to load it into the core."
                 return
             }
@@ -149,11 +157,17 @@ struct ProxiesView: View {
 
     private var toolbar: some View {
         HStack(spacing: DS.Space.md) {
-            Picker("Mode", selection: $selectedTab) {
+            Picker("Mode", selection: Binding(get: { selectedTab }, set: { tab in
+                Task {
+                    await appState.setMode(ClashConfig.Mode(rawValue: tab.rawValue.lowercased()) ?? .rule)
+                    selectedTab = ProxyTab(rawValue: appState.currentMode.rawValue.capitalized) ?? .rule
+                }
+            })) {
                 ForEach(ProxyTab.allCases) { tab in
                     Text(tab.rawValue).tag(tab)
                 }
             }
+            .disabled(appState.isPerformingNetworkOperation || clashViewModel.isToggling)
             .pickerStyle(.segmented)
             .labelsHidden()
             .controlSize(.small)
@@ -190,6 +204,14 @@ struct ProxiesView: View {
             .menuIndicator(.hidden)
             .fixedSize()
             .help("Sort nodes")
+
+            if !clashViewModel.isRunning {
+                Button("Start Core") {
+                    Task { await clashViewModel.start() }
+                }
+                .disabled(clashViewModel.isToggling || appState.isPerformingNetworkOperation)
+                .help("Start the core to test latency; system proxy remains a separate control")
+            }
 
             Button {
                 Task { await refreshProxies() }
@@ -234,7 +256,7 @@ struct ProxiesView: View {
                 if !showingLive {
                     Text(loadError ?? (providerCount > 0
                         ? "Saved subscription · Provider nodes load when the core runs."
-                        : "Saved subscription · Start the core to select nodes or test latency."))
+                        : "Saved subscription · Select a node now; it will be applied when you connect."))
                         .font(DS.Typography.metadata)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -276,6 +298,8 @@ struct SimpleProxyGroupCard: View {
     let onToggle: () -> Void
 
     @EnvironmentObject var clashController: ClashController
+    @EnvironmentObject var profileService: ProfileService
+    @EnvironmentObject var clashViewModel: ClashViewModel
 
     var body: some View {
         DSCard(padding: 0, spacing: 0, radius: DS.Radius.card) {
@@ -375,19 +399,12 @@ struct SimpleProxyGroupCard: View {
                         isSelected: group.now == itemName,
                         delay: nodes[itemName]?.delay,
                         isTesting: testingNodes.contains(itemName),
+                        canSelect: group.type == "Selector" && !clashViewModel.isToggling,
+                        canTest: allowsRuntimeActions,
                         onSelect: {
-                            guard allowsRuntimeActions else { return }
                             Task {
-                                do {
-                                    try await clashController.selectProxy(
-                                        group: group.name,
-                                        proxy: itemName
-                                    )
-                                    // Refresh proxy data to update UI
-                                    try await clashController.fetchProxiesData()
-                                } catch {
-                                    AppState.shared.reportError("Could not select \(itemName): \(error.localizedDescription)")
-                                }
+                                do { try await profileService.selectNode(group: group, node: itemName) }
+                                catch { AppState.shared.reportError(error.localizedDescription) }
                             }
                         },
                         onTest: {
@@ -399,7 +416,7 @@ struct SimpleProxyGroupCard: View {
                             }
                         }
                     )
-                    .disabled(!allowsRuntimeActions)
+
                 }
             }
             .padding(DS.Space.md)

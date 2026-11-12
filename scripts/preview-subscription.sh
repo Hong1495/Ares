@@ -13,6 +13,9 @@ while IFS= read -r file; do OBJECTS+=("$file"); done < <(find "$BIN/Yams.build" 
 xcrun swiftc -parse-as-library -target arm64-apple-macosx14.0 \
   -I "$BIN/Modules" -I "$PACKAGE/.build/checkouts/Yams/Sources/CYaml/include" \
   "$ROOT/Ares/Models/ProxyModels.swift" \
+  "$ROOT/Ares/Models/ClashConfig.swift" \
+  "$ROOT/Ares/Utilities/ClashPorts.swift" \
+  "$ROOT/Ares/Utilities/DefaultsKeys.swift" \
   "$ROOT/Ares/UI/DesignSystem/DesignSystem.swift" \
   "$ROOT/Ares/UI/DesignSystem/ProxyNodeTile.swift" \
   "$ROOT/Ares/UI/DesignSystem/WorkspaceCommands.swift" \

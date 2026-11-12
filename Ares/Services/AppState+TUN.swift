@@ -11,10 +11,25 @@ extension AppState {
         let hadProxy = systemProxyEnabled
         Task { @MainActor in
             defer { isTUNToggling = false; clashViewModel.isToggling = false }
-            // A stopped core stays stopped. Permission setup is deferred until launch.
-            guard wasRunning else {
-                setTUNConfiguration(!oldTUN)
-                finishOperation()
+            // Enabling TUN is a connection action, even if no core is running.
+            if !wasRunning {
+                guard !oldTUN else {
+                    setTUNConfiguration(false)
+                    finishOperation()
+                    return
+                }
+                let outcome = await RuntimeTransition.startStopped(
+                    activate: {
+                        self.setTUNConfiguration(true)
+                        return await self.startAndVerifyTUN(expected: true, restoreProxy: hadProxy)
+                    },
+                    stopFailed: { await self.clashViewModel.stopCore(intendedRestart: true) },
+                    restoreSettings: { self.setTUNConfiguration(oldTUN) })
+                switch outcome {
+                case .committed: finishOperation()
+                case .restored: finishOperation(error: "TUN could not start. The previous setting was restored.")
+                default: finishOperation(error: "TUN startup failed and core cleanup could not be verified.")
+                }
                 return
             }
             if !oldTUN, !(await PrivilegeService.shared.checkPrivileges()) {

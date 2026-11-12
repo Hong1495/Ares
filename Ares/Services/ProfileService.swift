@@ -10,6 +10,49 @@ class ProfileService: ObservableObject {
     @Published var activeProfileID: UUID?
     @Published var isSwitchingProfile: Bool = false
 
+    @Published private var nodeSelections: NodeSelectionPlan = {
+        guard let data = UserDefaults.standard.data(forKey: "profileNodeSelections"),
+              let plan = try? JSONDecoder().decode(NodeSelectionPlan.self, from: data) else { return NodeSelectionPlan() }
+        return plan
+    }()
+
+    var activeProfileRevision: String {
+        guard let profile = activeProfile else { return "" }
+        return "\(profile.id)|\(profile.path?.path ?? "")|\(profile.lastUpdated?.timeIntervalSince1970 ?? 0)"
+    }
+
+    func savedNode(group: String) -> String? {
+        guard let id = activeProfileID else { return nil }
+        return nodeSelections.choices(for: id)[group]
+    }
+
+    func selectNode(group: ProxyGroup, node: String) async throws {
+        guard group.type == "Selector", group.all.contains(node), let id = activeProfileID else { return }
+        let vm = ClashViewModel.shared
+        guard AppState.shared.beginOperation("Selecting Node") else {
+            throw NSError(domain: "Selection", code: 1, userInfo: [NSLocalizedDescriptionKey: "Wait for the current operation to finish."])
+        }
+        vm.isToggling = true
+        defer { vm.isToggling = false; AppState.shared.finishOperation() }
+        if vm.isRunning {
+            guard vm.appliedProfileRevision == activeProfileRevision else {
+                throw NSError(domain: "Selection", code: 2, userInfo: [NSLocalizedDescriptionKey: "Apply the selected subscription before changing the running node."])
+            }
+            try await ClashController.shared.selectProxy(group: group.name, proxy: node)
+        }
+        nodeSelections.select(profile: id, group: group.name, node: node)
+        UserDefaults.standard.set(try JSONEncoder().encode(nodeSelections), forKey: "profileNodeSelections")
+    }
+
+    func restoreNodeSelections() async throws {
+        guard let id = activeProfileID else { return }
+        let controller = ClashController.shared
+        try await controller.fetchProxiesData()
+        try await NodeSelectionPlan.restore(nodeSelections.choices(for: id), groups: controller.proxyGroups) { group, node in
+            try await controller.selectProxy(group: group, proxy: node)
+        }
+    }
+
     private var updateRevisions = ProfileUpdateRevisions()
     private let profilesDir: URL
     private let profilesMetadataFile: URL
@@ -108,7 +151,7 @@ class ProfileService: ObservableObject {
         // Add to list
         profiles.append(profile)
 
-        // Auto-select if first profile OR always activate new profile for better UX
+        // Keep the current profile when adding additional subscriptions.
         let shouldActivate = profiles.count == 1 || activeProfileID == nil
         if shouldActivate {
             activeProfileID = profile.id
@@ -295,6 +338,10 @@ class ProfileService: ObservableObject {
             try? FileManager.default.removeItem(at: path)
         }
 
+        nodeSelections.remove(profile: id)
+        if let data = try? JSONEncoder().encode(nodeSelections) {
+            UserDefaults.standard.set(data, forKey: "profileNodeSelections")
+        }
         // Remove from list
         profiles.remove(at: index)
 

@@ -74,6 +74,7 @@ class AppState: ObservableObject {
 
     private init() {
         // Restore properties synchronously where possible
+        currentMode = ClashConfig.Mode(rawValue: UserDefaults.standard.string(forKey: DefaultsKeys.clashMode) ?? "rule") ?? .rule
         tunEnabled = UserDefaults.standard.bool(forKey: DefaultsKeys.tunEnabled)
 
         // Start polling timer (Unified Heartbeat)

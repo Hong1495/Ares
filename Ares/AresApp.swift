@@ -107,7 +107,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // 3. Restore System Proxy state if enabled (NON-BLOCKING)
         // Run proxy setup in background to not delay app startup
-        if AppState.shared.systemProxyEnabled {
+        if AppState.shared.systemProxyEnabled && ClashViewModel.shared.runtimeState.isAPIReady {
             ClashViewModel.shared.addLog("[AppDelegate] Restoring system proxy state", level: .debug)
             Task.detached {
                 await AppState.shared.enableSystemProxy()

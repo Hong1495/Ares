@@ -219,8 +219,8 @@ struct MenuBarView: View {
     // MARK: - Derived
 
     private var headline: String {
-        if appState.systemProxyEnabled { return "Protected" }
-        if appState.tunEnabled { return "TUN active" }
+        if appState.systemProxyEnabled && clashViewModel.isRunning { return "Protected" }
+        if appState.tunEnabled && clashViewModel.isRunning { return "TUN active" }
         return clashViewModel.runtimeState.title
     }
 
@@ -239,9 +239,6 @@ struct MenuBarView: View {
     }
 
     private func toggleSystemProxy() async {
-        if !appState.systemProxyEnabled {
-            await clashViewModel.start()
-        }
         await appState.toggleSystemProxy()
     }
 

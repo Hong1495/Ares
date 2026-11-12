@@ -6,6 +6,8 @@ struct SimpleProxyButton: View {
     let isSelected: Bool
     let delay: Int?
     let isTesting: Bool
+    var canSelect: Bool = true
+    var canTest: Bool = true
     let onSelect: () -> Void
     let onTest: () -> Void
     @State private var hovering = false
@@ -30,6 +32,8 @@ struct SimpleProxyButton: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .disabled(!canSelect)
+            .help(canSelect ? "Select \(name)" : "This group selects nodes automatically")
             .accessibilityLabel("Select \(name)")
             .accessibilityAddTraits(isSelected ? .isSelected : [])
             if isTesting {
@@ -39,7 +43,8 @@ struct SimpleProxyButton: View {
                     Image(systemName: "bolt.horizontal").font(DS.Typography.metadata).frame(width: 22, height: 22)
                 }
                 .buttonStyle(.plain).foregroundStyle(.secondary)
-                .help("Test latency for \(name)")
+                .disabled(!canTest)
+                .help(canTest ? "Test latency for \(name)" : "Connect to test latency")
                 .accessibilityLabel("Test latency for \(name)")
             }
         }

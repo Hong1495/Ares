@@ -11,8 +11,10 @@ import Combine
     func testProxyDelay(name: String) async throws -> Int { fatalError("Offline latency testing must be disabled") }
 }
 @MainActor final class ClashViewModel: ObservableObject {
+    @Published var appliedProfileRevision = ""
     @Published var isRunning = false
     @Published var isToggling = false
+    func start() async { fatalError("Preview must not start a core") }
 }
 struct PreviewProfile {
     let id = UUID()
@@ -21,6 +23,10 @@ struct PreviewProfile {
 }
 @MainActor final class ProfileService: ObservableObject {
     @Published var activeProfile: PreviewProfile?
+    @Published private var choices: [String: String] = [:]
+    var activeProfileRevision: String { activeProfile?.id.uuidString ?? "" }
+    func savedNode(group: String) -> String? { choices[group] }
+    func selectNode(group: ProxyGroup, node: String) async throws { choices[group.name] = node }
     init() {
         let path = FileManager.default.temporaryDirectory.appendingPathComponent("ares-offline-preview-\(UUID()).yaml")
         let nodes = (1...32).map { "  - {name: Sample \($0), type: vless, server: example.invalid, port: 443}" }.joined(separator: "\n")
@@ -30,7 +36,10 @@ struct PreviewProfile {
     }
     isolated deinit { if let path = activeProfile?.path { try? FileManager.default.removeItem(at: path) } }
 }
-@MainActor final class AppState {
+@MainActor final class AppState: ObservableObject {
+    @Published var currentMode: ClashConfig.Mode = .rule
+    var isPerformingNetworkOperation = false
+    func setMode(_ mode: ClashConfig.Mode) async { currentMode = mode }
     static let shared = AppState()
     func reportError(_ message: String) { assertionFailure(message) }
 }
@@ -46,6 +55,7 @@ struct PreviewProfile {
                 .environmentObject(controller)
                 .environmentObject(profiles)
                 .environmentObject(runtime)
+                .environmentObject(AppState.shared)
                 .frame(minWidth: 1000, minHeight: 700)
                 .alert("Settings preview", isPresented: $showingSettings) {
                     Button("Done", role: .cancel) { }

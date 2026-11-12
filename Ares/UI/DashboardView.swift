@@ -103,16 +103,16 @@ private struct ControlCenterCard: View {
     }
 
     private var headline: String {
-        if appState.systemProxyEnabled { return "Protected" }
-        if appState.tunEnabled { return "TUN active" }
+        if appState.systemProxyEnabled && clashViewModel.isRunning { return "Protected" }
+        if appState.tunEnabled && clashViewModel.isRunning { return "TUN active" }
         return clashViewModel.runtimeState.title
     }
 
     private var subheadline: String {
-        if appState.systemProxyEnabled {
+        if appState.systemProxyEnabled && clashViewModel.isRunning {
             return "System traffic is routed through Ares"
         }
-        if appState.tunEnabled {
+        if appState.tunEnabled && clashViewModel.isRunning {
             return "All traffic is captured at the network layer"
         }
         return "Traffic is not being proxied"

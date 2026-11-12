@@ -53,6 +53,7 @@ class ClashViewModel: ObservableObject {
     }
 
     // MARK: - Published UI State
+    @Published private(set) var appliedProfileRevision = ""
     @Published var isRunning: Bool = false
     @Published var logs: [String] = []
     @Published var isToggling: Bool = false
@@ -71,9 +72,11 @@ class ClashViewModel: ObservableObject {
     
     func start(isRestart: Bool = false) async {
         guard !isToggling else { return }
+        if isRunning && !isRestart { return }
         isToggling = true
         defer { isToggling = false }
         await startCore(isRestart: isRestart)
+        if case .failed(let message) = runtimeState { AppState.shared.reportError(message) }
     }
     
     func stop(intendedRestart: Bool = false) async {
@@ -100,6 +103,8 @@ class ClashViewModel: ObservableObject {
         let tunEnabled = await MainActor.run { AppState.shared.tunEnabled }
         ClashController.shared.updatePort(tunEnabled: tunEnabled)
 
+        let profileRevision = ProfileService.shared.activeProfileRevision
+        appliedProfileRevision = ""
         runtimeState = .launching
         AppState.shared.activeConnectionsCount = nil
         let started = await ClashServiceActor.shared.start(isRestart: isRestart)
@@ -117,9 +122,23 @@ class ClashViewModel: ObservableObject {
 
         let readyTimeout: TimeInterval = tunEnabled ? 15.0 : 8.0
         if await ClashController.shared.waitForAPIReady(timeout: readyTimeout) {
-            runtimeState = .apiReady
-            isRunning = true
-            runtimeState = .running
+            do {
+                try await ProfileService.shared.restoreNodeSelections()
+                guard profileRevision == ProfileService.shared.activeProfileRevision else { throw CancellationError() }
+                // Read back TUN before reporting the runtime ready or enabling routing.
+                guard let url = URL(string: "\(ClashController.shared.baseURL)/configs") else { throw URLError(.badURL) }
+                let (data, response) = try await URLSession.shared.data(for: URLRequest(url: url, timeoutInterval: 5))
+                try CoreAPIContract.requireSuccess(response)
+                try CoreAPIContract.verifyTUN(data, expected: tunEnabled)
+                appliedProfileRevision = profileRevision
+                runtimeState = .apiReady
+                isRunning = true
+                runtimeState = .running
+            } catch {
+                let stopped = await ClashServiceActor.shared.stop()
+                isRunning = false
+                runtimeState = .failed(stopped ? "Core configuration or node selection could not be confirmed" : "Core verification and cleanup failed")
+            }
         } else {
             isRunning = false
             let stopped = await ClashServiceActor.shared.stop()
@@ -129,6 +148,7 @@ class ClashViewModel: ObservableObject {
     
     @discardableResult
     func stopCore(intendedRestart: Bool = false) async -> Bool {
+        appliedProfileRevision = ""
         runtimeState = .stopping
         ClashController.shared.runtimeGeneration = UUID()
         AppState.shared.activeConnectionsCount = nil

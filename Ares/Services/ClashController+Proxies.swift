@@ -31,6 +31,7 @@ extension ClashController {
         defer { selectingProxyGroups.remove(group) }
         ClashViewModel.shared.addLog("[ClashController] 🎯 Selecting proxy: \(proxy) in group: \(group)")
 
+        let generation = runtimeGeneration
         let url = try CoreAPIContract.proxyURL(base: baseURL, name: group)
 
         var request = URLRequest(url: url, timeoutInterval: 10)
@@ -43,6 +44,12 @@ extension ClashController {
         let (_, response) = try await URLSession.shared.data(for: request)
 
         try CoreAPIContract.requireSuccess(response)
+        guard generation == runtimeGeneration else { throw CancellationError() }
+        try await fetchProxiesData()
+        guard generation == runtimeGeneration,
+              proxyGroups.first(where: { $0.name == group })?.now == proxy else {
+            throw NSError(domain: "Selection", code: 3, userInfo: [NSLocalizedDescriptionKey: "The core did not confirm the selected node."])
+        }
     }
 
     /// Test proxy delay

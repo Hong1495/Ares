@@ -29,6 +29,14 @@ extension AppState {
             }
         }
 
+        if newState {
+            guard clashViewModel.runtimeState.isAPIReady,
+                  clashViewModel.appliedProfileRevision == ProfileService.shared.activeProfileRevision else {
+                finishOperation(error: "Apply the selected subscription before enabling System Proxy.")
+                return
+            }
+        }
+
         // Ensure privileges are installed if missing (Auto-Upgrade)
         var shouldCheckPrivileges = false
         if newState {
@@ -70,6 +78,11 @@ extension AppState {
     /// Force enable system proxy (for startup restoration)
     @discardableResult
     func enableSystemProxy() async -> Bool {
+        guard clashViewModel.runtimeState.isAPIReady,
+              clashViewModel.appliedProfileRevision == ProfileService.shared.activeProfileRevision else {
+            reportError("System Proxy was not enabled: the selected subscription and core are not ready.")
+            return false
+        }
         clashViewModel.addLog("[AppState] 🔄 Restoring system proxy state...")
 
         // Ensure privileges
