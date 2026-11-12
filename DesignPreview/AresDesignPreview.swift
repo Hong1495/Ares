@@ -42,10 +42,10 @@ struct PreviewWorkspace: View {
 
     private let destinations = [
         WorkspaceDestination(id: "Activity", title: "Activity", icon: "arrow.up.arrow.down", section: "Monitoring"),
+        WorkspaceDestination(id: "Routing", title: "Routing", icon: "globe.americas", section: "Monitoring"),
         WorkspaceDestination(id: "Proxies", title: "Proxies", icon: "network", section: "Proxy"),
         WorkspaceDestination(id: "Rules", title: "Rules", icon: "list.bullet.indent", section: "Proxy"),
         WorkspaceDestination(id: "Subscriptions", title: "Subscriptions", icon: "rectangle.stack", section: "Proxy"),
-        WorkspaceDestination(id: "Routing", title: "Routing", icon: "globe.americas", section: "Explore"),
         WorkspaceDestination(id: "Analysis", title: "Analysis", icon: "waveform.path.ecg.rectangle", section: "Developer"),
         WorkspaceDestination(id: "Logs", title: "Logs", icon: "text.alignleft", section: "Developer"),
         WorkspaceDestination(id: "Dashboard", title: "Dashboard", icon: "gauge.with.dots.needle.50percent", section: "Preferences"),
