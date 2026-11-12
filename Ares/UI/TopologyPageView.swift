@@ -15,7 +15,7 @@ struct TopologyPageView: View {
                 .background(DS.canvas)
         }
         .background(DS.canvas)
-        .navigationTitle("Topology")
+
         .onAppear {
             Task { await clashController.monitorConnections() }
         }
@@ -27,7 +27,7 @@ struct TopologyPageView: View {
                 Text("Processes")
                     .font(DS.Typography.metadata)
                     .foregroundStyle(.secondary)
-                Text("\(clashController.activeChains.count)")
+                Text("\(Set(clashController.activeChains.map(\.sourceProcess)).count)")
                     .font(DS.Typography.metadata.monospaced().weight(.semibold))
             }
 

@@ -14,7 +14,7 @@ struct MainView: View {
             section.items.map { item in
                 WorkspaceDestination(id: item.displayName, title: item.displayName, icon: item.sidebarIcon, section: section.id)
             }
-        } + [WorkspaceDestination(id: "Settings", title: "Settings", icon: "slider.horizontal.3", section: "Preferences")]
+        }
     }
 
     var body: some View {
@@ -24,13 +24,10 @@ struct MainView: View {
                 selection: Binding(
                     get: { appState.selection.displayName },
                     set: { title in
-                        let items = DSSidebarSection.all.flatMap(\.items) + [.settings]
+                        let items = DSSidebarSection.all.flatMap(\.items)
                         if let item = items.first(where: { $0.displayName == title }) { appState.selection = item }
                     }
-                ),
-                status: clashViewModel.runtimeState.title,
-                detail: appState.currentMode.displayLabel,
-                statusKind: runtimeStatus
+                )
             )
             .toolbar { AresSidebarToolbar(visibility: $columnVisibility) }
             .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 250)
@@ -54,15 +51,6 @@ struct MainView: View {
         .onAppear { WindowAccessor.openWindow = openWindow }
     }
 
-    private var runtimeStatus: DSStatus {
-        switch clashViewModel.runtimeState {
-        case .running, .apiReady: return .good
-        case .launching, .processRunning, .stopping: return .warning
-        case .failed: return .critical
-        case .stopped: return .idle
-        }
-    }
-
     // MARK: - Detail
 
     @ViewBuilder
@@ -73,9 +61,9 @@ struct MainView: View {
         case .policies:
             PoliciesView()
         case .connections:
-            ConnectionsView()
+            ActivityWorkspaceView()
         case .topology:
-            TopologyPageView()
+            ActivityWorkspaceView()
         case .routeMap:
             RouteMapPageView()
         case .analysis:

@@ -22,8 +22,9 @@ struct DSSidebarSection: Identifiable {
     let items: [AppState.NavigationItem]
 
     static let all: [DSSidebarSection] = [
-        .init(id: "Workspace", items: [.dashboard, .policies, .connections]),
-        .init(id: "Explore", items: [.topology, .routeMap]),
-        .init(id: "Developer", items: [.analysis, .logs])
+        .init(id: "Workspace", items: [.connections, .policies]),
+        .init(id: "Explore", items: [.routeMap]),
+        .init(id: "Developer", items: [.analysis, .logs]),
+        .init(id: "Preferences", items: [.dashboard, .settings])
     ]
 }

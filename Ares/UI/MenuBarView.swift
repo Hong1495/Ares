@@ -183,8 +183,8 @@ struct MenuBarView: View {
 
     private var footer: some View {
         HStack(spacing: DS.Space.xs) {
-            MenuActionButton(icon: "square.grid.2x2", title: "Dashboard") {
-                WindowAccessor.showMainWindow(selection: .dashboard, openWindow: openWindow)
+            MenuActionButton(icon: "point.3.connected.trianglepath.dotted", title: "Activity") {
+                WindowAccessor.showMainWindow(selection: .connections, openWindow: openWindow)
             }
 
             MenuActionButton(icon: "slider.horizontal.3", title: "Proxies") {

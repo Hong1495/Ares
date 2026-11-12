@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import SubscriptionKit
 
 /// Service for managing Clash profiles
 @MainActor
@@ -219,42 +220,63 @@ class ProfileService: ObservableObject {
         }
     }
 
-    private func downloadProfile(_ profile: Profile) async throws -> (String, SubscriptionInfo?) {
+    private func downloadProfile(_ profile: Profile) async throws -> (String, SubscriptionInfo?, Bool) {
         guard profile.type == .remote, let url = profile.url, ["https", "http"].contains(url.scheme?.lowercased() ?? "") else { throw URLError(.badURL) }
         var request = URLRequest(url: appendCompatibilityFlags(to: url))
         request.setValue("ClashMeta/1.31.0 Enforce (Ares; macOS)", forHTTPHeaderField: "User-Agent")
         let (data, response) = try await directURLSession.data(for: request)
+        var needsResources = false
         let content = try await SubscriptionPayload.prepare(data: data, response: response) { candidate in
-            try await self.validateProfileContent(candidate)
+            let result = try await self.validateProfileContent(candidate)
+            needsResources = result.needsResources
+            return result.valid
         }
         let header = (response as? HTTPURLResponse).flatMap { parseSubscriptionInfo(from: $0) }
         let info = (header?.total ?? 0) > 0 ? header : (parseSubscriptionInfo(fromContent: content) ?? header)
-        return (content, info)
+        return (content, info, needsResources)
     }
 
-    private func validateProfileContent(_ content: String) async throws -> Bool {
+    private func validateProfileContent(_ content: String) async throws -> (valid: Bool, needsResources: Bool) {
         // Full mihomo parsing happens only on an isolated candidate, before replacement.
         // Development tests inject a validator and never execute this production path.
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("Ares-validation-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         try content.write(to: directory.appendingPathComponent("config.yaml"), atomically: true, encoding: .utf8)
-        return await CoreManager.shared.validateConfig(configDir: directory)
+        // Preserve offline import when only a remote GeoIP/rule resource is unavailable.
+        // Actual activation still requires full validation before changing the running core.
+        guard let snapshot = try? SubscriptionSnapshot.parse(content) else { return (false, false) }
+        guard !snapshot.nodes.isEmpty || snapshot.providerCount > 0 else { return (false, false) }
+        for filename in ["Country.mmdb", "geoip.dat", "geosite.dat", "ASN.mmdb"] {
+            for mode in [false, true] {
+                let resource = await ConfigService.shared.getConfigDir(tunEnabled: mode).appendingPathComponent(filename)
+                if FileManager.default.fileExists(atPath: resource.path) {
+                    try? FileManager.default.copyItem(at: resource, to: directory.appendingPathComponent(filename))
+                    break
+                }
+            }
+        }
+        do { return (try await CoreManager.shared.validateConfigStrict(configDir: directory), false) }
+        catch ConfigurationValidationFailure.resourcesUnavailable {
+            ClashViewModel.shared.addLog("[Subscription] Saved for offline use; rule resources must be available before activation.", level: .warning)
+            return (true, true)
+        }
     }
 
     func updateProfile(_ profile: inout Profile) async throws {
-        let (content, info) = try await downloadProfile(profile)
+        let (content, info, needsResources) = try await downloadProfile(profile)
         let destination = profilesDir.appendingPathComponent("\(profile.id.uuidString).yaml")
         try content.write(to: destination, atomically: true, encoding: .utf8)
         profile.path = destination
         profile.subscriptionInfo = info
+        profile.needsRuleResources = needsResources
         profile.lastUpdated = Date()
     }
 
     func updateProfile(id: UUID) async throws {
         guard let profile = profiles.first(where: { $0.id == id }) else { throw URLError(.fileDoesNotExist) }
         let revision = updateRevisions.begin(id)
-        let (content, info) = try await downloadProfile(profile)
+        let (content, info, needsResources) = try await downloadProfile(profile)
         try Task.checkCancellation()
         // Resolve the index AFTER all suspension points. Delete/edit/newer refresh invalidates this response.
         guard !ClashViewModel.shared.isToggling, updateRevisions.isCurrent(revision, for: id),
@@ -266,6 +288,7 @@ class ProfileService: ObservableObject {
             try content.write(to: destination, atomically: true, encoding: .utf8)
             profiles[index].path = destination
             profiles[index].subscriptionInfo = info
+            profiles[index].needsRuleResources = needsResources
             profiles[index].lastUpdated = Date()
             try JSONEncoder().encode(profiles).write(to: profilesMetadataFile, options: .atomic)
         } catch {
@@ -316,7 +339,8 @@ class ProfileService: ObservableObject {
     /// Update the raw content of a profile
     func updateProfileContent(id: UUID, content: String) async throws {
         let revision = updateRevisions.begin(id)
-        guard try await validateProfileContent(content) else { throw URLError(.cannotParseResponse) }
+        let validation = try await validateProfileContent(content)
+        guard validation.valid else { throw URLError(.cannotParseResponse) }
         guard !ClashViewModel.shared.isToggling, updateRevisions.isCurrent(revision, for: id) else { throw CancellationError() }
         guard let index = profiles.firstIndex(where: { $0.id == id }),
               let path = profiles[index].path else {
@@ -325,6 +349,7 @@ class ProfileService: ObservableObject {
 
         // Write content to file
         try content.write(to: path, atomically: true, encoding: .utf8)
+        profiles[index].needsRuleResources = validation.needsResources
 
         // Update metadata (lastUpdated)
         profiles[index].lastUpdated = Date()

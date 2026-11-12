@@ -139,7 +139,7 @@ actor ConfigService {
         let candidate = directory.appendingPathComponent("candidate-\(UUID().uuidString).yaml")
         defer { try? FileManager.default.removeItem(at: candidate) }
         try await fileManager.writeText(content, to: candidate)
-        guard await CoreManager.shared.validateConfig(configDir: directory, configFile: candidate) else {
+        guard try await CoreManager.shared.validateConfigStrict(configDir: directory, configFile: candidate) else {
             throw NSError(domain: "ConfigService", code: 2, userInfo: [NSLocalizedDescriptionKey: "Generated configuration is invalid. The previous configuration was kept."])
         }
         try await fileManager.writeText(content, to: destination)

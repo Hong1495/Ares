@@ -19,7 +19,7 @@ struct AresDesignPreview: App {
 struct PreviewWorkspace: View {
     @State private var showUpdate = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
-    @State private var page = "Dashboard"
+    @State private var page = "Activity"
     @State private var dark = false
     @State private var enabled = true
     @State private var tun = false
@@ -35,13 +35,12 @@ struct PreviewWorkspace: View {
     @State private var theme = 0
 
     private let destinations = [
-        WorkspaceDestination(id: "Dashboard", title: "Dashboard", icon: "gauge.with.dots.needle.50percent", section: "Workspace"),
-        WorkspaceDestination(id: "Proxy & Rules", title: "Proxy & Rules", icon: "slider.horizontal.3", section: "Workspace"),
         WorkspaceDestination(id: "Activity", title: "Activity", icon: "arrow.up.arrow.down", section: "Workspace"),
-        WorkspaceDestination(id: "Topology", title: "Topology", icon: "point.3.connected.trianglepath.dotted", section: "Explore"),
+        WorkspaceDestination(id: "Proxy & Rules", title: "Proxy & Rules", icon: "slider.horizontal.3", section: "Workspace"),
         WorkspaceDestination(id: "Routing", title: "Routing", icon: "globe.americas", section: "Explore"),
         WorkspaceDestination(id: "Analysis", title: "Analysis", icon: "waveform.path.ecg.rectangle", section: "Developer"),
         WorkspaceDestination(id: "Logs", title: "Logs", icon: "text.alignleft", section: "Developer"),
+        WorkspaceDestination(id: "Dashboard", title: "Dashboard", icon: "gauge.with.dots.needle.50percent", section: "Preferences"),
         WorkspaceDestination(id: "Settings", title: "Settings", icon: "slider.horizontal.3", section: "Preferences")
     ]
 
@@ -63,7 +62,7 @@ struct PreviewWorkspace: View {
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            WorkspaceSidebar(destinations: destinations, selection: $page, status: "Design preview", detail: "Sample data · local only", statusKind: .idle)
+            WorkspaceSidebar(destinations: destinations, selection: $page)
             .toolbar { AresSidebarToolbar(visibility: $columnVisibility) }
             .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 260)
         } detail: {
@@ -185,7 +184,13 @@ struct PreviewWorkspace: View {
             } else if page == "Settings" {
                 DSPageTabs(titles: ["General", "Network", "TUN", "MITM", "Rules"], selection: $tab)
                 settingsPage
-            } else if page == "Topology" || page == "Routing" {
+            } else if page == "Activity" {
+                DSPageTabs(titles: ["Topology", "Connections"], selection: $tab)
+                if tab == 0 {
+                    ContentUnavailableView("No active connections", systemImage: "point.3.connected.trianglepath.dotted", description: Text("Applications and their connections appear here."))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else { activityPage }
+            } else if page == "Routing" {
                 ContentUnavailableView("No active routes", systemImage: "point.3.connected.trianglepath.dotted", description: Text("Route activity appears here while connections are open."))
                     .frame(maxWidth: .infinity, maxHeight: .infinity).background(DSSurfaceBackground())
             } else {

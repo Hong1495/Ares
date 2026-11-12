@@ -37,7 +37,7 @@ class AppState: ObservableObject {
             }
         }
     }
-    @Published var selection: NavigationItem = .dashboard
+    @Published var selection: NavigationItem = .connections
     @Published var animationsEnabled: Bool = true
     var isForeground = true
     var didSendInitialWake = false

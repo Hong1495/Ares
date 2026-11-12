@@ -105,13 +105,20 @@ actor CoreManager {
     }
 
     func validateConfig(configDir: URL, configFile: URL? = nil) async -> Bool {
-        let path = activeBinaryPath()
-        guard FileManager.default.fileExists(atPath: path) else { return false }
+        (try? await validateConfigStrict(configDir: configDir, configFile: configFile)) == true
+    }
 
+    func validateConfigStrict(configDir: URL, configFile: URL? = nil) async throws -> Bool {
+        let path = activeBinaryPath()
+        guard FileManager.default.fileExists(atPath: path) else { throw CoreManagerError.binaryNotExecutable }
         var arguments = ["-t", "-d", configDir.path]
         if let configFile { arguments += ["-f", configFile.path] }
-        let result = try? await ProcessManager().run(executable: path, arguments: arguments, timeout: 15)
-        return result?.exitCode == 0
+        let result = try await ProcessManager().run(executable: path, arguments: arguments, timeout: 15)
+        if result.exitCode == 0 { return true }
+        if ConfigurationValidationFailure.isResourceFailure(result.output + result.error) {
+            throw ConfigurationValidationFailure.resourcesUnavailable
+        }
+        return false
     }
 
     func latestRelease() async -> CoreReleaseInfo? {

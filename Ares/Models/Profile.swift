@@ -31,6 +31,7 @@ struct Profile: Identifiable, Codable {
     
     /// Subscription information (if available)
     var subscriptionInfo: SubscriptionInfo?
+    var needsRuleResources: Bool? = nil
     
     /// Initialize a new remote profile
     static func remote(name: String, url: URL) -> Profile {

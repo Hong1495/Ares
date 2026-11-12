@@ -8,18 +8,22 @@ struct AresMenuBarLabel: View {
     var latency: Int?
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 6) {
             Image(nsImage: Self.boarImage)
                 .renderingMode(.template)
-                .frame(width: 20, height: 20)
+                .frame(width: 17, height: 17)
                 .accessibilityHidden(true)
 
             if showsLatency {
-                Text(latency.map { $0 > 0 ? "\($0)" : "--" } ?? "--")
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
-                    .monospacedDigit()
-                    .foregroundStyle(.primary)
-                    .fixedSize()
+                HStack(alignment: .firstTextBaseline, spacing: 2) {
+                    Text(latency.map { $0 > 0 ? "\($0)" : "--" } ?? "--")
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .monospacedDigit()
+                    Text("ms")
+                        .font(.system(size: 10, weight: .regular))
+                }
+                .foregroundStyle(.primary)
+                .fixedSize()
             }
         }
         .fixedSize()
@@ -34,7 +38,7 @@ struct AresMenuBarLabel: View {
     }
 
     static let boarImage: NSImage = {
-        let size = NSSize(width: 20, height: 20)
+        let size = NSSize(width: 17, height: 17)
         let image = NSImage(size: size, flipped: true) { bounds in
             guard let context = NSGraphicsContext.current?.cgContext else { return false }
             context.setFillColor(NSColor.black.cgColor)
@@ -74,27 +78,27 @@ private struct AresBoarMark: Shape {
         path.closeSubpath()
 
         // Angled eyes, matching the original icon's forward-facing expression.
-        path.move(to: p(8, 11))
-        path.addLine(to: p(13, 14))
-        path.addLine(to: p(9, 14))
+        path.move(to: p(7, 10.5))
+        path.addLine(to: p(13.5, 14.5))
+        path.addLine(to: p(8, 14.5))
         path.closeSubpath()
-        path.move(to: p(24, 11))
-        path.addLine(to: p(19, 14))
-        path.addLine(to: p(23, 14))
+        path.move(to: p(25, 10.5))
+        path.addLine(to: p(18.5, 14.5))
+        path.addLine(to: p(24, 14.5))
         path.closeSubpath()
 
         // One clean negative-space tusk on each side of the muzzle.
-        path.move(to: p(9.3, 16.5))
-        path.addCurve(to: p(12.3, 22), control1: p(9.5, 20), control2: p(10, 21))
-        path.addLine(to: p(12, 17.5))
+        path.move(to: p(7.5, 16))
+        path.addCurve(to: p(12.5, 23.5), control1: p(7.5, 21), control2: p(10, 23))
+        path.addLine(to: p(12, 18))
         path.closeSubpath()
-        path.move(to: p(22.7, 16.5))
-        path.addCurve(to: p(19.7, 22), control1: p(22.5, 20), control2: p(22, 21))
-        path.addLine(to: p(20, 17.5))
+        path.move(to: p(24.5, 16))
+        path.addCurve(to: p(19.5, 23.5), control1: p(24.5, 21), control2: p(22, 23))
+        path.addLine(to: p(20, 18))
         path.closeSubpath()
 
         // A single oval nose keeps the lower face quiet at small sizes.
-        path.addEllipse(in: CGRect(x: p(13.5, 22).x, y: p(13.5, 22).y, width: rect.width * 5 / 32, height: rect.height * 3 / 32))
+        path.addEllipse(in: CGRect(x: p(14, 24).x, y: p(14, 24).y, width: rect.width * 4 / 32, height: rect.height * 2 / 32))
         path.closeSubpath()
         return path
     }

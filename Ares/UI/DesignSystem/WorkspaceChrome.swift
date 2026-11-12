@@ -12,9 +12,6 @@ struct WorkspaceDestination: Identifiable {
 struct WorkspaceSidebar: View {
     let destinations: [WorkspaceDestination]
     @Binding var selection: String
-    let status: String
-    let detail: String
-    let statusKind: DSStatus
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var sections: [String] {
@@ -52,12 +49,6 @@ struct WorkspaceSidebar: View {
                             .background(selection == destination.id ? Color.primary.opacity(0.06) : .clear, in: RoundedRectangle(cornerRadius: 7))
                     }.buttonStyle(.plain)
                 }
-                HStack(spacing: 6) {
-                    Circle().fill(statusKind.color).frame(width: 5, height: 5)
-                    Text(status).lineLimit(1)
-                }
-                .font(DS.Typography.caption).foregroundStyle(.secondary).padding(.horizontal, 10)
-                .help(detail)
             }.padding(10)
         }
     }

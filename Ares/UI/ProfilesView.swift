@@ -184,6 +184,11 @@ struct ProfileCard: View {
         VStack(alignment: .leading, spacing: DS.Space.md) {
             header
 
+            if profile.needsRuleResources == true {
+                Label("Saved · Rule data requires a network connection before use", systemImage: "exclamationmark.circle")
+                    .font(DS.Typography.metadata)
+                    .foregroundStyle(Color.statusWarn)
+            }
             if let sub = profile.subscriptionInfo {
                 usage(sub)
             }
