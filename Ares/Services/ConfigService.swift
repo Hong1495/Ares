@@ -110,7 +110,7 @@ actor ConfigService {
         let targetDir = getConfigDir(tunEnabled: tunEnabled)
         
         // Ensure directory exists
-        try? await fileManager.createDirectoryIfNeeded(at: targetDir)
+        try await ConfigDirectoryPreparation.shared.prepare(targetDir)
         
         let finalConfig = """
         \(baseConfig)
@@ -313,7 +313,7 @@ actor ConfigService {
         // Use the requested mode even before the preference has been committed.
         let targetPath = getConfigPath(tunEnabled: tunEnabled)
         let targetDir = getConfigDir(tunEnabled: tunEnabled)
-        try? await fileManager.createDirectoryIfNeeded(at: targetDir)
+        try await ConfigDirectoryPreparation.shared.prepare(targetDir)
         
         let configYAML = await MainActor.run {
             var clashConfig = ClashConfig(fromUserDefaults: true)

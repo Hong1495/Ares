@@ -7,7 +7,6 @@ struct DashboardView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            StatusBanner().padding(.horizontal, 28)
             DashboardComposition(
                 runtime: clashViewModel.runtimeState.title,
                 version: clashViewModel.coreVersionInfo.displayVersion,
@@ -40,49 +39,6 @@ struct DashboardView: View {
         case .failed: return .critical
         case .stopped: return .idle
         }
-    }
-}
-
-// MARK: - Status banner
-
-private struct StatusBanner: View {
-    @EnvironmentObject private var appState: AppState
-
-    var body: some View {
-        if let operation = appState.operationStatus {
-            banner(
-                icon: "arrow.triangle.2.circlepath",
-                text: operation.title,
-                tint: .statusWarn,
-                showsSpinner: true
-            )
-        } else if let error = appState.lastOperationError {
-            banner(icon: "exclamationmark.triangle.fill", text: error, tint: .statusBad, showsSpinner: false)
-        }
-    }
-
-    private func banner(icon: String, text: String, tint: Color, showsSpinner: Bool) -> some View {
-        HStack(spacing: DS.Space.sm) {
-            if showsSpinner {
-                ProgressView().controlSize(.mini)
-            } else {
-                Image(systemName: icon)
-                    .font(DS.Typography.metadata.weight(.semibold))
-            }
-            Text(text)
-                .font(DS.Typography.secondary.weight(.medium))
-                .lineLimit(2)
-            Spacer(minLength: 0)
-        }
-        .foregroundStyle(tint)
-        .padding(.horizontal, DS.Space.md)
-        .padding(.vertical, DS.Space.sm)
-        .background(RoundedRectangle(cornerRadius: DS.Radius.tile, style: .continuous).fill(tint.opacity(0.1)))
-        .overlay(
-            RoundedRectangle(cornerRadius: DS.Radius.tile, style: .continuous)
-                .strokeBorder(tint.opacity(0.18), lineWidth: DS.hairline)
-        )
-        .transition(.opacity.combined(with: .move(edge: .top)))
     }
 }
 

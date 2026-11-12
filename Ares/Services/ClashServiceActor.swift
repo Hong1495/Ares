@@ -98,7 +98,7 @@ actor ClashServiceActor {
         } catch {
             addLog("[ClashServiceActor] ❌ Config build failed: \(error)")
             await MainActor.run {
-                ClashViewModel.shared.markStartFailed("Config build failed")
+                ClashViewModel.shared.markStartFailed(error.localizedDescription)
             }
             return false
         }
