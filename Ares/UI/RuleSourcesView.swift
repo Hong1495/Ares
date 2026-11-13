@@ -2,6 +2,8 @@ import SwiftUI
 import SubscriptionKit
 
 struct RuleSourcesView: View {
+    @EnvironmentObject private var controller: ClashController
+    @EnvironmentObject private var profiles: ProfileService
     @Environment(\.dismiss) private var dismiss
     @State private var document: RuleSourceDocument.Document?
     @State private var error: String?
@@ -50,6 +52,12 @@ struct RuleSourcesView: View {
             }.font(DS.Typography.metadata).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(DS.Space.lg)
         }.frame(minWidth: 820, minHeight: 500).background(DS.canvas)
         .task { await load() }
+        .onChange(of: controller.runtimeGeneration) { _, _ in invalidate() }
+        .onChange(of: profiles.activeProfileRevision) { _, _ in invalidate() }
+    }
+    private func invalidate() {
+        document = nil; selection = nil; capturedAt = nil
+        error = "Runtime or subscription changed. Refresh to inspect current sources."
     }
     @MainActor private func load() async {
         guard !busy else { return }

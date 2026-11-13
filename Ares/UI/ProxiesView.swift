@@ -85,7 +85,7 @@ struct ProxiesView: View {
         .navigationTitle("")
         .toolbar { ProxiesTitleToolbar(count: nodeCount) }
         .sheet(isPresented: $showingResources) { ProxyResourcesView().environmentObject(clashController) }
-        .sheet(isPresented: $showingPolicies) { PolicyGroupsView().environmentObject(clashController) }
+        .sheet(isPresented: $showingPolicies, onDismiss: { Task { await refreshProxies() } }) { PolicyGroupsView().environmentObject(clashController) }
         .onAppear { selectedTab = ProxyTab(rawValue: appState.currentMode.rawValue.capitalized) ?? .rule }
         .onChange(of: appState.currentMode) { _, mode in
             selectedTab = ProxyTab(rawValue: mode.rawValue.capitalized) ?? .rule
@@ -103,6 +103,8 @@ struct ProxiesView: View {
         loadRevision = revision
         let key = profileKey
         let path = profileService.activeProfile?.path
+        let policyKey = profileService.activeProfile.map { "policyGroupOverrides." + $0.id.uuidString }
+        let policy = policyKey.flatMap { UserDefaults.standard.string(forKey: $0) } ?? "{}"
         liveProfileKey = ""
         isLoading = true
         loadError = nil
@@ -110,7 +112,8 @@ struct ProxiesView: View {
         do {
             let snapshot: SubscriptionSnapshot? = try await Task.detached {
                 guard let path else { return nil }
-                return try SubscriptionSnapshot.parse(String(contentsOf: path, encoding: .utf8))
+                let source = try String(contentsOf: path, encoding: .utf8)
+                return try SubscriptionSnapshot.parse(PolicyConfiguration.preview(source: source, overrides: policy))
             }.value
             try Task.checkCancellation()
             guard key == profileKey, loadRevision == revision else { return }

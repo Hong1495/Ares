@@ -98,14 +98,55 @@ final class FakeConfig: URLProtocol, @unchecked Sendable {
         let providers = try await providersTask.value
         precondition(providers.first?.ruleCount == 12)
         FakeConfig.respond = nil
+        let updateTask = Task { try await controller.updateRuleProvider("Asia / A?#") }
+        for _ in 0..<200 where FakeConfig.respond == nil { try await Task.sleep(for: .milliseconds(5)) }
+        let preflight = FakeConfig.respond!
+        FakeConfig.respond = nil
+        preflight()
         FakeConfig.expectedMethod = "PUT"
         FakeConfig.expectedPath = "/providers/rules/Asia / A?#"
         FakeConfig.status = 503
-        let updateTask = Task { try await controller.updateRuleProvider("Asia / A?#") }
         for _ in 0..<200 where FakeConfig.respond == nil { try await Task.sleep(for: .milliseconds(5)) }
         FakeConfig.respond!()
         do { _ = try await updateTask.value; fatalError("Update failure accepted") }
         catch { precondition((error as NSError).code == 503) }
+        precondition(ResourceActivity.shared.entries.first?.outcome == .failed)
+        precondition(ResourceActivity.shared.entries.first?.phase == .requesting)
+        for scenario in ["success", "readback-failure", "endpoint-changed", "inline"] {
+            FakeConfig.expectedMethod = "GET"; FakeConfig.expectedPath = "/providers/rules"
+            FakeConfig.status = 200
+            FakeConfig.payload = scenario == "inline" ? Data(#"{"providers":{"Asia / A?#":{"name":"Asia / A?#","behavior":"domain","vehicleType":"Inline","ruleCount":12}}}"#.utf8) : providerPayload
+            FakeConfig.respond = nil
+            let mutation = Task { try await controller.updateRuleProvider("Asia / A?#") }
+            for _ in 0..<200 where FakeConfig.respond == nil { try await Task.sleep(for: .milliseconds(5)) }
+            let first = FakeConfig.respond!; FakeConfig.respond = nil; first()
+            if scenario != "inline" {
+                FakeConfig.expectedMethod = "PUT"; FakeConfig.expectedPath = "/providers/rules/Asia / A?#"
+                for _ in 0..<200 where FakeConfig.respond == nil { try await Task.sleep(for: .milliseconds(5)) }
+                let put = FakeConfig.respond!; FakeConfig.respond = nil
+                if scenario == "endpoint-changed" { controller.baseURL = "https://changed.invalid" }
+                put()
+                if scenario != "endpoint-changed" {
+                    FakeConfig.expectedMethod = "GET"; FakeConfig.expectedPath = "/providers/rules"
+                    FakeConfig.status = scenario == "readback-failure" ? 503 : 200
+                    for _ in 0..<200 where FakeConfig.respond == nil { try await Task.sleep(for: .milliseconds(5)) }
+                    let read = FakeConfig.respond!; FakeConfig.respond = nil; read()
+                    if scenario == "success" {
+                        FakeConfig.expectedPath = "/rules"
+                        FakeConfig.payload = Data(#"{"rules":[]}"#.utf8)
+                        for _ in 0..<200 where FakeConfig.respond == nil { try await Task.sleep(for: .milliseconds(5)) }
+                        FakeConfig.respond!()
+                    }
+                }
+            }
+            do { _ = try await mutation.value; precondition(scenario == "success") }
+            catch { precondition(scenario != "success") }
+            let entry = ResourceActivity.shared.entries.first!
+            if scenario == "success" { precondition(entry.outcome == .confirmed) }
+            if scenario == "inline" { precondition(entry.phase == .preparing && entry.outcome == .failed) }
+            if scenario == "readback-failure" { precondition(entry.phase == .reading && entry.outcome == .failed) }
+            if scenario == "endpoint-changed" { precondition(entry.outcome == .cancelled) }
+        }
         FakeConfig.expectedPath = "/dns/query"
         FakeConfig.expectedMethod = "GET"
         for scenario in ["success", "empty", "nxdomain", "http-error", "malformed", "generation-changed", "endpoint-changed"] {

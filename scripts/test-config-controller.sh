@@ -5,6 +5,7 @@ OUT="$(mktemp -d /tmp/ares-config-api.XXXXXX)"
 trap 'rm -rf "$OUT"' EXIT
 # All HTTP is intercepted; no production controller lifecycle or core is linked.
 xcrun swiftc -parse-as-library \
+  "$ROOT/Ares/Services/ResourceActivity.swift" \
   "$ROOT/Ares/Models/DNSQueryResult.swift" "$ROOT/Ares/Services/ClashController+DNS.swift" \
   "$ROOT/Ares/Models/RuleModels.swift" \
   "$ROOT/Ares/Models/ClashConfig.swift" \

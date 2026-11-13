@@ -2,6 +2,7 @@ import SwiftUI
 import SubscriptionKit
 
 @MainActor final class ClashController: ObservableObject {
+    let baseURL = "https://preview.invalid"
     @Published var rules: [ClashRule] = (0..<55).map { index in
         ClashRule(index: index, type: index % 2 == 0 ? "RuleSet" : "DomainSuffix",
             payload: index % 2 == 0 ? "Streaming" : "example.test", proxy: "Proxy",
@@ -22,9 +23,9 @@ import SubscriptionKit
     func beginOperation(_ text: String) -> Bool { true }
     func finishOperation(error: String?) {}
 }
-@MainActor final class ProfileService {
+@MainActor final class ProfileService: ObservableObject {
     static let shared = ProfileService()
-    var activeProfileRevision = "preview"
+    @Published var activeProfileRevision = "preview"
 }
 @MainActor enum LocalRulesService {
     static func apply(_ text: String, expectedRevision: String, expectedRules: String? = nil) async -> Bool { false }
@@ -43,7 +44,7 @@ final class UserDefaults {
     @StateObject private var controller = ClashController()
     var body: some Scene {
         WindowGroup("Ares Rules Preview") {
-            RulesView().environmentObject(controller).frame(minWidth: 850, minHeight: 540)
+            RulesView().environmentObject(controller).environmentObject(ProfileService.shared).frame(minWidth: 850, minHeight: 540)
         }.defaultSize(width: 1000, height: 640)
     }
 }

@@ -3,6 +3,9 @@ import SwiftUI
 struct RuleProvidersView: View {
     @EnvironmentObject private var controller: ClashController
     @Environment(\.dismiss) private var dismiss
+    let initialSelection: String?
+    init(initialSelection: String? = nil) { self.initialSelection = initialSelection }
+    @State private var showHistory = false
     @State private var providers: [RuleProvider] = []
     @State private var search = ""
     @State private var busy = false
@@ -26,9 +29,11 @@ struct RuleProvidersView: View {
                 Text("Rule Sets").font(DS.Typography.secondary.weight(.semibold)).fixedSize()
                 Text("\(providers.count)").font(DS.Typography.secondary.monospacedDigit())
                 Spacer()
-                Button("Done") { dismiss() }.controlSize(.small).fixedSize()
+                Button("Done") { dismiss() }.controlSize(.small).fixedSize().disabled(busy)
             }.padding(DS.Space.lg)
             CollectionTools(placeholder: "Search rule sets", search: $search) {
+                Button { showHistory = true } label: { Image(systemName: "clock.arrow.circlepath") }
+                    .help("Resource activity").accessibilityLabel("Resource activity")
                 Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") }
                     .help("Read rule set status").accessibilityLabel("Read rule set status")
                     .disabled(busy)
@@ -84,7 +89,8 @@ struct RuleProvidersView: View {
         .background(DS.canvas)
         .interactiveDismissDisabled(busy)
         .sheet(item: $sourceSelection) { RuleSourcesView(provider: $0.name) }
-        .task { await load() }
+        .task { inspectedProvider = initialSelection; search = initialSelection ?? ""; await load() }
+        .sheet(isPresented: $showHistory) { ResourceActivityView(kind: .rules) }
         .onChange(of: controller.runtimeGeneration) { _, _ in
             providers = []; relatedRules = []; inspectedProvider = nil; loadedGeneration = nil
             error = "The core changed. Refresh to read the current rule sets."
@@ -93,7 +99,7 @@ struct RuleProvidersView: View {
 
     @MainActor private func load() async {
         guard !busy else { return }
-        busy = true; error = nil
+        busy = true; error = nil; providers = []; relatedRules = []; loadedGeneration = nil
         let generation = controller.runtimeGeneration
         defer { busy = false }
         do {
@@ -101,6 +107,7 @@ struct RuleProvidersView: View {
             try await controller.fetchRules()
             guard generation == controller.runtimeGeneration else { throw CancellationError() }
             loadedGeneration = generation
+            if let inspectedProvider { relatedRules = controller.rules.filter { $0.type.lowercased().replacingOccurrences(of: "-", with: "") == "ruleset" && $0.payload == inspectedProvider } }
         } catch {
             providers = []
             self.error = "Rule set status could not be read from the current core."
@@ -121,6 +128,7 @@ struct RuleProvidersView: View {
                 relatedRules = controller.rules.filter { $0.type.lowercased().replacingOccurrences(of: "-", with: "") == "ruleset" && $0.payload == inspectedProvider }
             }
         } catch {
+            providers = []; relatedRules = []; loadedGeneration = nil
             self.error = "The update or its status readback failed. Refresh to verify the current rule set."
         }
     }

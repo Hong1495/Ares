@@ -78,17 +78,17 @@ actor ConfigService {
         return result
     }
 
-    func policyGroups(profilePath: URL, overrides: String) async throws -> ([PolicyConfiguration.Group], [PolicyConfiguration.Group]) {
+    func policyGroups(profilePath: URL, overrides: String) async throws -> ([PolicyConfiguration.Group], [PolicyConfiguration.Group], String) {
         let source = try await fileManager.readText(from: profilePath)
         let inherited = try PolicyConfiguration.read(source)
-        let effective = try PolicyConfiguration.read(PolicyConfiguration.apply(source: source, overrides: overrides))
+        let effective = try PolicyConfiguration.read(PolicyConfiguration.preview(source: source, overrides: overrides))
         guard source == (try await fileManager.readText(from: profilePath)) else { throw CancellationError() }
-        return (inherited, effective)
+        return (inherited, effective, source)
     }
 
-    func egressSettings(profilePath: URL, overrides: String) async throws -> (EgressConfiguration.Document, EgressConfiguration.Document) {
+    func egressSettings(profilePath: URL, overrides: String, policyOverrides: String = "{}") async throws -> (EgressConfiguration.Document, EgressConfiguration.Document) {
         let source = try await fileManager.readText(from: profilePath)
-        let inherited = try EgressConfiguration.read(source)
+        let inherited = try EgressConfiguration.read(PolicyConfiguration.preview(source: source, overrides: policyOverrides))
         // Keep outdated drafts editable after a subscription removes or renames a node.
         // The UI overlays explicit fields; applying always runs the complete validation.
         _ = try EgressConfiguration.decode(overrides)

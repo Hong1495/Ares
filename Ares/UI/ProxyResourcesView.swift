@@ -3,6 +3,9 @@ import SwiftUI
 struct ProxyResourcesView: View {
     @EnvironmentObject private var controller: ClashController
     @Environment(\.dismiss) private var dismiss
+    let initialSelection: String?
+    init(initialSelection: String? = nil) { self.initialSelection = initialSelection }
+    @State private var showHistory = false
     @State private var resources: [ProxyResource] = []
     @State private var selection: String?
     @State private var search = ""
@@ -25,6 +28,8 @@ struct ProxyResourcesView: View {
                 Button("Done") { dismiss() }.controlSize(.small).fixedSize().disabled(busy)
             }.padding(DS.Space.lg)
             CollectionTools(placeholder: "Search resources", search: $search) {
+                Button { showHistory = true } label: { Image(systemName: "clock.arrow.circlepath") }
+                    .help("Resource activity").accessibilityLabel("Resource activity")
                 Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") }
                     .disabled(busy).help("Read node resources").accessibilityLabel("Read node resources")
             }
@@ -71,7 +76,8 @@ struct ProxyResourcesView: View {
             Text("Provider history uses its configured test URL. A completed check can include failed or unmeasured nodes.")
                 .font(DS.Typography.metadata).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(DS.Space.lg)
         }.frame(minWidth: 760, minHeight: 540).background(DS.canvas).interactiveDismissDisabled(busy)
-        .task { await load() }
+        .task { search = initialSelection ?? ""; await load(); selection = initialSelection }
+        .sheet(isPresented: $showHistory) { ResourceActivityView(kind: .nodes) }
         .onChange(of: controller.runtimeGeneration) { _, _ in
             resources = []; generation = nil; selection = nil; status = nil
             error = "The core changed. Refresh before working with resources."
@@ -79,7 +85,7 @@ struct ProxyResourcesView: View {
     }
     @MainActor private func load() async {
         guard !busy else { return }
-        busy = true; error = nil; status = nil
+        busy = true; error = nil; status = nil; resources = []; generation = nil
         let token = controller.runtimeGeneration
         defer { busy = false }
         do {
@@ -98,6 +104,7 @@ struct ProxyResourcesView: View {
             status = health ? "Check request completed. Review measurement times and results below." : "Resource updated and read back."
             selection = resource.name
         } catch {
+            resources = []; generation = nil
             self.error = "The request or its readback failed. Refresh to verify the current resource."
         }
     }

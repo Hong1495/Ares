@@ -3,6 +3,7 @@ import Foundation
 @MainActor final class ProfileService {
     static let shared = ProfileService()
     struct Profile { let path: URL? }
+    var activeProfileID: UUID?
     var activeProfile: Profile?
     var activeProfileRevision = "r1"
 }

@@ -41,7 +41,7 @@ class ClashController: ObservableObject {
     }
 
     var selectingProxyGroups: Set<String> = []
-    var runtimeGeneration = UUID() {
+    @Published var runtimeGeneration = UUID() {
         didSet { measuredDelays.removeAll(); rules = []; rulesError = nil }
     }
     @Published var testingProxyNames: Set<String> = []

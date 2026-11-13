@@ -172,7 +172,14 @@ with tempfile.TemporaryDirectory(prefix='ares-native-core-') as name:
             {'name': 'Fallback', 'type': 'fallback', 'use': ['Remote Nodes'], 'url': test_url, 'interval': 600},
             {'name': 'Balance', 'type': 'load-balance', 'use': ['Remote Nodes'], 'url': test_url, 'interval': 600, 'strategy': 'round-robin'}]
         policy['rules'] = ['MATCH,Pick']
-        candidate.write_text(json.dumps(policy))
+        if len(sys.argv) > 2:
+            # Exercise the production Swift composer, not a handwritten equivalent.
+            draft = dict(policy)
+            draft['proxy-groups'] = config['proxy-groups']
+            fixture = root / 'composition-source.json'; fixture.write_text(json.dumps(draft))
+            subprocess.run([sys.argv[2], str(fixture), str(candidate)], check=True, env=clean_env)
+        else:
+            candidate.write_text(json.dumps(policy))
         api('PUT', '/configs?force=true', {'path': str(candidate)})
         for group, kind in [('Pick', 'Selector'), ('Auto', 'URLTest'), ('Fallback', 'Fallback'), ('Balance', 'LoadBalance')]:
             assert api(path='/proxies/' + group)['type'] == kind
@@ -192,6 +199,13 @@ with tempfile.TemporaryDirectory(prefix='ares-native-core-') as name:
         assert len(api(path='/providers/proxies')['providers']['Remote Nodes']['proxies']) == 3
         assert 'Provider C' in api(path='/proxies/Pick')['all']
         api('PUT', '/proxies/Pick', {'name': 'Provider C'}); traffic()
+        # Deleting a referenced group must be rejected without disturbing live traffic.
+        broken = dict(policy)
+        broken['proxy-groups'] = [g for g in policy['proxy-groups'] if g['name'] != 'Pick']
+        invalid = root / 'missing-group.json'; invalid.write_text(json.dumps(broken))
+        validation = subprocess.run([str(core), '-t', '-d', str(root), '-f', str(invalid)], capture_output=True, env=clean_env)
+        assert validation.returncode != 0, 'Deleted referenced policy accepted'
+        traffic()
         api('PUT', '/configs?force=true', {'path': str(path)})
         traffic()
         print('PASS: four policy types, nested selections, auto/fallback pin/reset, load-balanced traffic, HTTP provider update, health history and new member selection')

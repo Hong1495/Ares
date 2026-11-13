@@ -8,6 +8,8 @@ import SubscriptionKit
         let stored: String
         let inherited: EgressConfiguration.Document
         let effective: EgressConfiguration.Document
+        var policyOverrides = "{}"
+        var policyKey: String? = nil
     }
     static func key(_ id: UUID) -> String { "egressOverrides." + id.uuidString }
     static func load() async throws -> Snapshot {
@@ -15,15 +17,20 @@ import SubscriptionKit
         guard let id = profiles.activeProfileID, let path = profiles.activeProfile?.path else { throw URLError(.fileDoesNotExist) }
         let revision = profiles.activeProfileRevision, key = key(id)
         let stored = UserDefaults.standard.string(forKey: key) ?? EgressConfiguration.empty
-        let documents = try await ConfigService.shared.egressSettings(profilePath: path, overrides: stored)
-        guard revision == profiles.activeProfileRevision, stored == (UserDefaults.standard.string(forKey: key) ?? EgressConfiguration.empty) else { throw CancellationError() }
-        return Snapshot(revision: revision, storageKey: key, stored: stored, inherited: documents.0, effective: documents.1)
+        let policyKey = "policyGroupOverrides." + id.uuidString
+        let policy = UserDefaults.standard.string(forKey: policyKey) ?? "{}"
+        let documents = try await ConfigService.shared.egressSettings(profilePath: path, overrides: stored, policyOverrides: policy)
+        guard revision == profiles.activeProfileRevision, stored == (UserDefaults.standard.string(forKey: key) ?? EgressConfiguration.empty), policy == (UserDefaults.standard.string(forKey: policyKey) ?? "{}") else { throw CancellationError() }
+        return Snapshot(revision: revision, storageKey: key, stored: stored, inherited: documents.0, effective: documents.1, policyOverrides: policy, policyKey: policyKey)
     }
     static func apply(_ overrides: String, snapshot: Snapshot, defaults: UserDefaults = .standard) async -> Bool {
         let app = AppState.shared, vm = ClashViewModel.shared
         guard snapshot.revision == ProfileService.shared.activeProfileRevision,
               snapshot.stored == (defaults.string(forKey: snapshot.storageKey) ?? EgressConfiguration.empty) else {
             app.reportError("The subscription or its routing overrides changed. Reopen the editor before applying."); return false
+        }
+        if let key = snapshot.policyKey, snapshot.policyOverrides != (defaults.string(forKey: key) ?? "{}") {
+            app.reportError("Policy groups changed. Reopen Routing & Listeners before applying."); return false
         }
         guard app.beginOperation("Applying Routing & Listeners") else { return false }
         vm.isToggling = true

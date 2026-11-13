@@ -52,7 +52,7 @@ public enum SceneOverrideDocument {
                 guard let name = key.string, !name.isEmpty else { throw EffectiveConfiguration.BuildError.invalidSection }
                 let fields = try scalars(value)
                 // Parameter semantics are checked against the actual group type on apply.
-                guard Set(fields.keys).isSubset(of: Set(PolicyConfiguration.fields)) else { throw EffectiveConfiguration.BuildError.invalidSection }
+                guard Set(fields.keys).isSubset(of: Set(PolicyConfiguration.fields + PolicyConfiguration.structuralFields)) else { throw EffectiveConfiguration.BuildError.invalidSection }
                 groups[name] = fields
             }
             return try PolicyConfiguration.encodeOverrides(groups)

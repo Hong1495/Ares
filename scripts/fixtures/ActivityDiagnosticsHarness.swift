@@ -16,7 +16,7 @@ import SubscriptionKit
     var isToggling = false
     var revision = "current"
     var configuration = "mode: rule\ntun: {enable: false}\nmixed-port: 7890\ndns: {enable: false}"
-    func captureRecoveryCheckpoint() async throws -> RuntimeCheckpoint {
+    func recoveryCheckpoint() throws -> RuntimeCheckpoint {
         RuntimeCheckpoint(configuration: configuration, profileID: nil, profileRevision: revision, selections: [:], tunEnabled: false)
     }
 }
@@ -26,14 +26,17 @@ import SubscriptionKit
 }
 @MainActor final class ClashController {
     static let shared = ClashController()
+    var baseURL = "https://diagnostics.invalid"
     var runtimeGeneration = UUID()
     var proxyGroups: [ProxyGroup] = []
     var proxyNodes: [String: ProxyNode] = [:]
     var failed = false
     var changeGeneration = false
     var mismatch = false
+    var readbackFailure = false
     func readRuntimeConfiguration() async throws -> Data {
-        Data((mismatch ? #"{"mode":"rule","tun":{"enable":false},"mixed-port":9999}"# : #"{"mode":"rule","tun":{"enable":false},"mixed-port":7890}"#).utf8)
+        if readbackFailure { throw URLError(.timedOut) }
+        return Data((mismatch ? #"{"mode":"rule","tun":{"enable":false},"mixed-port":9999}"# : #"{"mode":"rule","tun":{"enable":false},"mixed-port":7890}"#).utf8)
     }
     func fetchProxiesData() async throws { if failed { throw URLError(.timedOut) } }
     func fetchProxyResources() async throws -> [ProxyResource] {
@@ -53,6 +56,24 @@ import SubscriptionKit
         precondition(result.rows.contains { $0.id == "Subscription" && $0.status == "Matches" })
         precondition(result.rows.contains { $0.id == "Nodes · Fixture" && $0.detail.contains("1 measured") && $0.detail.contains("Historical") })
         precondition(result.rows.contains { $0.id == "Rules · Rules" && $0.detail.contains("5 rules") })
+        precondition(result.rows.first { $0.id == "Nodes · Fixture" }?.destination == .nodes("Fixture"))
+        controller.readbackFailure = true
+        let independent = try await ActivityDiagnosticsService.load()
+        precondition(independent.rows.contains { $0.id == "Runtime readback" && $0.status == "Unavailable" })
+        precondition(independent.rows.contains { $0.id == "Rules · Rules" })
+        controller.readbackFailure = false
+        ClashViewModel.shared.configuration += "\nrules: [\"AND,((RULE-SET,Missing),(DOMAIN,fixture.test)),DIRECT\"]"
+        let references = try await ActivityDiagnosticsService.load()
+        precondition(references.rows.contains { $0.id == "Missing rule resource · Missing" && $0.destination == .sources("Missing") })
+        let activity = ResourceActivity.shared
+        let attempt = try activity.begin(name: "Fixture", kind: .nodes, action: .update, generation: controller.runtimeGeneration, endpoint: controller.baseURL)
+        activity.advance(attempt, to: .reading)
+        activity.finish(attempt, error: URLError(.timedOut))
+        let history = try await ActivityDiagnosticsService.load()
+        precondition(history.rows.contains { $0.id == "Last nodes operation · Fixture" && $0.status == "Unconfirmed" })
+        controller.runtimeGeneration = UUID()
+        let fresh = try await ActivityDiagnosticsService.load()
+        precondition(!fresh.rows.contains { $0.id.hasPrefix("Last nodes operation") })
         controller.mismatch = true
         ClashViewModel.shared.revision = "older"
         let mismatch = try await ActivityDiagnosticsService.load()

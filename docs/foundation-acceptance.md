@@ -131,3 +131,29 @@ The user explicitly requested acceptance, commit and publication of a new versio
 - History stores the latest 100 attempt summaries with trigger/outcome/section names. Corrupt history is preserved; filesystem permissions and retention are tested. Production history is never used by the isolated coordinator harness.
 - Full local verification passed: 139 safe tests, 54 package tests passed with one optional skip, coordinator/automation/catalog/lifecycle/API/diagnostic/reaper/listener tests, Python update tests, isolated previews and Debug build. Release arm64 build also passed. Release CI additionally executes native egress validation against the bundled pinned core.
 - UI acceptance checked native scene group/member pickers, missing-choice messaging and execution history. Installed production application and host proxy/TUN are left untouched. Physical-network and installed-update/relaunch acceptance remain explicit limits, not assumed successes.
+
+## Post-1.0.11 diagnostics and resource operations
+
+- Diagnostics and rule-source inspection read the verified checkpoint without refreshing recovery state. Runtime readback failure no longer hides independently available policy/provider evidence. Current endpoint/generation/revision checks guard the completed snapshot.
+- Evidence navigation carries typed destinations and resource names. Configuration evidence retains the original diagnostic batch; unavailable comparison and empty successful comparison are distinct. Nested rule/provider references and missing providers are exposed without claiming runtime hit attribution.
+- Production resource APIs record preflight/request/readback/completion and reject duplicate in-flight work. Rule Inline updates are rejected before mutation. A failed readback remains unconfirmed even when the mutation request succeeded. No automatic retry or recovery is added.
+- Session history limits completed entries to 100, retains in-flight entries, labels previous runtimes, and discards raw error strings. Tests cover retention, duplicate operations, privacy, API readback failure, stale endpoints/generations, Inline preflight and independent diagnostic failures.
+- Full verification passed: 139 safe tests, 54 package tests plus one optional skip, production-service harnesses, isolated previews and Debug build. Follow-up targeted checks cover final changes; arm64 Release compilation passed. Native preview confirmed first-use resource targeting, selected member details and history failure-stage presentation.
+- Host production app, system proxy and TUN remain untouched. This development checkpoint is not a newly published release, and does not claim physical network or installed-update acceptance.
+
+## Policy composition acceptance
+
+- Production policy composer supports local group creation, subscription-group deletion/restoration, type/member/resource edits and per-type parameters without flattening unknown fields. Legacy parameter-only storage and scene projections remain compatible.
+- Groups plus local routing rules commit as one transaction. Stale rules reject the draft; activation/readback failures restore rules, overrides and saved selections. Runtime verification checks group types, removed names and unfiltered explicit member order. The pinned core validates final rule/listener references before activation.
+- Package tests cover new groups, ordering, deletion, inheritance restoration, missing references, mixed dialer/group cycles, collisions, empty/duplicate members, type changes and scene round trips. 58 package tests passed, one optional skipped. Full verification includes 139 safe tests and the production transaction/API/lifecycle harnesses.
+- `scripts/test-policy-composition.sh` compiles the production Swift composer and feeds its output into the native loopback core suite. Actual RULE-SET traffic, four policy types, nested/manual/automatic choices, resource updates and rejected deletion of a referenced group pass against mihomo v1.19.34. Release CI now uses this path.
+- Native inert UI preview covers creation, member selection, routing-rule insertion, list/source editors and hidden scrollbars. Debug and arm64 Release builds pass. No production app installation or host system network changes were made; physical TUN and installed-update acceptance remain separate.
+
+
+## Network configuration form convergence
+
+- DNS string/list mappings and ordered resolver/filter lists now have a form editor alongside Source. Complex nested values stay in Source; scalar/list identity and string typing survive round trips. Form row edits enter the configuration draft through Add/Save Row before Apply.
+- HTTP/SOCKS/Mixed listeners and TCP/UDP fixed forwarding use isolated entry drafts. Patching preserves authentication, TLS, unknown fields and unsupported rows. Complete egress validation still checks target references, bind addresses and endpoint conflicts before activation.
+- Routing targets include locally composed policy groups. A changed policy baseline rejects an already-open routing draft rather than applying against obsolete targets. The production coordinator harness covers this additional stale-policy guard.
+- Full local verification passed with 139 safe tests, 61 package tests plus one optional skip, production service/lifecycle/coordinator harnesses and Debug/arm64 Release compilation. Native v1.19.34 DNS and egress tests verify real resolver isolation, two-hop outbound traffic, authenticated HTTP, SOCKS TCP/UDP and fixed TCP/UDP forwarding on owned loopback ports.
+- Inert native UI acceptance exercised DNS row insertion and listener draft creation/save with hidden scrollbars. No host network settings or installed production app were changed; this checkpoint does not claim physical TUN or installed-update acceptance.

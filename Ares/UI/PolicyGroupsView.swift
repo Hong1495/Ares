@@ -10,6 +10,7 @@ struct PolicyGroupsView: View {
     @State private var error: String?
     @State private var editing: PolicyConfiguration.Group?
     @State private var busy = false
+    @State private var composing = false
     @State private var liveGroups: [ProxyGroup] = []
     @State private var graph: PolicyGraph.Snapshot?
     @State private var capturedAt: Date?
@@ -22,6 +23,8 @@ struct PolicyGroupsView: View {
                 Button("Done") { dismiss() }.controlSize(.small).fixedSize()
             }.padding(DS.Space.lg)
             CollectionTools(placeholder: "Search groups", search: $search) {
+                Button { composing = true } label: { Image(systemName: "square.and.pencil") }
+                    .disabled(snapshot == nil || busy).help("Compose policies and routing rules").accessibilityLabel("Compose policies")
                 Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") }
                     .disabled(busy).help("Read policy groups").accessibilityLabel("Read policy groups")
             }
@@ -64,6 +67,7 @@ struct PolicyGroupsView: View {
                 .font(DS.Typography.metadata).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(DS.Space.lg)
         }.frame(minWidth: 800, minHeight: 560).background(DS.canvas)
         .task { await load() }
+        .sheet(isPresented: $composing, onDismiss: { Task { await load() } }) { if let snapshot { PolicyCompositionView(snapshot: snapshot) } }
         .sheet(item: $editing, onDismiss: { Task { await load() } }) { group in
             if let snapshot { PolicyParameterEditor(group: group, snapshot: snapshot) }
         }
@@ -143,7 +147,7 @@ private struct PolicyParameterEditor: View {
         .onAppear {
             do {
                 edits = try PolicyConfiguration.decodeOverrides(snapshot.stored)
-                enabled = Set(edits[group.name]?.keys ?? Dictionary<String, String>().keys)
+                enabled = Set((edits[group.name] ?? [:]).keys.filter { PolicyConfiguration.fields.contains($0) })
                 values = group.fields
             } catch { self.error = "Saved overrides could not be read." }
         }
@@ -154,7 +158,9 @@ private struct PolicyParameterEditor: View {
     }
     private func apply() {
         do {
-            edits[group.name] = Dictionary(uniqueKeysWithValues: enabled.map { ($0, values[$0] ?? "") })
+            var updated = (edits[group.name] ?? [:]).filter { PolicyConfiguration.structuralFields.contains($0.key) }
+            for field in enabled where PolicyConfiguration.fields.contains(field) { updated[field] = values[field] ?? "" }
+            edits[group.name] = updated
             if edits[group.name]?.isEmpty == true { edits.removeValue(forKey: group.name) }
             let text = try PolicyConfiguration.encodeOverrides(edits)
             applying = true; error = nil

@@ -12,6 +12,7 @@ scripts/test-configuration-coordinator.sh
 scripts/test-scene-automation.sh
 scripts/test-scene-catalog.sh
 scripts/test-effective-config.sh
+scripts/test-resource-activity.sh
 scripts/test-activity-diagnostics.sh
 scripts/test-listener-verification.sh
 scripts/test-core-process-reaper.sh

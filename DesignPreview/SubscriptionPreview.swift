@@ -11,6 +11,19 @@ import SubscriptionKit
     }
     var activeChains: [Chain] { (1...80).map { Chain(sourceProcess: "Preview App", rule: "Domain", host: "fixture-\($0).test", destinationIP: "", chains: ["Preview Route"]) } }
     func monitorConnections() async {}
+    init() {
+        let activity = ResourceActivity.shared
+        let attempt = try! activity.begin(name: "Sample Resource", kind: .nodes, action: .update, generation: runtimeGeneration, endpoint: baseURL)
+        activity.advance(attempt, to: .reading)
+        activity.finish(attempt, error: URLError(.timedOut))
+    }
+    let baseURL = "https://preview.invalid"
+    @Published var rules: [ClashRule] = []
+    func fetchRules() async throws {}
+    func fetchRuleProviders() async throws -> [RuleProvider] {
+        try RuleProvider.decode(Data(#"{"providers":{"Sample Rules":{"name":"Sample Rules","behavior":"domain","vehicleType":"HTTP","ruleCount":128}}}"#.utf8))
+    }
+    func updateRuleProvider(_ name: String) async throws -> [RuleProvider] { try await fetchRuleProviders() }
     @Published var runtimeGeneration = UUID()
     func queryDNS(name: String, type: String) async throws -> DNSQueryResult {
         try JSONDecoder().decode(DNSQueryResult.self, from: Data(#"{"Status":0,"TC":false,"Answer":[{"name":"fixture.test.","type":1,"TTL":90,"data":"192.0.2.10"}]}"#.utf8))
@@ -75,13 +88,15 @@ struct PreviewProfile {
         let stored: String
         let inherited: [PolicyConfiguration.Group]
         let effective: [PolicyConfiguration.Group]
+        var source = "proxy-groups: [{name: Automatic, type: url-test, proxies: [DIRECT]}]"
+        var localRules = ""
     }
     static var canReadRuntime: Bool { false }
     static func load() async throws -> Snapshot {
         let groups = try PolicyConfiguration.read("proxy-groups: [{name: Automatic, type: url-test, proxies: [Sample 1], interval: 600, tolerance: 50, use: [Sample Resource]}]")
         return Snapshot(revision: "preview", storageKey: "unused", stored: "{}", inherited: groups, effective: groups)
     }
-    static func apply(_ text: String, snapshot: Snapshot) async -> Bool { false }
+    static func apply(_ text: String, snapshot: Snapshot, localRules: String? = nil) async -> Bool { false }
 }
 @MainActor enum DNSSettingsService {
     struct Snapshot {
@@ -163,16 +178,21 @@ struct PreviewProfile {
     func resume() { paused = false }
 }
 @MainActor enum ActivityDiagnosticsService {
-    struct Row: Identifiable { let id: String; let status: String; let detail: String; let attention: Bool }
-    struct Snapshot { let capturedAt: Date; let rows: [Row] }
+    enum Destination: Equatable, Identifiable {
+        var id: String { String(describing: self) }
+        case configuration, policies, nodes(String?), rules(String?), sources(String?), history }
+    struct Row: Identifiable { let id: String; let status: String; let detail: String; let attention: Bool; var destination: Destination? = nil }
+    struct Snapshot { let capturedAt: Date; let rows: [Row]; var audit: [ConfigurationAudit.Row] = []; var differences: [ConfigurationDiff.Row] = [] }
     static func load() async throws -> Snapshot {
         Snapshot(capturedAt: Date(), rows: [
-            Row(id: "Subscription", status: "Matches", detail: "Running revision matches the selected subscription.", attention: false),
-            Row(id: "Node resources", status: "Unavailable", detail: "Resource metadata could not be read.", attention: true),
-            Row(id: "Policy membership", status: "No static issues", detail: "4 groups · 32 member references", attention: false)])
+            Row(id: "Saved configuration", status: "Different", detail: "One structural difference from verified launch.", attention: true, destination: .configuration),
+            Row(id: "Nodes · Sample Resource", status: "Read", detail: "32 nodes · 28 measured · Historical measurements, not a live connectivity test.", attention: false, destination: .nodes("Sample Resource")),
+            Row(id: "Rules · Sample Rules", status: "Read", detail: "128 rules · domain · 2 configured references.", attention: false, destination: .rules("Sample Rules")),
+            Row(id: "Policy membership", status: "No static issues", detail: "4 groups · 32 member references", attention: false, destination: .policies),
+            Row(id: "Last nodes operation · Sample Resource", status: "Unconfirmed", detail: "Update · The core may have completed the request. Read current metadata before retrying.", attention: true, destination: .history)])
     }
 }
-struct RuleSourcesView: View { var body: some View { Text("Inert rule sources preview") } }
+struct RuleSourcesView: View { var provider: String? = nil; var body: some View { Text("Inert rule sources preview") } }
 @main struct SubscriptionPreview: App {
     @State private var showingSettings = false
     @Environment(\.openWindow) private var openWindow

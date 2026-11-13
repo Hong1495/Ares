@@ -10,6 +10,7 @@ extension ClashController {
         request.httpMethod = "GET"
         let (data, response) = try await proxySession.data(for: request)
         try CoreAPIContract.requireSuccess(response)
+        try Task.checkCancellation()
         guard generation == runtimeGeneration, endpoint == baseURL else { throw CancellationError() }
         return data
     }
@@ -108,14 +109,28 @@ extension ClashController {
         guard let escaped = name.addingPercentEncoding(withAllowedCharacters: .alphanumerics), !name.isEmpty else {
             throw URLError(.badURL)
         }
-        let generation = runtimeGeneration
-        _ = try await readRuleResource(path: "/providers/rules/" + escaped, method: "PUT")
-        let providers = try await fetchRuleProviders()
-        guard generation == runtimeGeneration, providers.contains(where: { $0.name == name }) else {
-            throw CancellationError()
+        let generation = runtimeGeneration, endpoint = baseURL
+        let activity = ResourceActivity.shared
+        let attempt = try activity.begin(name: name, kind: .rules, action: .update, generation: generation, endpoint: endpoint)
+        do {
+            let before = try await fetchRuleProviders()
+            guard generation == runtimeGeneration, endpoint == baseURL else { throw CancellationError() }
+            guard before.first(where: { $0.name == name })?.canUpdate == true else { throw URLError(.unsupportedURL) }
+            activity.advance(attempt, to: .requesting)
+            _ = try await readRuleResource(path: "/providers/rules/" + escaped, method: "PUT")
+            activity.advance(attempt, to: .reading)
+            let providers = try await fetchRuleProviders()
+            guard generation == runtimeGeneration, endpoint == baseURL, providers.contains(where: { $0.name == name }) else {
+                throw CancellationError()
+            }
+            try await fetchRules()
+            guard generation == runtimeGeneration, endpoint == baseURL else { throw CancellationError() }
+            activity.finish(attempt)
+            return providers
+        } catch {
+            activity.finish(attempt, error: error)
+            throw error
         }
-        try await fetchRules()
-        return providers
     }
 
     private func readRuleResource(path: String, method: String = "GET") async throws -> Data {
@@ -126,6 +141,7 @@ extension ClashController {
         request.httpMethod = method
         let (data, response) = try await proxySession.data(for: request)
         try CoreAPIContract.requireSuccess(response)
+        try Task.checkCancellation()
         guard generation == runtimeGeneration, endpoint == baseURL else { throw CancellationError() }
         return data
     }

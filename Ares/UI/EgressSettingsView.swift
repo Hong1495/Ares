@@ -7,6 +7,7 @@ struct EgressSettingsView: View {
     @State private var snapshot: EgressSettingsService.Snapshot?
     @State private var edits = EgressConfiguration.Overrides()
     @State private var tab = 0
+    @State private var sourceMode = false
     @State private var selected: String?
     @State private var error: String?
     @State private var busy = false
@@ -33,7 +34,7 @@ struct EgressSettingsView: View {
                 Spacer()
                 if snapshot == nil { Button("Reload") { Task { await load() } }.disabled(busy) }
             }.font(DS.Typography.metadata).padding(DS.Space.lg)
-        }.frame(minWidth: 740, idealWidth: 800, minHeight: 560, idealHeight: 600).background(DS.canvas)
+        }.frame(minWidth: 740, idealWidth: 800, minHeight: 560, idealHeight: 600).background(DS.canvas).scrollIndicators(.never, axes: [.horizontal, .vertical])
         .interactiveDismissDisabled(pending || busy).task { await load() }
         .confirmationDialog("Discard unapplied routing changes?", isPresented: $confirmDiscard) {
             Button("Discard", role: .destructive) { dismiss() }
@@ -108,6 +109,11 @@ struct EgressSettingsView: View {
             }
             Text(sectionOverride == nil ? "Inherited · Read only" : "Local override · Replaces the entire section")
                 .font(DS.Typography.metadata).foregroundStyle(.secondary)
+            Picker("Editor", selection: $sourceMode) { Text("Form").tag(false); Text("Source").tag(true) }
+                .pickerStyle(.segmented).labelsHidden().frame(width: 160)
+            if !sourceMode {
+                InboundForm(text: Binding(get: { sectionOverride ?? inheritedSection }, set: { sectionOverride = $0 }), section: tab == 1 ? .listeners : .tunnels, targets: snapshot?.inherited.targets ?? []).id(tab).disabled(sectionOverride == nil)
+            } else {
             TextEditor(text: Binding(get: { sectionOverride ?? inheritedSection }, set: { sectionOverride = $0 }))
                 .font(.system(size: 12, design: .monospaced)).scrollContentBackground(.hidden)
                 .padding(DS.Space.sm).background(.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 6))
@@ -117,6 +123,7 @@ struct EgressSettingsView: View {
                 Button("Add example") { sectionOverride = example }.disabled(sectionOverride != "[]")
                 Spacer()
                 Text("YAML list").font(DS.Typography.metadata).foregroundStyle(.secondary)
+            }
             }
             Text(tab == 1 ? "Use an explicit IP and single port. Listener bindings are independent of Allow LAN. Use 127.0.0.1 for local access; configure users for shared access." : "Each entry maps a local address to a target through a proxy. These are fixed TCP/UDP forwards, not TUN routes.")
                 .font(DS.Typography.metadata).foregroundStyle(.secondary)

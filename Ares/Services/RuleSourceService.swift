@@ -6,7 +6,7 @@ import SubscriptionKit
         let vm = ClashViewModel.shared
         let controller = ClashController.shared
         let generation = controller.runtimeGeneration
-        let checkpoint = try await vm.captureRecoveryCheckpoint()
+        let checkpoint = try vm.recoveryCheckpoint()
         let revision = ProfileService.shared.activeProfileRevision
         let sameSource = checkpoint.profileRevision == revision && checkpoint.profileID == ProfileService.shared.activeProfileID
         let path = sameSource ? ProfileService.shared.activeProfile?.path : nil

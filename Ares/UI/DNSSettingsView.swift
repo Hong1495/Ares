@@ -6,6 +6,7 @@ struct DNSSettingsView: View {
     @EnvironmentObject private var controller: ClashController
     @Environment(\.dismiss) private var dismiss
     @State private var tab = 0
+    @State private var sourceMode = false
     @State private var snapshot: DNSSettingsService.Snapshot?
     @State private var selection = "nameserver-policy"
     @State private var edits: [String: String] = [:]
@@ -30,7 +31,7 @@ struct DNSSettingsView: View {
             if tab == 0 { configuration } else { DNSQueryView().environmentObject(controller) }
         }
         .frame(minWidth: 740, idealWidth: 800, minHeight: 540, idealHeight: 580)
-        .background(DS.canvas).interactiveDismissDisabled(pending || applying)
+        .background(DS.canvas).scrollIndicators(.never, axes: [.horizontal, .vertical]).interactiveDismissDisabled(pending || applying)
         .task { await load() }
         .confirmationDialog("Discard unapplied DNS changes?", isPresented: $confirmDiscard) {
             Button("Discard", role: .destructive) { dismiss() }
@@ -66,11 +67,17 @@ struct DNSSettingsView: View {
                         }.labelsHidden().frame(maxWidth: 240).disabled(edits[selection] == nil)
                         Spacer()
                     } else {
+                        Picker("Editor", selection: $sourceMode) { Text("Form").tag(false); Text("Source").tag(true) }
+                            .pickerStyle(.segmented).labelsHidden().frame(width: 160)
+                        if !sourceMode {
+                            DNSValueForm(text: value, mapping: field.kind == "mapping").id(selection).disabled(edits[selection] == nil)
+                        } else {
                         TextEditor(text: value).font(.system(size: 12, design: .monospaced))
                             .scrollContentBackground(.hidden).padding(DS.Space.sm)
                             .background(.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 6))
                             .overlay(RoundedRectangle(cornerRadius: 6).stroke(.primary.opacity(0.10), lineWidth: 1))
                             .disabled(edits[selection] == nil).accessibilityLabel(field.title + " YAML")
+                        }
                         Text(field.kind == "mapping" ? "YAML mapping · Applying replaces this entire field." : "YAML list · Applying replaces this entire field.")
                             .font(DS.Typography.metadata).foregroundStyle(.secondary)
                     }

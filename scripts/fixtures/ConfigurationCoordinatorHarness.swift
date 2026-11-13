@@ -1,6 +1,11 @@
 import Foundation
 import SubscriptionKit
 
+@MainActor final class ClashController {
+    static let shared = ClashController()
+    var proxyGroups = [ProxyGroup(name: "Auto", type: "URLTest", all: ["DIRECT"])]
+    func fetchProxiesData() async throws {}
+}
 @MainActor final class Trace {
     static let shared = Trace()
     var events: [String] = []
@@ -49,9 +54,9 @@ import SubscriptionKit
 }
 @MainActor final class ConfigService {
     static let shared = ConfigService()
-    func policyGroups(profilePath: URL, overrides: String) async throws -> ([PolicyConfiguration.Group], [PolicyConfiguration.Group]) { ([], []) }
+    func policyGroups(profilePath: URL, overrides: String) async throws -> ([PolicyConfiguration.Group], [PolicyConfiguration.Group], String) { ([], [], "{}") }
     func dnsSettings(profilePath: URL, overrides: String) async throws -> ([String: String], [String: String], [String: String]) { ([:], [:], [:]) }
-    func egressSettings(profilePath: URL, overrides: String) async throws -> (EgressConfiguration.Document, EgressConfiguration.Document) {
+    func egressSettings(profilePath: URL, overrides: String, policyOverrides: String = "{}") async throws -> (EgressConfiguration.Document, EgressConfiguration.Document) {
         let document = try EgressConfiguration.read("{}"); return (document, document)
     }
     var content = "old"
@@ -195,7 +200,7 @@ import SubscriptionKit
         for scenario in ["success", "validation", "rollback", "cleanup", "stale", "stopped", "stopped-invalid"] {
             resetRecovery()
             defaults.removeObject(forKey: policyKey)
-            let snapshot = PolicyGroupService.Snapshot(revision: "new", storageKey: policyKey, stored: "{}", inherited: [], effective: [])
+            let snapshot = PolicyGroupService.Snapshot(revision: "new", storageKey: policyKey, stored: "{}", inherited: [], effective: [], source: "proxy-groups: [{name: Auto, type: url-test, proxies: [DIRECT]}]")
             switch scenario {
             case "validation": trace.buildFails = true
             case "rollback": trace.starts = [false, true]
@@ -210,6 +215,24 @@ import SubscriptionKit
             if !success { precondition(defaults.string(forKey: policyKey) == (scenario == "stale" ? "changed" : nil)) }
             precondition(!AppState.shared.busy && !ClashViewModel.shared.isToggling)
         }
+        // Group structure and local rules form one transaction, including API-readback rollback.
+        let originalGroups = ClashController.shared.proxyGroups
+        for scenario in ["commit", "readback", "invalid", "stale-rules", "offline"] {
+            resetRecovery()
+            defaults.removeObject(forKey: policyKey)
+            defaults.removeObject(forKey: DefaultsKeys.localRules)
+            let snapshot = PolicyGroupService.Snapshot(revision: "new", storageKey: policyKey, stored: "{}", inherited: [], effective: [], source: "{}")
+            ClashController.shared.proxyGroups = scenario == "readback" ? [] : [ProxyGroup(name: "New", type: "Selector", all: ["DIRECT"])]
+            if scenario == "invalid" { trace.buildFails = true }
+            if scenario == "offline" { ClashViewModel.shared.runtimeState = .stopped }
+            if scenario == "stale-rules" { defaults.set("MATCH,REJECT", forKey: DefaultsKeys.localRules) }
+            let result = await PolicyGroupService.apply(#"{"New":{"_create":"true","type":"select","proxies":"[\"DIRECT\"]"}}"#, snapshot: snapshot, localRules: "DOMAIN-SUFFIX,fixture.test,New", defaults: defaults)
+            precondition(result == ["commit", "offline"].contains(scenario))
+            precondition(defaults.string(forKey: DefaultsKeys.localRules) == (result ? "DOMAIN-SUFFIX,fixture.test,New" : scenario == "stale-rules" ? "MATCH,REJECT" : nil))
+            if scenario == "readback" { precondition(trace.events.contains("start:current")) }
+        }
+        ClashController.shared.proxyGroups = originalGroups
+        print("PASS: composed groups and local rules commit together; missing readback rolls back both; stale rules and invalid configs rejected")
         let dnsKey = DNSSettingsService.key(UUID())
         for scenario in ["success", "validation", "rollback", "cleanup", "stale", "stopped", "stopped-invalid"] {
             resetRecovery()
@@ -230,15 +253,18 @@ import SubscriptionKit
             precondition(!AppState.shared.busy && !ClashViewModel.shared.isToggling)
         }
         let egressKey = EgressSettingsService.key(UUID())
-        for scenario in ["success", "validation", "rollback", "cleanup", "stale", "stopped", "stopped-invalid"] {
+        let egressPolicyKey = "policyGroupOverrides." + UUID().uuidString
+        for scenario in ["success", "validation", "rollback", "cleanup", "stale", "stale-policy", "stopped", "stopped-invalid"] {
             resetRecovery()
             defaults.removeObject(forKey: egressKey)
-            let snapshot = EgressSettingsService.Snapshot(revision: "new", storageKey: egressKey, stored: EgressConfiguration.empty, inherited: try! EgressConfiguration.read("{}"), effective: try! EgressConfiguration.read("{}"))
+            defaults.removeObject(forKey: egressPolicyKey)
+            let snapshot = EgressSettingsService.Snapshot(revision: "new", storageKey: egressKey, stored: EgressConfiguration.empty, inherited: try! EgressConfiguration.read("{}"), effective: try! EgressConfiguration.read("{}"), policyKey: egressPolicyKey)
             switch scenario {
             case "validation": trace.buildFails = true
             case "rollback": trace.starts = [false, true]
             case "cleanup": trace.starts = [false]; trace.stops = [true, false]
             case "stale": defaults.set("changed", forKey: egressKey)
+            case "stale-policy": defaults.set("changed", forKey: egressPolicyKey)
             case "stopped": ClashViewModel.shared.runtimeState = .stopped
             case "stopped-invalid": ClashViewModel.shared.runtimeState = .stopped; trace.buildFails = true
             default: break

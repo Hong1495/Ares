@@ -9,6 +9,7 @@ BIN="$(swift build --build-system native --package-path "$PACKAGE" --show-bin-pa
 OBJECTS=()
 while IFS= read -r file; do OBJECTS+=("$file"); done < <(find "$BIN/Yams.build" "$BIN/CYaml.build" "$BIN/SubscriptionKit.build" -name '*.o')
 xcrun swiftc -parse-as-library -I "$BIN/Modules" -I "$PACKAGE/.build/checkouts/Yams/Sources/CYaml/include" \
+  "$ROOT/Ares/Services/ResourceActivity.swift" \
   "$ROOT/Ares/Models/ProxyModels.swift" "$ROOT/Ares/Models/ProxyResourceModels.swift" "$ROOT/Ares/Models/RuleModels.swift" \
   "$ROOT/Ares/Utilities/RuntimeCheckpoint.swift" "$ROOT/Ares/Services/ActivityDiagnosticsService.swift" \
   "$ROOT/scripts/fixtures/ActivityDiagnosticsHarness.swift" "${OBJECTS[@]}" -o "$OUT/check"

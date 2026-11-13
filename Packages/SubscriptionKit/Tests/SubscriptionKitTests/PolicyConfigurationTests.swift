@@ -37,7 +37,7 @@ final class PolicyConfigurationTests: XCTestCase {
         XCTAssertThrowsError(try PolicyConfiguration.apply(source: "{}", overrides: #"{"Removed":{"interval":"10"}}"#))
         let groups = try PolicyConfiguration.read(source)
         XCTAssertEqual(groups.count, 2)
-        XCTAssertNil(groups[0].fields["url"])
+        XCTAssertEqual(groups[0].fields["url"], "https://example.test/check")
         XCTAssertNil(groups[0].fields["custom-field"])
         XCTAssertEqual(groups[1].providers, ["Remote"])
     }
@@ -49,5 +49,52 @@ final class PolicyConfigurationTests: XCTestCase {
     func testStableOverrideSerialization() throws {
         let values = ["Auto": ["filter": "HK|JP", "interval": "300"]]
         XCTAssertEqual(try PolicyConfiguration.decodeOverrides(PolicyConfiguration.encodeOverrides(values)), values)
+    }
+}
+
+extension PolicyConfigurationTests {
+    func testCreateComposeDeleteAndRestore() throws {
+        let edits = ["Manual": ["_create": "true", "type": "select", "proxies": try PolicyConfiguration.list(["Auto", "DIRECT"])],
+                     "Failover": ["_create": "true", "type": "fallback", "use": try PolicyConfiguration.list(["Remote"])],
+                     "Balance": ["_delete": "true"]]
+        let result = try PolicyConfiguration.apply(source: source, overrides: PolicyConfiguration.encodeOverrides(edits))
+        let groups = try PolicyConfiguration.read(result)
+        XCTAssertEqual(groups.map(\.name), ["Auto", "Failover", "Manual"])
+        XCTAssertEqual(groups.last?.members, ["Auto", "DIRECT"])
+        XCTAssertEqual(groups[1].fields["interval"], "300")
+        XCTAssertTrue(result.contains("custom-field: preserved"))
+        XCTAssertEqual(try PolicyConfiguration.read(PolicyConfiguration.apply(source: source, overrides: "{}" )).count, 2)
+    }
+    func testMissingReferencesCyclesAndNameCollisions() throws {
+        let cases: [[String: [String: String]]] = [
+            ["Auto": ["proxies": "[\"Missing\"]"]],
+            ["Auto": ["use": "[\"Missing\"]"]],
+            ["Auto": ["proxies": "[\"Auto\"]"]],
+            ["Auto": ["proxies": "[\"Balance\"]"], "Balance": ["proxies": "[\"Auto\"]"]],
+            ["Auto": ["_create": "true", "type": "select", "proxies": "[\"DIRECT\"]"]],
+            ["GLOBAL": ["_create": "true", "type": "select", "proxies": "[\"DIRECT\"]"]],
+            ["Auto": ["proxies": "[]", "use": "[]"]],
+            ["Auto": ["proxies": "[\"DIRECT\",\"DIRECT\"]"]]
+        ]
+        for edits in cases { XCTAssertThrowsError(try PolicyConfiguration.apply(source: source, overrides: PolicyConfiguration.encodeOverrides(edits))) }
+        let chain = "proxies: [{name: Exit, type: http, dialer-proxy: Auto}]\nproxy-groups: [{name: Auto, type: select, proxies: [DIRECT]}]"
+        XCTAssertThrowsError(try PolicyConfiguration.apply(source: chain, overrides: #"{"Auto":{"proxies":"[\"Exit\"]"}}"#))
+    }
+    func testTypeChangePreservesUnknownAndDropsInapplicableFields() throws {
+        let result = try PolicyConfiguration.apply(source: source, overrides: #"{"Auto":{"type":"select"}}"#)
+        XCTAssertTrue(result.contains("custom-field: preserved"))
+        XCTAssertNil(try PolicyConfiguration.read(result)[0].fields["tolerance"])
+        XCTAssertNil(try PolicyConfiguration.read(result)[0].fields["interval"])
+        XCTAssertEqual(try PolicyConfiguration.read(result)[0].type, "select")
+    }
+    func testStaleOverrideRepairAndSceneRoundTrip() throws {
+        let edits = #"{"Removed":{"proxies":"[\"DIRECT\"]"},"New":{"_create":"true","type":"select","proxies":"[\"DIRECT\"]"}}"#
+        XCTAssertThrowsError(try PolicyConfiguration.apply(source: source, overrides: edits))
+        XCTAssertTrue(try PolicyConfiguration.read(PolicyConfiguration.preview(source: source, overrides: edits)).contains { $0.name == "Removed" })
+        let yaml = try SceneOverrideDocument.render(edits, section: .policy)
+        XCTAssertEqual(try PolicyConfiguration.decodeOverrides(SceneOverrideDocument.encode(yaml, section: .policy)), try PolicyConfiguration.decodeOverrides(edits))
+        let catalog = try PolicyConfiguration.catalog(source)
+        XCTAssertEqual(catalog.providers, ["Remote"])
+        XCTAssertTrue(catalog.nodes.isEmpty)
     }
 }

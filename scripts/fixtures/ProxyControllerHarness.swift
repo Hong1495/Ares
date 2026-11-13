@@ -33,6 +33,8 @@ final class FakeCore: URLProtocol, @unchecked Sendable {
         "Fallback": ["type": "Fallback", "all": ["A", "B"], "now": "A", "fixed": ""]
     ]
     nonisolated(unsafe) static var resourceStatus = 200
+    nonisolated(unsafe) static var failResourceReadback = false
+    nonisolated(unsafe) static var mutationSeen = false
     nonisolated(unsafe) static var resourceDelay = 0.0
     nonisolated(unsafe) static var resourceMethods: [String] = []
     nonisolated(unsafe) static var active = 0, peak = 0, requests = 0
@@ -48,8 +50,9 @@ final class FakeCore: URLProtocol, @unchecked Sendable {
         if path.count > 1 && path[1] == "providers" {
             Self.resourceMethods.append(request.httpMethod! + " " + request.url!.path)
             if path.count == 3 {
+                if Self.failResourceReadback && Self.mutationSeen { status = 503 }
                 body = ["providers": ["Remote / A?#": ["name": "Remote / A?#", "vehicleType": "HTTP", "proxies": [["name": "Failed", "type": "VLESS"]]]]]
-            } else { status = Self.resourceStatus }
+            } else { Self.mutationSeen = true; status = Self.resourceStatus }
         } else if isDelay {
             Self.active += 1
             Self.peak = max(Self.peak, Self.active)
@@ -106,6 +109,12 @@ final class FakeCore: URLProtocol, @unchecked Sendable {
         _ = try await controller.performProxyResourceAction(name: "Remote / A?#", healthCheck: true)
         precondition(FakeCore.resourceMethods.contains("PUT /providers/proxies/Remote / A?#"))
         precondition(FakeCore.resourceMethods.contains("GET /providers/proxies/Remote / A?#/healthcheck"))
+        precondition(ResourceActivity.shared.entries.first?.outcome == .confirmed)
+        FakeCore.failResourceReadback = true; FakeCore.mutationSeen = false
+        do { _ = try await controller.performProxyResourceAction(name: "Remote / A?#", healthCheck: false); fatalError("Readback failure accepted") }
+        catch { precondition((error as NSError).code == 503) }
+        precondition(ResourceActivity.shared.entries.first?.phase == .reading && ResourceActivity.shared.entries.first?.outcome == .failed)
+        FakeCore.failResourceReadback = false
         FakeCore.resourceStatus = 503
         do { _ = try await controller.performProxyResourceAction(name: "Remote / A?#", healthCheck: false); fatalError("Resource failure accepted") }
         catch { precondition((error as NSError).code == 503) }
@@ -116,6 +125,14 @@ final class FakeCore: URLProtocol, @unchecked Sendable {
         controller.runtimeGeneration = UUID()
         do { _ = try await staleResource.value; fatalError("Stale resources accepted") }
         catch { precondition(error is CancellationError) }
+        let staleAction = Task { try await controller.performProxyResourceAction(name: "Remote / A?#", healthCheck: false) }
+        try await Task.sleep(for: .milliseconds(30))
+        do { _ = try await controller.performProxyResourceAction(name: "Remote / A?#", healthCheck: true); fatalError("Concurrent resource action accepted") }
+        catch { precondition((error as NSError).code == NSURLErrorResourceUnavailable) }
+        controller.runtimeGeneration = UUID()
+        do { _ = try await staleAction.value; fatalError("Stale action accepted") }
+        catch { precondition(error is CancellationError) }
+        precondition(ResourceActivity.shared.entries.first?.outcome == .cancelled)
         FakeCore.resourceDelay = 0
         print("PASS: stale resource response rejected after runtime change")
         print("PASS: resource methods, encoded names, update/health readback, stale latency invalidation and HTTP failure")
