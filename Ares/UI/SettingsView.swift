@@ -735,7 +735,7 @@ struct SettingsView: View {
                 Button(loadingSourceDiff ? "Loading…" : "Reload") { Task { await loadSourceDiff() } }
                     .disabled(loadingSourceDiff)
             }
-            Text("Complete structural changes, including list order. Sensitive values and custom names are hidden. Saved configuration is not proof of the running state.")
+            Text("Structural changes · Sensitive values hidden").help("Complete structural changes, including list order. Sensitive values and custom names are hidden. Saved configuration is not proof of the running state.")
                 .font(.caption).foregroundStyle(.secondary)
             if let sourceDiffError { Text(sourceDiffError).font(.callout).foregroundStyle(.secondary) }
             Text("\(sourceDiffRows.count) changed fields").font(.caption).foregroundStyle(.secondary)
@@ -786,7 +786,7 @@ struct SettingsView: View {
                 Button(auditing ? "Checking…" : "Check Again") { Task { await checkRuntime() } }
                     .disabled(auditing || appState.isPerformingNetworkOperation)
             }
-            Text("Compares the saved configuration file with the core’s current response. Unsaved edits are excluded. Live changes can differ from the file. Not exposed means the API cannot verify that field.")
+            Text("Saved configuration vs. live core").help("Compares the saved configuration file with the core’s current response. Unsaved edits are excluded. Live changes can differ from the file. Not exposed means the API cannot verify that field.")
                 .font(.caption).foregroundStyle(.secondary)
             if let auditError { Text(auditError).font(.callout).foregroundStyle(.secondary) }
             if let auditDate {

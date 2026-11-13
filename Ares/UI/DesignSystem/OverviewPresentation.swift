@@ -21,15 +21,17 @@ struct DashboardComposition<Traffic: View, Controls: View, Details: View>: View 
     @ViewBuilder var details: () -> Details
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                controls().fixedSize(horizontal: false, vertical: true)
-                traffic().frame(height: 210)
-                details()
-            }
-            .padding(.horizontal, 28).padding(.vertical, 20)
-            .frame(maxWidth: .infinity, alignment: .top)
-        }.scrollIndicators(.never, axes: [.horizontal, .vertical])
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(spacing: 24) {
+                    controls().fixedSize(horizontal: false, vertical: true)
+                    traffic().frame(height: min(230, max(150, geometry.size.height * 0.25)))
+                    details().fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .top)
+                }
+                .padding(.horizontal, 28).padding(.vertical, 20)
+                .frame(minHeight: geometry.size.height, alignment: .top)
+            }.scrollIndicators(.never, axes: [.horizontal, .vertical])
+        }
         .background(DS.canvas)
     }
 }
@@ -174,57 +176,6 @@ struct OverviewRoutingModePicker: View {
     }
 }
 
-/// Shared by the production probes and the isolated design preview.
-struct OverviewReachability: View {
-    struct Item: Identifiable {
-        let id: String
-        let name: String
-        let icon: String
-        let latency: Int?
-        let loading: Bool
-    }
-    let items: [Item]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Rectangle().fill(DS.line).frame(height: 0.5)
-            Text("Reachability").font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
-            HStack(spacing: 24) {
-                ForEach(items) { item in
-                    ReachabilityResult(item: item)
-                        .frame(maxWidth: .infinity)
-                }
-            }
-        }
-    }
-}
-
-private struct ReachabilityResult: View {
-    let item: OverviewReachability.Item
-    private var status: String {
-        if item.loading { return "Testing" }
-        guard let ms = item.latency else { return "Not tested" }
-        return ms < 0 ? "Unavailable" : "\(ms) milliseconds"
-    }
-    var body: some View {
-        HStack(spacing: 8) {
-                DashboardSymbol(name: item.icon).foregroundStyle(.secondary)
-                Text(item.name).font(.system(size: 12, weight: .medium))
-                Spacer(minLength: 4)
-                if item.loading && item.latency == nil { ProgressView().controlSize(.mini) }
-                else {
-                    Text(item.latency.flatMap { $0 >= 0 ? String($0) : nil } ?? "—")
-                        .font(.system(size: 18, weight: .medium, design: .rounded))
-                        .monospacedDigit().foregroundStyle(Color.latency(item.latency))
-                    Text("ms").font(.system(size: 11)).foregroundStyle(.secondary)
-                }
-        }.padding(.vertical, 10)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(item.name): \(status)")
-            .help("\(status) · HTTPS response time, checked automatically every 30 seconds.")
-    }
-}
-
 struct OverviewTrafficPoint: Identifiable {
     var id: Date { time }
     let time: Date
@@ -340,14 +291,29 @@ struct OverviewWorkspaceSummary: View {
         let name: String
         let connections: Int
     }
+    struct Probe: Identifiable {
+        let id: String
+        let name: String
+        let success: String
+        let latency: Int?
+        let samples: [Int?]
+    }
+    struct ConfigurationSummary {
+        let value: String
+        let unit: String
+        let rows: [String]
+        let status: String
+    }
+    var probes: [Probe] = []
+    var applications = ConfigurationSummary(value: "—", unit: "rules", rows: [], status: "Unavailable")
+    var policies = ConfigurationSummary(value: "—", unit: "groups", rows: [], status: "Unavailable")
+    var scenes = ConfigurationSummary(value: "—", unit: "saved", rows: [], status: "Unavailable")
     let processes: [ProcessRow]
     let activityStatus: String
     let connections: Int?
     let processCount: Int?
     let qualityStatus: String
     let qualityGroup: String
-    let qualityValue: String
-    let qualityDetail: String
     let route: String
     let openActivity: () -> Void
     let openApplications: () -> Void
@@ -356,58 +322,95 @@ struct OverviewWorkspaceSummary: View {
     let openScenes: () -> Void
 
     var body: some View {
-        VStack(spacing: 20) {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: 24) {
-                    activity.frame(minWidth: 270, maxWidth: .infinity)
-                    quality.frame(minWidth: 270, maxWidth: .infinity)
-                }
-                VStack(spacing: 24) { activity; quality }
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 24) {
+                activityColumn.frame(minWidth: 270, maxWidth: .infinity)
+                qualityColumn.frame(minWidth: 340, maxWidth: .infinity)
             }
-            HStack(spacing: 24) {
-                destination("Applications", icon: "app.connected.to.app.below.fill", detail: "Route by executable", action: openApplications)
-                destination("Policies", icon: "slider.horizontal.3", detail: "Automatic · Fallback · Manual", action: openPolicies)
-                destination("Scenes", icon: "square.stack.3d.up", detail: "Saved routing configurations", action: openScenes)
+            VStack(spacing: 24) { activityColumn; qualityColumn }
+        }
+    }
+
+    private var activityColumn: some View {
+        VStack(spacing: 24) {
+            activity
+            configuration("Applications", summary: applications, action: openApplications)
+        }
+    }
+
+    private var qualityColumn: some View {
+        VStack(spacing: 24) {
+            quality
+            HStack(alignment: .top, spacing: 24) {
+                configuration("Policies", summary: policies, action: openPolicies)
+                configuration("Scenes", summary: scenes, action: openScenes)
             }
         }
     }
+
     private var activity: some View {
         VStack(alignment: .leading, spacing: 14) {
             heading("Activity", action: openActivity)
             HStack(alignment: .firstTextBaseline, spacing: 18) {
-                metric(connections.map(String.init) ?? "—", "connections")
+                metric(connections.map(String.init) ?? "—", "connections").help("Active connections, excluding Ares and its core")
                 metric(processCount.map(String.init) ?? "—", "sources")
                     .help("Grouped by application or executable; unidentified traffic is grouped by source address.")
             }
             if processes.isEmpty {
                 Text(activityStatus).font(DS.Typography.metadata).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 86, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
             } else {
-                VStack(spacing: 10) {
-                    ForEach(processes) { row in
-                        HStack {
-                            Text(row.name).font(DS.Typography.secondary).lineLimit(1)
-                            Spacer()
-                            Text(String(row.connections)).font(DS.Typography.secondary.monospacedDigit()).foregroundStyle(.secondary)
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        ForEach(processes) { row in
+                            HStack(spacing: 12) {
+                                Text(row.name).font(DS.Typography.secondary).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+                                GeometryReader { proxy in
+                                    Capsule().fill(DS.accent.opacity(0.35))
+                                        .frame(width: proxy.size.width * CGFloat(row.connections) / CGFloat(max(connections ?? 0, 1)))
+                                }.frame(width: 64, height: 3)
+                                Text(String(row.connections)).font(DS.Typography.secondary.monospacedDigit()).frame(width: 30, alignment: .trailing)
+                            }.help("\(row.name): \(row.connections) active connections")
                         }
                     }
-                }.frame(maxWidth: .infinity, minHeight: 86, alignment: .topLeading)
-                Text(activityStatus).font(DS.Typography.metadata).foregroundStyle(.secondary)
+                }.frame(height: min(210, CGFloat(processes.count) * 28 - 12)).scrollIndicators(.never)
             }
+
         }.padding(.top, 16).overlay(alignment: .top) { Rectangle().fill(DS.line).frame(height: 0.5) }
     }
     private var quality: some View {
         VStack(alignment: .leading, spacing: 14) {
             heading("Network Quality", action: openQuality)
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(qualityValue).font(.system(size: 20, weight: .medium, design: .rounded)).monospacedDigit()
-                Text(qualityDetail).font(DS.Typography.metadata).foregroundStyle(.secondary)
+                Text(qualityGroup).font(DS.Typography.secondary.weight(.medium)).lineLimit(1)
+                Spacer()
+                Text(qualityStatus).font(DS.Typography.metadata).foregroundStyle(.secondary).lineLimit(1).help(qualityStatus)
+            }.frame(height: 24)
+            VStack(spacing: 12) {
+                ForEach(probes) { probe in
+                    HStack(spacing: 10) {
+                        Text(probe.name).font(DS.Typography.secondary).frame(width: 64, alignment: .leading)
+                        Chart {
+                            ForEach(probe.samples.indices, id: \.self) { index in
+                                if let value = probe.samples[index] {
+                                    LineMark(x: .value("Sample", index), y: .value("ms", value),
+                                             series: .value("Segment", probe.samples.prefix(index).filter { $0 == nil }.count))
+                                        .foregroundStyle(DS.accent).lineStyle(StrokeStyle(lineWidth: 1))
+                                    PointMark(x: .value("Sample", index), y: .value("ms", value)).foregroundStyle(DS.accent).symbolSize(5)
+                                } else {
+                                    RuleMark(x: .value("Failure", index)).foregroundStyle(Color.statusBad.opacity(0.5))
+                                }
+                            }
+                        }.chartXAxis(.hidden).chartYAxis(.hidden).frame(height: 28)
+                            .accessibilityLabel(probe.name + " · latest probe samples")
+                        Text(probe.success).font(DS.Typography.metadata.monospacedDigit()).frame(width: 48, alignment: .trailing)
+                        Text(probe.latency.map { "\($0) ms" } ?? "—").font(DS.Typography.secondary.monospacedDigit())
+                            .foregroundStyle(Color.latency(probe.latency)).frame(width: 62, alignment: .trailing)
+                    }.help("Success rate · Latest measured response · Up to 120 samples")
+                }
+                Text(route).font(DS.Typography.metadata).foregroundStyle(.secondary).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
             }
-            VStack(alignment: .leading, spacing: 10) {
-                Text(qualityGroup).font(DS.Typography.secondary).lineLimit(1)
-                Text(route).font(DS.Typography.metadata).foregroundStyle(.secondary).lineLimit(2)
-                Text(qualityStatus).font(DS.Typography.metadata).foregroundStyle(.secondary).lineLimit(2)
-            }.frame(maxWidth: .infinity, minHeight: 86, alignment: .topLeading)
+
         }.padding(.top, 16).overlay(alignment: .top) { Rectangle().fill(DS.line).frame(height: 0.5) }
     }
     private func heading(_ title: String, action: @escaping () -> Void) -> some View {
@@ -425,16 +428,18 @@ struct OverviewWorkspaceSummary: View {
             Text(label).font(DS.Typography.metadata).foregroundStyle(.secondary)
         }
     }
-    private func destination(_ title: String, icon: String, detail: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 9) {
-                Image(systemName: icon).font(.system(size: 13)).foregroundStyle(.secondary).frame(width: 18)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title).font(DS.Typography.secondary.weight(.medium))
-                    Text(detail).font(DS.Typography.metadata).foregroundStyle(.secondary).lineLimit(1)
+    private func configuration(_ title: String, summary: ConfigurationSummary, action: @escaping () -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            heading(title, action: action)
+            metric(summary.value, summary.unit)
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(Array(summary.rows.enumerated()), id: \.offset) { _, row in
+                    Text(row).font(DS.Typography.secondary).lineLimit(1).truncationMode(.middle).help(row)
                 }
-                Spacer(minLength: 0)
-            }.padding(.vertical, 12).contentShape(Rectangle())
-        }.buttonStyle(.plain).frame(maxWidth: .infinity, alignment: .leading)
+                if summary.rows.isEmpty { Text("—").font(DS.Typography.secondary).foregroundStyle(.secondary) }
+            }.frame(minHeight: 60, alignment: .top)
+            Text(summary.status).font(DS.Typography.metadata).foregroundStyle(.secondary).lineLimit(2).help(summary.status)
+        }.frame(maxWidth: .infinity, alignment: .topLeading).padding(.top, 16)
+            .overlay(alignment: .top) { Rectangle().fill(DS.line).frame(height: 0.5) }
     }
 }

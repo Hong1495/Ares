@@ -64,11 +64,11 @@ struct DNSSettingsView: View {
                         Picker(field.title, selection: value) {
                             if value.wrappedValue.isEmpty { Text("Core default").tag("") }
                             ForEach(options, id: \.self) { Text($0).tag($0) }
-                        }.labelsHidden().frame(maxWidth: 240).disabled(edits[selection] == nil)
+                        }.labelsHidden().frame(maxWidth: 240, alignment: .leading).disabled(edits[selection] == nil)
                         Spacer()
                     } else {
                         Picker("Editor", selection: $sourceMode) { Text("Form").tag(false); Text("Source").tag(true) }
-                            .pickerStyle(.segmented).labelsHidden().frame(width: 160)
+                            .pickerStyle(.segmented).labelsHidden().fixedSize().frame(width: 160, alignment: .leading)
                         if !sourceMode {
                             DNSValueForm(text: value, mapping: field.kind == "mapping").id(selection).disabled(edits[selection] == nil)
                         } else {
@@ -158,7 +158,7 @@ private struct DNSQueryView: View {
                     .labelsHidden().frame(width: 95)
                 Button(busy ? "Querying…" : "Query") { query() }.fixedSize().disabled(busy || name.isEmpty)
             }.controlSize(.small)
-            Text("Queries the running core’s general DNS resolver. Upstream selection and proxy-host routing are not exposed by this API.")
+            Text("Core DNS query · Upstream path unavailable").help("Queries the running core’s general DNS resolver. Upstream selection and proxy-host routing are not exposed by this API.")
                 .font(DS.Typography.metadata).foregroundStyle(.secondary)
             if let error { Text(error).font(DS.Typography.metadata).foregroundStyle(Color.statusBad) }
             if let result {

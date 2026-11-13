@@ -61,7 +61,7 @@ struct PolicyCompositionView: View {
                     Button("Remove Stale Overrides") { for key in stale { edits.removeValue(forKey: key) }; refresh() }
                 }.font(DS.Typography.metadata).padding(DS.Space.md)
             }
-            Text("Changes stay in this draft until Apply. Rules run before subscription rules. Invalid references or cycles prevent activation.")
+            Text("Draft · Apply to activate").help("Changes stay in this draft until Apply. Rules run before subscription rules. Invalid references or cycles prevent activation.")
                 .font(DS.Typography.metadata).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(DS.Space.lg)
         }.frame(minWidth: 820, minHeight: 570).background(DS.canvas).scrollIndicators(.never, axes: [.horizontal, .vertical]).interactiveDismissDisabled(applying)
         .onAppear {
@@ -123,7 +123,7 @@ struct PolicyCompositionView: View {
                 Picker("Policy", selection: $selection) {
                     Text("Choose group").tag(String?.none)
                     ForEach(groups) { Text($0.name).tag(Optional($0.name)) }
-                }.frame(maxWidth: 240)
+                }.labelsHidden().frame(maxWidth: 240, alignment: .leading)
                 Button("Add First") {
                     guard let selection else { return }
                     let rule = ruleType == "MATCH" ? "MATCH," + selection : ruleType + "," + ruleValue + "," + selection
@@ -134,7 +134,7 @@ struct PolicyCompositionView: View {
             HStack {
                 Picker("Rule editor", selection: $sourceMode) {
                     Text("List").tag(false); Text("Source").tag(true)
-                }.pickerStyle(.segmented).labelsHidden().frame(width: 150)
+                }.pickerStyle(.segmented).labelsHidden().fixedSize().frame(width: 150, alignment: .leading)
                 Spacer()
                 if !sourceMode {
                     Button { moveRule(-1) } label: { Image(systemName: "arrow.up") }.disabled(ruleSelection == nil).help("Move rule up")
@@ -159,7 +159,7 @@ struct PolicyCompositionView: View {
                     })).font(DS.Typography.metadata.monospaced()).textFieldStyle(.roundedBorder)
                 }
             }
-            Text("Top to bottom, first match wins. A local MATCH hides later rules. Existing comments and advanced expressions are retained.")
+            Text("First match wins · MATCH ends evaluation").help("Top to bottom, first match wins. A local MATCH hides later rules. Existing comments and advanced expressions are retained.")
                 .font(DS.Typography.metadata).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
         }.padding(DS.Space.lg)
         .onChange(of: sourceMode) { _, isSource in
@@ -292,7 +292,7 @@ private struct PolicyStructureEditor: View {
                     List(Array(Set(providers + uses)).sorted(), id: \.self) { resource in
                         Toggle(resource + (providers.contains(resource) ? "" : " · Missing"), isOn: Binding(get: { uses.contains(resource) }, set: { if $0 { uses.append(resource) } else { uses.removeAll { $0 == resource } } }))
                     }.disabled(!ownProviders)
-                    Text("Resources supply their own members. Filters apply in the core; explicit members preserve the order shown in Members.").font(DS.Typography.metadata).foregroundStyle(.secondary)
+                    Text("Resource members follow core filters").help("Resources supply their own members. Filters apply in the core; explicit members preserve the order shown in Members.").font(DS.Typography.metadata).foregroundStyle(.secondary)
                 }.padding(DS.Space.lg)
             }
         }.frame(width: 720, height: 540).background(DS.canvas).scrollIndicators(.never, axes: [.horizontal, .vertical])

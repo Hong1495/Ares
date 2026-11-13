@@ -78,7 +78,7 @@ struct EgressSettingsView: View {
                 Text("\(node.name) → \((edits.nodes[node.name]?["dialer-proxy"] ?? node.dialer).isEmpty ? "No explicit dialer" : (edits.nodes[node.name]?["dialer-proxy"] ?? node.dialer))")
                     .font(DS.Typography.metadata).lineLimit(2).textSelection(.enabled)
             }
-            Text("Select a node to override its dialer or interface. Unchecked fields inherit; an empty local value clears the subscription setting. Provider-managed nodes remain in their source resource.")
+            Text("Select a node to edit its outbound").help("Select a node to override its dialer or interface. Unchecked fields inherit; an empty local value clears the subscription setting. Provider-managed nodes remain in their source resource.")
                 .font(DS.Typography.metadata).foregroundStyle(.secondary)
         }.padding(DS.Space.lg).disabled(busy || snapshot == nil)
     }
@@ -110,7 +110,7 @@ struct EgressSettingsView: View {
             Text(sectionOverride == nil ? "Inherited · Read only" : "Local override · Replaces the entire section")
                 .font(DS.Typography.metadata).foregroundStyle(.secondary)
             Picker("Editor", selection: $sourceMode) { Text("Form").tag(false); Text("Source").tag(true) }
-                .pickerStyle(.segmented).labelsHidden().frame(width: 160)
+                .pickerStyle(.segmented).labelsHidden().fixedSize().frame(width: 160, alignment: .leading)
             if !sourceMode {
                 InboundForm(text: Binding(get: { sectionOverride ?? inheritedSection }, set: { sectionOverride = $0 }), section: tab == 1 ? .listeners : .tunnels, targets: snapshot?.inherited.targets ?? []).id(tab).disabled(sectionOverride == nil)
             } else {
@@ -125,7 +125,8 @@ struct EgressSettingsView: View {
                 Text("YAML list").font(DS.Typography.metadata).foregroundStyle(.secondary)
             }
             }
-            Text(tab == 1 ? "Use an explicit IP and single port. Listener bindings are independent of Allow LAN. Use 127.0.0.1 for local access; configure users for shared access." : "Each entry maps a local address to a target through a proxy. These are fixed TCP/UDP forwards, not TUN routes.")
+            Text(tab == 1 ? "Local: 127.0.0.1 · Shared access requires authentication" : "Fixed TCP / UDP forwarding")
+                .help(tab == 1 ? "Specify an IP and port. Listener bindings are independent of Allow LAN." : "Maps a local address to a target through a proxy; separate from TUN routes.")
                 .font(DS.Typography.metadata).foregroundStyle(.secondary)
         }.padding(DS.Space.lg).disabled(busy || snapshot == nil)
     }

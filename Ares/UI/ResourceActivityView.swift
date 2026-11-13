@@ -41,8 +41,9 @@ struct ResourceActivityView: View {
                     if let finished = entry.finishedAt { Text("Finished: " + finished.formatted(date: .omitted, time: .standard)).foregroundStyle(.secondary) }
                 }.font(DS.Typography.metadata).frame(maxWidth: .infinity, alignment: .leading).padding(DS.Space.lg)
             }
-            Text(entries.isEmpty ? "No resource operations recorded in this app session." : "App-initiated operations in this session. Core-scheduled updates are not reported by this history.")
+            Text(entries.isEmpty ? "No operations yet" : "App operations · This session")
+                .help("Core-scheduled updates are not included in this history.")
                 .font(DS.Typography.metadata).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(DS.Space.lg)
-        }.frame(minWidth: 800, minHeight: 460).background(DS.canvas)
+        }.frame(minWidth: 800, minHeight: 460).background(DS.canvas).scrollIndicators(.never, axes: [.horizontal, .vertical])
     }
 }

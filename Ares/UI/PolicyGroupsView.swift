@@ -28,11 +28,11 @@ struct PolicyGroupsView: View {
                 Button("Done") { dismiss() }.controlSize(.small).fixedSize()
             }.padding(DS.Space.lg) }
             CollectionTools(placeholder: "Search groups", search: $search) {
-                Button { composition = .init(recommended: false) } label: { Label("Compose", systemImage: "square.and.pencil") }
-                    .disabled(snapshot == nil || busy).help("Compose policies and routing rules").accessibilityLabel("Compose policies")
-                Button("Recommended…") { composition = .init(recommended: true) }
-                    .disabled(snapshot == nil || busy).help("Review recommended groups before applying")
-                Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") }
+                Button { composition = .init(recommended: false) } label: { Image(systemName: "square.and.pencil").frame(width: 28, height: 24) }
+                    .disabled(snapshot == nil || busy).help("Compose policies and rules").accessibilityLabel("Compose policies")
+                Button { composition = .init(recommended: true) } label: { Image(systemName: "sparkles").frame(width: 28, height: 24) }
+                    .disabled(snapshot == nil || busy).help("Recommended policies · Review before applying").accessibilityLabel("Recommended policies")
+                Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise").frame(width: 28, height: 24) }
                     .disabled(busy).help("Read policy groups").accessibilityLabel("Read policy groups")
             }
             if let error { Text(error).font(DS.Typography.metadata).foregroundStyle(Color.statusBad).padding(DS.Space.md) }
@@ -152,7 +152,7 @@ private struct PolicyParameterEditor: View {
                 }
             }.formStyle(.grouped).disabled(applying)
             if let error { Text(error).font(DS.Typography.metadata).foregroundStyle(Color.statusBad).padding(DS.Space.md) }
-            Text("Unchecked fields inherit from the subscription. Interval is in seconds; timeout and tolerance are in milliseconds.")
+            Text("Inherit unless overridden · Interval: s · Timeout / tolerance: ms").help("Unchecked fields inherit from the subscription. Interval is in seconds; timeout and tolerance are in milliseconds.")
                 .font(DS.Typography.metadata).foregroundStyle(.secondary).padding(DS.Space.lg)
         }.frame(width: 620, height: 520).background(DS.canvas).interactiveDismissDisabled(applying)
         .onAppear {

@@ -22,41 +22,46 @@ struct ApplicationRoutingView: View {
     private var matching: [Connection] { live.filter { selection.contains($0.metadata.processPath ?? "") } }
     var body: some View {
         VStack(spacing: 0) {
-            if !embedded || undo != nil { HStack {
-                if !embedded { Text("Application Routing").font(DS.Typography.secondary.weight(.semibold)) }
-                Spacer()
-                if let undo { Button("Undo Last Change") { Task { await revert(undo) } } }
-                if !embedded { Button("Done") { dismiss() } }
+            if !embedded { HStack {
+                Text("Applications").font(DS.Typography.secondary.weight(.semibold))
+                Spacer(); Button("Done") { dismiss() }
             }.controlSize(.small).padding(DS.Space.lg) }
+            DSCard(padding: DS.Space.md) {
+                HStack(spacing: DS.Space.md) {
+                    Spacer()
+                    TextField("Search applications", text: $search)
+                        .textFieldStyle(.roundedBorder).controlSize(.small).frame(width: 200)
+                    Button { chooseApplication() } label: { Image(systemName: "plus") }.help("Add an application or executable")
+                    Button { Task { await readConnections() } } label: { Image(systemName: "arrow.clockwise") }.help("Read core connections")
+                    if let undo { Button { Task { await revert(undo) } } label: { Image(systemName: "arrow.uturn.backward") }.help("Undo last change") }
+                    Image(systemName: "info.circle").foregroundStyle(.secondary)
+                        .help("Routes match exact executable paths; select helpers separately. Local rules apply across subscriptions to new connections in Rule mode.")
+                }.buttonStyle(.borderless).font(DS.Typography.secondary)
+            }.padding(.horizontal, DS.Space.lg).padding(.top, DS.Space.pageTop).padding(.bottom, DS.Space.md)
             HSplitView {
                 VStack(spacing: DS.Space.md) {
-                    HStack {
-                        TextField("Search executables", text: $search).textFieldStyle(.roundedBorder)
-                        Button { chooseApplication() } label: { Image(systemName: "plus") }.help("Choose an application or executable")
-                    }.controlSize(.small)
                     List(paths.filter { search.isEmpty || $0.localizedCaseInsensitiveContains(search) }, id: \.self, selection: $selection) { path in
                         VStack(alignment: .leading, spacing: 3) {
                             Text((path as NSString).lastPathComponent).font(DS.Typography.secondary)
-                            Text(path).font(DS.Typography.metadata).foregroundStyle(.secondary).lineLimit(2).help(path)
-                        }.padding(.vertical, 3)
+                            Text(path).font(DS.Typography.metadata).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle).help(path)
+                        }.padding(.vertical, 5)
                     }
-                    Text("Exact executables · Select observed helper processes separately. Unknown and remote processes are not inferred.")
-                        .font(DS.Typography.metadata).foregroundStyle(.secondary)
-                }.padding(DS.Space.lg).frame(minWidth: 200, idealWidth: 240, maxWidth: 300)
+                }.padding(.horizontal, DS.Space.lg).padding(.bottom, DS.Space.lg)
+                    .frame(minWidth: 200, idealWidth: 240, maxWidth: 300)
                 ScrollView { VStack(alignment: .leading, spacing: DS.Space.md) {
-                    VStack(alignment: .leading, spacing: DS.Space.sm) {
+                    DSCard(padding: DS.Space.md) { VStack(alignment: .leading, spacing: DS.Space.md) {
+                        HStack(spacing: 8) { Text("Route").font(DS.Typography.secondary)
                         Picker("Route", selection: $target) {
                             ForEach(snapshot?.targets ?? ["DIRECT", "REJECT"], id: \.self) { name in
                                 Text(name == "DIRECT" ? "Direct" : name == "REJECT" ? "Block" : name).tag(name)
                             }
-                        }.frame(maxWidth: 320)
+                        }.labelsHidden().frame(maxWidth: 280, alignment: .leading)
+                        Spacer(minLength: 0) }
                         HStack {
-                        Button("Use Subscription") { apply(nil) }.disabled(selected.isEmpty || snapshot == nil)
-                        Button("Apply Route") { apply(target) }.buttonStyle(.borderedProminent).disabled(selected.isEmpty || snapshot == nil)
+                        Button("Use subscription") { apply(nil) }.disabled(selected.isEmpty || snapshot == nil)
+                        Button("Apply route") { apply(target) }.buttonStyle(.borderedProminent).disabled(selected.isEmpty || snapshot == nil)
                         }
-                    }.controlSize(.small)
-                    Text("Local rules apply across subscriptions, to new connections in Rule mode. Existing connections keep their route; reconnect the application to verify. Removing a local rule restores normal rule evaluation.")
-                        .font(DS.Typography.metadata).foregroundStyle(.secondary)
+                    }.controlSize(.small) }
                     if let snapshot, !selected.isEmpty {
                         let existing = RuleDraftDocument(snapshot.rules).rules.compactMap { $0.rule.flatMap(RuleForm.init) }.filter { $0.type == "PROCESS-PATH" && selection.contains($0.payload) }
                         let conflicts = Dictionary(grouping: existing, by: \.payload).values.filter { $0.count > 1 }.count
@@ -65,15 +70,12 @@ struct ApplicationRoutingView: View {
                     if AppState.shared.currentMode != .rule {
                         Text("Rule mode is not active. Application rules are saved but bypassed in Global / Direct mode.").font(DS.Typography.metadata).foregroundStyle(Color.statusWarn)
                     }
-                    Text("Rule precedence").font(DS.Typography.secondary.weight(.medium))
-                    Text(snapshot?.evidenceSource ?? "Loading configuration…").font(DS.Typography.metadata).foregroundStyle(.secondary)
+                    Text("Rule precedence").font(DS.Typography.secondary.weight(.medium)).help("Local path rules take precedence. Domain and IP rules may also match; observed connections show the actual core decision.")
                     Table(ApplicationRouting.evidence(paths: selected, rules: snapshot?.evidence ?? [])) {
                         TableColumn("Order") { Text(String($0.order)).monospacedDigit() }.width(48)
                         TableColumn("Rule") { Text($0.expression).lineLimit(1).help($0.expression) }
                         TableColumn("Match / conflict") { Text($0.explanation).lineLimit(2) }.width(min: 150, ideal: 190)
-                    }.font(DS.Typography.metadata).frame(minHeight: 120)
-                    Text("Local exact-path rules are placed first. Other domain/IP rules may also match; advanced rules are not simulated here. The connection table below reports the core’s actual decision.")
-                        .font(DS.Typography.metadata).foregroundStyle(.secondary)
+                    }.font(DS.Typography.metadata).frame(height: 180)
                     HStack {
                         Text("Observed connections").font(DS.Typography.secondary.weight(.medium))
                         Spacer()
@@ -85,9 +87,9 @@ struct ApplicationRoutingView: View {
                         TableColumn("Matched rule") { Text($0.rule + ": " + $0.rulePayload).lineLimit(1).help($0.rule + ": " + $0.rulePayload) }
                         TableColumn("Actual route") { Text($0.chainsString).lineLimit(1).help($0.chainsString) }
                         TableColumn("↓ / ↑") { Text(bytes($0.download) + " / " + bytes($0.upload)).monospacedDigit() }.width(110)
-                    }.font(DS.Typography.metadata).frame(minHeight: 120)
-                    if matching.isEmpty { Text("No matching core-reported executable. Process routing requires core process identification; unavailable identity may require privileged/TUN mode. Blocked or closed connections may not appear.").font(DS.Typography.metadata).foregroundStyle(.secondary) }
-                }.padding(DS.Space.lg).frame(minHeight: 640) }.frame(minWidth: 440)
+                    }.font(DS.Typography.metadata).frame(height: 180)
+                    if matching.isEmpty { Text(selected.isEmpty ? "Select an application" : "No matching connections").help("Only core-reported executables are shown. Blocked or closed connections may not appear. Process identification may require privileged or TUN operation.").font(DS.Typography.metadata).foregroundStyle(.secondary) }
+                }.padding(.horizontal, DS.Space.lg).padding(.bottom, DS.Space.lg) }.frame(minWidth: 440)
             }
             if let message { Text(message).font(DS.Typography.metadata).foregroundStyle(.secondary).padding(.horizontal, DS.Space.lg) }
             if let error { Text(error).font(DS.Typography.metadata).foregroundStyle(Color.statusBad).padding(DS.Space.md) }

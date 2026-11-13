@@ -17,21 +17,22 @@ struct ScenariosView: View {
     @State private var showingHistory = false
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                if !embedded { Text("Scenes").font(DS.Typography.secondary.weight(.semibold)).fixedSize() }
-                Spacer()
-                Button { showingHistory = true } label: { Label("History", systemImage: "clock.arrow.circlepath") }.help("Scene execution history").accessibilityLabel("Scene execution history")
-                Button { showingAutomation = true } label: { Label("Automation", systemImage: "bolt.badge.clock") }.help("Automatic scenes").accessibilityLabel("Automatic scenes")
-                Button("Undo Last Switch") { review = ScenarioService.undoReview() }.disabled(ScenarioService.undoReview() == nil)
-                if !embedded { Button("Done") { dismiss() }.fixedSize() }
-            }.controlSize(.small).padding(DS.Space.lg)
-            HStack {
-                TextField("Scene name", text: $name).textFieldStyle(.roundedBorder).accessibilityLabel("Scene name")
-                Button("Save Current") { save() }.disabled(context == nil || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty).fixedSize()
-                Button { load() } label: { Image(systemName: "arrow.clockwise") }.help("Reload saved settings").accessibilityLabel("Reload saved settings")
-            }.controlSize(.small).padding(.horizontal, DS.Space.lg).padding(.bottom, DS.Space.md)
-            Text("Scenes combine overrides, saved node choices and proxy mode for this subscription. Proxy and TUN switches remain separate.")
-                .font(DS.Typography.metadata).foregroundStyle(.secondary).padding(.horizontal, DS.Space.lg).padding(.bottom, DS.Space.md)
+            if !embedded { HStack {
+                Text("Scenes").font(DS.Typography.secondary.weight(.semibold)); Spacer()
+                Button("Done") { dismiss() }.controlSize(.small)
+            }.padding(DS.Space.lg) }
+            DSCard(padding: DS.Space.md) {
+                HStack(spacing: DS.Space.md) {
+                    TextField("Scene name", text: $name).textFieldStyle(.roundedBorder).frame(maxWidth: 240)
+                    Button("Save current") { save() }.disabled(context == nil || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Spacer(minLength: 8)
+                    Button { showingHistory = true } label: { Image(systemName: "clock.arrow.circlepath") }.help("History").accessibilityLabel("History")
+                    Button { showingAutomation = true } label: { Image(systemName: "bolt.badge.clock") }.help("Automation").accessibilityLabel("Automation")
+                    Button { review = ScenarioService.undoReview() } label: { Image(systemName: "arrow.uturn.backward") }.disabled(ScenarioService.undoReview() == nil).help("Undo last switch")
+                    Button { load() } label: { Image(systemName: "arrow.clockwise") }.help("Refresh scenes")
+                    Image(systemName: "info.circle").foregroundStyle(.secondary).help("Scenes save overrides, node choices and proxy mode for this subscription. System proxy and TUN switches remain separate.")
+                }.controlSize(.small).buttonStyle(.borderless).font(DS.Typography.secondary)
+            }.padding(.horizontal, DS.Space.lg).padding(.top, DS.Space.pageTop).padding(.bottom, DS.Space.md)
             Divider()
             Table(scenarios) {
                 TableColumn("Scene") { Text($0.name).lineLimit(1).help($0.name) }
@@ -197,12 +198,13 @@ private struct SceneEditorView: View {
     }
     private var routingEditor: some View {
         VStack(alignment: .leading, spacing: DS.Space.md) {
+            HStack(spacing: 8) { Text("Proxy Mode").font(DS.Typography.secondary)
             Picker("Proxy Mode", selection: $mode) {
                 Text("Keep Current").tag("keep")
                 Text("Rule").tag("rule"); Text("Global").tag("global"); Text("Direct").tag("direct")
-            }.frame(maxWidth: 320)
+            }.labelsHidden().frame(maxWidth: 220, alignment: .leading); Spacer(minLength: 0) }
             Toggle("Include node selections", isOn: $includeSelections).toggleStyle(.switch).controlSize(.small)
-            Text("Exact group and member names. Missing or unconfirmed choices fail activation and restore the previous runtime.")
+            Text("Choices are validated before activation").help("Exact group and member names. Missing or unconfirmed choices fail activation and restore the previous runtime.")
                 .font(DS.Typography.metadata).foregroundStyle(.secondary)
             HStack {
                 Picker("Group", selection: $groupName) {
@@ -234,7 +236,7 @@ private struct SceneEditorView: View {
                 }
             }.disabled(!includeSelections)
             Button("Use Current Saved Choices") { choices = context.settings.selections ?? [:]; includeSelections = true }
-            Text("Unlisted automatic groups return to automatic selection. Unlisted manual groups retain the core’s restored/default choice. A stopped core validates choices when next started.")
+            Text("Unlisted groups use automatic or restored choices").help("Unlisted automatic groups return to automatic selection. Unlisted manual groups retain the core’s restored/default choice. A stopped core validates choices when next started.")
                 .font(DS.Typography.metadata).foregroundStyle(.secondary)
         }.font(DS.Typography.secondary).padding(DS.Space.lg)
     }
@@ -248,9 +250,9 @@ private struct SceneEditorView: View {
             Picker("Metered", selection: $trigger.cost) { Text("Any").tag("any"); Text("Yes").tag("yes"); Text("No").tag("no") }
             Picker("Low Data Mode", selection: $trigger.constrained) { Text("Any").tag("any"); Text("Yes").tag("yes"); Text("No").tag("no") }
             Stepper("Priority: \(trigger.priority)", value: $trigger.priority, in: -100...100)
-            Text("All conditions must match. Higher priority wins; equal-priority matches block switching. At least one condition is required. Network type and interface are not a trusted home/office identity.")
+            Text("Match all conditions · Higher priority wins").help("All conditions must match. Higher priority wins; equal-priority matches block switching. At least one condition is required. Network type and interface are not a trusted home/office identity.")
                 .font(DS.Typography.metadata).foregroundStyle(.secondary)
-            Text("Automatic switching must also be enabled in Scenes → Automatic Scenes.")
+            Text("Enable automation in Scenes").help("Automatic switching must also be enabled in Scenes → Automatic Scenes.")
                 .font(DS.Typography.metadata).foregroundStyle(.secondary)
             Spacer()
         }.font(DS.Typography.secondary).controlSize(.small).padding(DS.Space.lg)
@@ -324,7 +326,7 @@ private struct SceneAutomationView: View {
                 TableColumn("Priority") { Text(String($0.priority)).monospacedDigit() }.width(65)
                 TableColumn("Match") { Text($0.reason) }
             }.font(DS.Typography.metadata)
-            Text("10 seconds stable · 30 seconds between attempts. No match keeps the current configuration. Failures, sleep and manual scene switches pause automation. Only the current subscription and a running core are eligible.")
+            Text("10 sec stable · 30 sec cooldown · Current subscription only").help("10 seconds stable · 30 seconds between attempts. No match keeps the current configuration. Failures, sleep and manual scene switches pause automation. Only the current subscription and a running core are eligible.")
                 .font(DS.Typography.metadata).foregroundStyle(.secondary)
         }.padding(DS.Space.lg).frame(width: 760, height: 430).background(DS.canvas).scrollIndicators(.never)
             .task { service.start() }

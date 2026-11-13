@@ -13,6 +13,7 @@ struct SettingsTabs: View {
         .pickerStyle(.segmented)
         .labelsHidden()
         .controlSize(.small)
+        .fixedSize()
         .frame(maxWidth: 520, alignment: .leading)
     }
 }

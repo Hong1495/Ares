@@ -25,15 +25,15 @@ struct CollectionTools<Actions: View>: View {
     @ViewBuilder var actions: () -> Actions
 
     var body: some View {
-        HStack(spacing: DS.Space.md) {
+        DSCard(padding: DS.Space.md) { HStack(spacing: DS.Space.md) {
             Spacer(minLength: DS.Space.sm)
             TextField(placeholder, text: $search)
                 .textFieldStyle(.roundedBorder).controlSize(.small)
                 .frame(minWidth: 130, idealWidth: 200, maxWidth: 200)
-            HStack(spacing: DS.Space.xs) { actions() }
+            HStack(spacing: DS.Space.md) { actions() }
                 .font(.system(size: 13, weight: .regular))
                 .buttonStyle(.borderless)
-        }
+        } }
         .padding(.horizontal, DS.Space.lg)
         .padding(.top, DS.Space.pageTop)
         .padding(.bottom, DS.Space.md)

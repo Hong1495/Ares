@@ -45,7 +45,7 @@ struct RuleSourcesView: View {
             }
             VStack(alignment: .leading, spacing: DS.Space.sm) {
                 if let capturedAt { Text("Snapshot: " + capturedAt.formatted(date: .abbreviated, time: .standard)) }
-                Text("Verified configuration · includes nested expressions and sub-rule sections. This view does not report runtime hits.")
+                Text("Verified configuration · Not runtime hits").help("Verified configuration · includes nested expressions and sub-rule sections. This view does not report runtime hits.")
                 if let issues = document?.issues, !issues.isEmpty {
                     ScrollView { VStack(alignment: .leading) { ForEach(issues, id: \.self) { Text($0) } } }.frame(maxHeight: 65)
                 }

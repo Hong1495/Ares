@@ -73,7 +73,7 @@ struct ProxyResourcesView: View {
                     }.width(120)
                 }.frame(minHeight: 150)
             }
-            Text("Provider history uses its configured test URL. A completed check can include failed or unmeasured nodes.")
+            Text("Provider test results · Completion does not imply availability").help("Provider history uses its configured test URL. A completed check can include failed or unmeasured nodes.")
                 .font(DS.Typography.metadata).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(DS.Space.lg)
         }.frame(minWidth: 760, minHeight: 540).background(DS.canvas).interactiveDismissDisabled(busy)
         .task { search = initialSelection ?? ""; await load(); selection = initialSelection }

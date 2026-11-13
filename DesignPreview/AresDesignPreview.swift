@@ -128,16 +128,17 @@ struct PreviewWorkspace: View {
             OverviewConnectionCard(snapshot: snapshot, systemProxy: $enabled, tun: $tun, interception: $inspection, mode: $mode)
         } details: {
             OverviewWorkspaceSummary(
-                processes: empty ? [] : [.init(id: "browser", name: "Safari", connections: 12), .init(id: "editor", name: "Code Editor", connections: 8), .init(id: "mail", name: "Mail", connections: 4)],
-                activityStatus: empty ? "No active connections" : "Top 3 sources by connections · Ares excluded",
+                probes: ["Google", "Cloudflare", "GitHub", "DNS"].map { .init(id: $0, name: $0, success: "83.3%", latency: 42, samples: [30, 44, 36, nil, 50, 42]) },
+                applications: .init(value: "4", unit: "local rules", rows: ["Safari → Automatic", "Mail → DIRECT", "Editor → Work"], status: "First 3 rules · Saved configuration"),
+                policies: .init(value: "8", unit: "groups", rows: ["select · 4", "url-test · 3", "fallback · 1"], status: "Saved configuration"),
+                scenes: .init(value: "2", unit: "saved", rows: ["Home", "Office"], status: "Automation off"),
+                processes: empty ? [] : [.init(id: "browser", name: "Safari", connections: 12), .init(id: "editor", name: "Code Editor", connections: 8), .init(id: "mail", name: "Mail", connections: 4), .init(id: "music", name: "Music", connections: 2), .init(id: "calendar", name: "Calendar", connections: 1), .init(id: "sync", name: "Sync", connections: 1)],
+                activityStatus: empty ? "No active connections" : "All sources · Ares excluded",
                 connections: empty ? 0 : 28, processCount: empty ? 0 : 6,
-                qualityStatus: "Synthetic preview · latest 20 samples", qualityGroup: "Ares Auto", qualityValue: empty ? "—" : "95.0%", qualityDetail: "Google probe success",
+                qualityStatus: "Preview · 6 samples", qualityGroup: "Ares Auto",
                 route: "Ares Route → Ares Auto → Japan",
                 openActivity: { page = "Activity" }, openApplications: { page = "Applications" }, openQuality: { page = "Network Quality" }, openPolicies: { page = "Policies" }, openScenes: { page = "Scenes" })
-            OverviewReachability(
-                items: [("Google", "magnifyingglass"), ("GitHub", "chevron.left.forwardslash.chevron.right"), ("Gemini", "sparkles")].map {
-                    .init(id: $0.0, name: $0.0, icon: $0.1, latency: empty ? nil : (error ? -1 : (measured ? 42 : 38)), loading: false)
-                })
+
         }
     }
 

@@ -47,7 +47,7 @@ struct ActivityDiagnosticsView: View {
             Table(rows, selection: $selection) {
                 TableColumn("Area") { Text($0.id).lineLimit(1).help($0.id) }.width(min: 150, ideal: 180, max: 200)
                 TableColumn("Result") { row in Text(row.status).foregroundStyle(selection == row.id ? Color(nsColor: .selectedControlTextColor) : (row.attention ? Color.statusWarn : Color.primary)) }.width(130)
-                TableColumn("Evidence") { Text($0.detail).textSelection(.enabled).help($0.detail) }
+                TableColumn("Evidence") { Text($0.detail).lineLimit(1).truncationMode(.tail).help($0.detail) }
             }.font(DS.Typography.metadata)
             if let row = rows.first(where: { $0.id == selection }) {
                 HStack(alignment: .top, spacing: DS.Space.lg) {
@@ -58,11 +58,12 @@ struct ActivityDiagnosticsView: View {
                 }.padding(DS.Space.lg)
             }
             HStack {
-                Text(error ?? snapshot.map { "Snapshot: " + $0.capturedAt.formatted(date: .omitted, time: .standard) + " · Read-only inspection; no connectivity probes." } ?? (busy ? "Reading runtime…" : "No current runtime snapshot."))
+                Text(error ?? snapshot.map { "Updated " + $0.capturedAt.formatted(date: .omitted, time: .standard) + " · Read-only" } ?? (busy ? "Reading runtime…" : "No runtime snapshot"))
+                    .help("Inspects runtime configuration without sending connectivity probes.")
                     .foregroundStyle(error == nil ? Color.secondary : Color.statusBad)
                 Spacer()
             }.font(DS.Typography.metadata).padding(DS.Space.lg)
-        }.frame(minWidth: 800, minHeight: 520).background(DS.canvas)
+        }.frame(minWidth: 800, minHeight: 520).background(DS.canvas).scrollIndicators(.never, axes: [.horizontal, .vertical])
         .task { await load() }
         .onDisappear { refreshTask?.cancel(); snapshot = nil }
         .onChange(of: controller.runtimeGeneration) { _, _ in snapshot = nil }

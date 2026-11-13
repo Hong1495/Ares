@@ -42,7 +42,7 @@ struct LocalRulesEditorView: View {
                 Picker("Editor", selection: $sourceMode) {
                     Text("List").tag(false)
                     Text("Source").tag(true)
-                }.labelsHidden().pickerStyle(.segmented).frame(width: 150).fixedSize()
+                }.labelsHidden().pickerStyle(.segmented).frame(width: 150, alignment: .leading).fixedSize()
                 Spacer()
                 Button("Cancel") { dismiss() }.fixedSize()
                 Button("Save & Apply") { apply() }.buttonStyle(.borderedProminent).fixedSize()
@@ -86,7 +86,7 @@ struct LocalRulesEditorView: View {
             VStack(alignment: .leading, spacing: DS.Space.sm) {
                 if let error { Text(error).foregroundStyle(Color.statusBad) }
                 if !sourceMode, let warning { Text(warning).foregroundStyle(Color.statusWarn) }
-                Text("Local rules run first, in order. Comments and advanced syntax are preserved in Source.")
+                Text("Local rules run first").help("Rules run in order. Source preserves comments and advanced syntax.")
                     .foregroundStyle(.secondary)
             }.font(DS.Typography.metadata).frame(maxWidth: .infinity, alignment: .leading).padding(DS.Space.lg)
         }
@@ -146,7 +146,7 @@ private struct RuleEditForm: View {
             }.controlSize(.small)
             if useSource {
                 TextField("Rule expression", text: $raw).font(DS.Typography.metadata.monospaced()).textFieldStyle(.roundedBorder)
-                Text("The complete expression is preserved. The core validates it when you apply the draft.")
+                Text("Validated on Apply").help("The complete expression is preserved and validated by the core.")
                     .font(DS.Typography.metadata).foregroundStyle(.secondary)
             } else {
                 Form {
