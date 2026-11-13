@@ -322,30 +322,44 @@ struct OverviewWorkspaceSummary: View {
     let openScenes: () -> Void
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: 24) {
-                activityColumn.frame(minWidth: 270, maxWidth: .infinity)
-                qualityColumn.frame(minWidth: 340, maxWidth: .infinity)
+        VStack(spacing: 24) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 24) {
+                    activity.frame(minWidth: 270, maxWidth: .infinity)
+                    quality.frame(minWidth: 340, maxWidth: .infinity)
+                }
+                VStack(spacing: 24) { activity; quality }
             }
-            VStack(spacing: 24) { activityColumn; qualityColumn }
+            configurationGrid
         }
     }
 
-    private var activityColumn: some View {
-        VStack(spacing: 24) {
-            activity
-            configuration("Applications", summary: applications, action: openApplications)
-        }
-    }
-
-    private var qualityColumn: some View {
-        VStack(spacing: 24) {
-            quality
-            HStack(alignment: .top, spacing: 24) {
-                configuration("Policies", summary: policies, action: openPolicies)
-                configuration("Scenes", summary: scenes, action: openScenes)
+    // Shared rows keep headings, values and footers aligned even when content differs.
+    private var configurationGrid: some View {
+        Grid(alignment: .topLeading, horizontalSpacing: 24, verticalSpacing: 12) {
+            GridRow {
+                heading("Applications", action: openApplications)
+                heading("Policies", action: openPolicies)
+                heading("Scenes", action: openScenes)
+            }
+            GridRow {
+                configurationMetric(applications)
+                configurationMetric(policies)
+                configurationMetric(scenes)
+            }
+            GridRow {
+                configurationRows(applications)
+                configurationRows(policies)
+                configurationRows(scenes)
+            }
+            GridRow {
+                configurationStatus(applications)
+                configurationStatus(policies)
+                configurationStatus(scenes)
             }
         }
+        .padding(.top, 16)
+        .overlay(alignment: .top) { Rectangle().fill(DS.line).frame(height: 0.5) }
     }
 
     private var activity: some View {
@@ -428,18 +442,21 @@ struct OverviewWorkspaceSummary: View {
             Text(label).font(DS.Typography.metadata).foregroundStyle(.secondary)
         }
     }
-    private func configuration(_ title: String, summary: ConfigurationSummary, action: @escaping () -> Void) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            heading(title, action: action)
-            metric(summary.value, summary.unit)
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(Array(summary.rows.enumerated()), id: \.offset) { _, row in
-                    Text(row).font(DS.Typography.secondary).lineLimit(1).truncationMode(.middle).help(row)
-                }
-                if summary.rows.isEmpty { Text("—").font(DS.Typography.secondary).foregroundStyle(.secondary) }
-            }.frame(minHeight: 60, alignment: .top)
-            Text(summary.status).font(DS.Typography.metadata).foregroundStyle(.secondary).lineLimit(2).help(summary.status)
-        }.frame(maxWidth: .infinity, alignment: .topLeading).padding(.top, 16)
-            .overlay(alignment: .top) { Rectangle().fill(DS.line).frame(height: 0.5) }
+    private func configurationMetric(_ summary: ConfigurationSummary) -> some View {
+        metric(summary.value, summary.unit).frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func configurationRows(_ summary: ConfigurationSummary) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(summary.rows.enumerated()), id: \.offset) { _, row in
+                Text(row).font(DS.Typography.secondary).lineLimit(1).truncationMode(.middle).help(row)
+            }
+            if summary.rows.isEmpty { Text("—").font(DS.Typography.secondary).foregroundStyle(.secondary) }
+        }.frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    private func configurationStatus(_ summary: ConfigurationSummary) -> some View {
+        Text(summary.status).font(DS.Typography.metadata).foregroundStyle(.secondary)
+            .lineLimit(2).help(summary.status).frame(maxWidth: .infinity, alignment: .topLeading)
     }
 }
