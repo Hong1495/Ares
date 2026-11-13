@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import UniformTypeIdentifiers
+import SubscriptionKit
 
 // MARK: - Grouping
 
@@ -9,6 +10,8 @@ import UniformTypeIdentifiers
 struct ConnectionsView: View {
     @StateObject private var viewModel = ConnectionsViewModel()
     @State private var searchText = ""
+    private struct RoutingSelection: Identifiable { let id = UUID(); let paths: [String] }
+    @State private var routingSelection: RoutingSelection?
     @State private var selectedNodeID: ActivityNode.ID? // For Inspector
     @State private var showInspector: Bool = false
 
@@ -42,6 +45,7 @@ struct ConnectionsView: View {
                     .frame(minWidth: 280, maxWidth: 400)
             }
         }
+        .sheet(item: $routingSelection) { ApplicationRoutingView(initialPaths: $0.paths) }
         .toolbar {
             ActivityTitleToolbar(count: viewModel.groupedNodes.count,
                                  subtitle: "Connections",
@@ -220,6 +224,14 @@ struct ConnectionsView: View {
                     .contextMenu(forSelectionType: ActivityNode.ID.self) { selection in
                         // Context Menu for Selected Items
                         if selection.count == 1, let id = selection.first, let node = findNode(id: id, nodes: nodes) {
+                            let paths: [String] = {
+                                switch node {
+                                case .connection(let connection): return [connection.metadata.processPath ?? ""].filter(ApplicationRouting.validPath)
+                                case .app(let session): return Array(Set(session.activeConnections.compactMap { $0.metadata.processPath }.filter(ApplicationRouting.validPath))).sorted()
+                                case .group: return []
+                                }
+                            }()
+                            Button("Route Application…") { routingSelection = RoutingSelection(paths: paths) }.disabled(paths.isEmpty)
                             // --- Standard Copy Actions ---
                             Button("Copy Summary") {
                                 NSPasteboard.general.clearContents()

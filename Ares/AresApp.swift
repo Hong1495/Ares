@@ -19,6 +19,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         AppUpdateService.shared.start()
         SceneAutomationService.shared.start()
+        NetworkQualityService.shared.start()
         registerLifecycleObservers()
         registerWorkspaceObservers()
 

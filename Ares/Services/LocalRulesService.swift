@@ -2,17 +2,17 @@ import Foundation
 
 /// Draft editing never changes defaults; apply uses the shared validated replacement boundary.
 @MainActor enum LocalRulesService {
-    static func apply(_ draft: String, expectedRevision: String, expectedRules: String? = nil, defaults: UserDefaults = .standard) async -> Bool {
-        if let expectedRules, (defaults.string(forKey: DefaultsKeys.localRules) ?? "") != expectedRules {
-            AppState.shared.reportError("Local rules changed while this editor was open. Reopen it before applying.")
-            return false
+    static func apply(_ draft: String, expectedRevision: String, expectedRules: String? = nil, expectedPolicy: (key: String, value: String)? = nil, defaults: UserDefaults = .standard) async -> Bool {
+        func isCurrent() -> Bool {
+            if let expectedPolicy, (defaults.string(forKey: expectedPolicy.key) ?? "{}") != expectedPolicy.value { return false }
+            return expectedRevision == ProfileService.shared.activeProfileRevision
+                && (expectedRules == nil || (defaults.string(forKey: DefaultsKeys.localRules) ?? "") == expectedRules)
+        }
+        guard isCurrent() else {
+            AppState.shared.reportError("The subscription, rules or policies changed. Reopen the editor before applying."); return false
         }
         let app = AppState.shared
         let vm = ClashViewModel.shared
-        guard expectedRevision == ProfileService.shared.activeProfileRevision else {
-            app.reportError("The subscription changed. Reopen the rule editor before applying.")
-            return false
-        }
         guard app.beginOperation("Applying Local Rules") else { return false }
         vm.isToggling = true
         defer { vm.isToggling = false; app.finishOperation(error: app.lastOperationError) }
@@ -24,6 +24,9 @@ import Foundation
         if vm.runtimeState.isAPIReady {
             do {
                 let checkpoint = try await vm.captureRecoveryCheckpoint()
+                guard isCurrent() else {
+                    app.reportError("The subscription, rules or policies changed while preparing. No rules were changed."); return false
+                }
                 let outcome = await ConfigurationCoordinator.replace(previous: checkpoint,
                     targetMode: app.tunEnabled, restoreProxy: app.systemProxyEnabled,
                     preparePreferences: { defaults.set(draft, forKey: DefaultsKeys.localRules) },

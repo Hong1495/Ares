@@ -19,6 +19,7 @@ struct PolicyCompositionView: View {
     @State private var error: String?
     @State private var applying = false
     @State private var tab = 0
+    @State private var recommendation: String?
     private struct EditorTarget: Identifiable { let id: String; let isNew: Bool }
     private var catalog: PolicyConfiguration.Catalog? { try? PolicyConfiguration.catalog(snapshot.source) }
     private var conflicts: [String] {
@@ -82,6 +83,8 @@ struct PolicyCompositionView: View {
                 TextField("New group name", text: $name).textFieldStyle(.roundedBorder).frame(width: 210)
                 Button { add() } label: { Image(systemName: "plus") }.help("Create group").accessibilityLabel("Create group")
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button("Add Recommended") { addRecommended() }.disabled(recommendation != nil)
+                    .help("Add automatic, fallback and manual groups to this draft")
                 Spacer()
                 Button { if let selection { editing = .init(id: selection, isNew: edits[selection]?["_create"] == "true") } } label: { Image(systemName: "pencil") }
                     .disabled(selection == nil).help("Edit selected group").accessibilityLabel("Edit selected group")
@@ -95,6 +98,9 @@ struct PolicyCompositionView: View {
                     }
                 } label: { Image(systemName: "trash") }.disabled(!edits.values.contains { $0["_delete"] == "true" }).help("Restore removed subscription groups")
             }.controlSize(.small).buttonStyle(.borderless).padding(DS.Space.md)
+            if let recommendation {
+                Text(recommendation).font(DS.Typography.metadata).foregroundStyle(.secondary).padding(.horizontal, DS.Space.md).padding(.bottom, DS.Space.sm)
+            }
             Table(groups, selection: $selection) {
                 TableColumn("Group") { Text($0.name).lineLimit(1).help($0.name) }
                 TableColumn("Type") { Text($0.type) }.width(95)
@@ -163,6 +169,14 @@ struct PolicyCompositionView: View {
     private func moveRule(_ offset: Int) {
         if let ruleSelection { ruleDocument.move(id: ruleSelection, by: offset); rules = ruleDocument.text }
     }
+    private func addRecommended() {
+        do {
+            let plan = try RecommendedPolicies.make(source: snapshot.source, overrides: PolicyConfiguration.encodeOverrides(edits))
+            edits = try PolicyConfiguration.decodeOverrides(plan.overrides); selection = plan.manual
+            recommendation = "Added " + plan.automatic + ", " + plan.fallback + " and " + plan.manual + ". Checks every 5 min; 5 sec timeout; Auto tolerance 50 ms. Fallback uses member order. Subscription rules stay intact; assign these groups in application or routing rules to use them."
+            refresh()
+        } catch { self.error = error.localizedDescription }
+    }
     private func add() {
         let key = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !groups.contains(where: { $0.name == key }), !(catalog?.nodes.contains(key) ?? false),
@@ -218,6 +232,7 @@ private struct PolicyStructureEditor: View {
     @State private var ownType = false
     @State private var ownFields = Set<String>()
     @State private var tab = 0
+    @State private var recommendation: String?
     private var explanation: String {
         switch type {
         case "url-test": return "Selects using configured latency tests. Manual pinning remains available."

@@ -9,6 +9,7 @@ import SubscriptionKit
         let sourceProcess: String, rule: String, host: String, destinationIP: String
         let chains: [String]
     }
+    static let shared = ClashController()
     var activeChains: [Chain] { (1...80).map { Chain(sourceProcess: "Preview App", rule: "Domain", host: "fixture-\($0).test", destinationIP: "", chains: ["Preview Route"]) } }
     func monitorConnections() async {}
     init() {
@@ -205,6 +206,8 @@ struct RuleSourcesView: View { var provider: String? = nil; var body: some View 
                 if CommandLine.arguments.contains("--topology") { TopologyPageView() }
                 else if CommandLine.arguments.contains("--scenes") { ScenariosView().frame(width: 740, height: 500) }
                 else if CommandLine.arguments.contains("--diagnostics") { ActivityDiagnosticsView().frame(width: 800, height: 520) }
+                else if CommandLine.arguments.contains("--quality") { NetworkQualityView() }
+                else if CommandLine.arguments.contains("--apps") { ApplicationRoutingView(initialPaths: ["/Applications/Preview.app/Contents/MacOS/Preview"]) }
                 else if CommandLine.arguments.contains("--egress") { EgressSettingsView().frame(width: 740, height: 560) }
                 else if CommandLine.arguments.contains("--dns") { DNSSettingsView().frame(width: 740, height: 540) }
                 else if CommandLine.arguments.contains("--resources") { ProxyResourcesView() }
@@ -225,4 +228,46 @@ struct RuleSourcesView: View { var provider: String? = nil; var body: some View 
             WorkspaceCommands(showSettings: { showingSettings = true }, showMainWindow: { openWindow(id: "main") })
         }
     }
+}
+
+@MainActor final class NetworkQualityService: ObservableObject {
+    static let shared = NetworkQualityService()
+    struct Target: Identifiable { let id: String; let name: String }
+    static let targets = [Target(id: "gstatic", name: "Google"), Target(id: "cloudflare", name: "Cloudflare"), Target(id: "github", name: "GitHub")]
+    @Published var enabled = true
+    @Published var group = "Preview Auto"
+    @Published var interval = 60
+    @Published var window = NetworkQuality.Window()
+    @Published var groups = [ProxyGroup(name: "Preview Auto", type: "URLTest", now: "Sample 1", all: ["Sample 1", "Sample 2"])]
+    var status = "Synthetic preview · not production measurements"
+    var observedAt: Date? = Date()
+    var error: String?
+    init() {
+        for n in 0..<20 { window.record(.init(date: Date().addingTimeInterval(Double(n - 20) * 60), milliseconds: n == 10 ? nil : 70 + n % 7 * 15, outcome: "Preview fixture"), target: "gstatic") }
+        window.observe(.init(path: [group, "Sample 1"], pinned: false, kind: "URLTest"))
+        window.observe(.init(path: [group, "Sample 2"], pinned: false, kind: "URLTest"))
+    }
+    func start() {}
+    func readGroups() async {}
+    func setEnabled(_ value: Bool) { enabled = value }
+    func configure(group: String, interval: Int) { self.group = group; self.interval = interval }
+    func reset() { window = .init() }
+    func select(member: String) async {}
+    func resumeAutomatic(group: String) async {}
+}
+@MainActor enum ApplicationRoutingService {
+    struct Snapshot {
+        let policy: PolicyGroupService.Snapshot
+        let rules: String
+        let evidence: [String]
+        let evidenceSource: String
+        let targets: [String]
+    }
+    struct Undo { let previous: String; let applied: String; let revision: String }
+    static func load() async throws -> Snapshot {
+        Snapshot(policy: try await PolicyGroupService.load(), rules: "", evidence: ["PROCESS-PATH,/Applications/Preview.app/Contents/MacOS/Preview,DIRECT", "MATCH,Automatic"], evidenceSource: "Synthetic preview", targets: ["DIRECT", "REJECT", "Automatic"])
+    }
+    static func apply(paths: [String], target: String?, snapshot: Snapshot) async throws -> Undo? { nil }
+    static func undo(_ undo: Undo) async -> Bool { true }
+    static func connections() async throws -> [Connection] { [] }
 }

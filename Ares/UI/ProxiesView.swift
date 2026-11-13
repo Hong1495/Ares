@@ -28,6 +28,7 @@ struct ProxiesView: View {
     @State private var searchText = ""
     @State private var showingResources = false
     @State private var showingPolicies = false
+    @State private var showingQuality = false
     private var profileKey: String { profileService.activeProfileRevision }
 
     private var showingLive: Bool {
@@ -84,6 +85,7 @@ struct ProxiesView: View {
         }
         .navigationTitle("")
         .toolbar { ProxiesTitleToolbar(count: nodeCount) }
+        .sheet(isPresented: $showingQuality) { NetworkQualityView() }
         .sheet(isPresented: $showingResources) { ProxyResourcesView().environmentObject(clashController) }
         .sheet(isPresented: $showingPolicies, onDismiss: { Task { await refreshProxies() } }) { PolicyGroupsView().environmentObject(clashController) }
         .onAppear { selectedTab = ProxyTab(rawValue: appState.currentMode.rawValue.capitalized) ?? .rule }
@@ -184,6 +186,8 @@ struct ProxiesView: View {
 
             HStack(spacing: 8) {
                 HStack(spacing: 6) {
+                    Button { showingQuality = true } label: { Image(systemName: "waveform.path.ecg") }
+                        .help("Network Quality").accessibilityLabel("Network Quality")
                     Button { showingPolicies = true } label: { Image(systemName: "slider.horizontal.3") }
                         .help("Policy groups and parameters").accessibilityLabel("Policy groups")
                     Button { showingResources = true } label: { Image(systemName: "square.stack") }

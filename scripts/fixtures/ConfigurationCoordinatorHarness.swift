@@ -14,9 +14,10 @@ import SubscriptionKit
     var buildFails = false
     var restoreFails = false
     var captureFails = false
+    var onCapture: (() -> Void)?
     var checkpointMissing = false
     var proxyResults: [Bool] = []
-    func reset() { events = []; starts = []; stops = []; buildFails = false; restoreFails = false; captureFails = false; checkpointMissing = false; proxyResults = [] }
+    func reset() { events = []; starts = []; stops = []; buildFails = false; restoreFails = false; captureFails = false; checkpointMissing = false; proxyResults = []; onCapture = nil }
 }
 @MainActor final class AppState {
     static let shared = AppState()
@@ -89,6 +90,7 @@ import SubscriptionKit
     var appliedProfileRevision = "new"
     func captureRecoveryCheckpoint() async throws -> RuntimeCheckpoint {
         Trace.shared.events.append("capture")
+        Trace.shared.onCapture?()
         if Trace.shared.captureFails { throw URLError(.cannotParseResponse) }
         return RuntimeCheckpoint(configuration: "current", profileID: nil, profileRevision: "current", selections: [:], tunEnabled: false)
     }
@@ -252,6 +254,22 @@ import SubscriptionKit
             if !success { precondition(defaults.string(forKey: dnsKey) == (scenario == "stale" ? "changed" : nil)) }
             precondition(!AppState.shared.busy && !ClashViewModel.shared.isToggling)
         }
+        // Application rule drafts must not overwrite policies/rules changed during checkpoint capture.
+        for scenario in ["policy-before", "policy-during", "rules-during", "revision-during"] {
+            resetRecovery(); ProfileService.shared.activeProfileRevision = "new"
+            defaults.set("{}", forKey: "applicationPolicy"); defaults.set("old", forKey: DefaultsKeys.localRules)
+            if scenario == "policy-before" { defaults.set("changed", forKey: "applicationPolicy") }
+            trace.onCapture = {
+                if scenario == "policy-during" { defaults.set("changed", forKey: "applicationPolicy") }
+                if scenario == "rules-during" { defaults.set("newer", forKey: DefaultsKeys.localRules) }
+                if scenario == "revision-during" { ProfileService.shared.activeProfileRevision = "changed" }
+            }
+            let result = await LocalRulesService.apply("PROCESS-PATH,/bin/fixture,DIRECT", expectedRevision: "new", expectedRules: "old", expectedPolicy: ("applicationPolicy", "{}"), defaults: defaults)
+            precondition(!result && !trace.events.contains("stop"))
+            precondition(defaults.string(forKey: DefaultsKeys.localRules) == (scenario == "rules-during" ? "newer" : "old"))
+        }
+        ProfileService.shared.activeProfileRevision = "new"
+        print("PASS: application-rule drafts reject policy, rule and subscription changes before any runtime stop")
         let egressKey = EgressSettingsService.key(UUID())
         let egressPolicyKey = "policyGroupOverrides." + UUID().uuidString
         for scenario in ["success", "validation", "rollback", "cleanup", "stale", "stale-policy", "stopped", "stopped-invalid"] {
