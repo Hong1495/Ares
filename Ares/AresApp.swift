@@ -61,6 +61,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // Sparkle's handoff already restored networking and stopped the owned core.
+        // Do not run a second synchronous proxy cleanup while the installer waits for exit.
+        if AppTerminationCoordinator.shared.updateShutdownPrepared { return }
         // Force cleanup on exit
         ClashViewModel.shared.addLog("[AppDelegate] App terminating - cleaning up", level: .debug)
 

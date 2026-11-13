@@ -55,55 +55,50 @@ struct AresMenuBarLabel: View {
     }()
 }
 
-/// Front-facing ears, angular brow, long snout and paired tusks taken from
-/// Ares's app icon. Details are reduced to negative space for menu-bar sizes.
+/// A compact boar silhouette: broad snout and outward tusks carry the identity.
+/// Large negative spaces stay legible at the native 17-point menu-bar size.
 private struct AresBoarMark: Shape {
     func path(in rect: CGRect) -> Path {
         func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
             CGPoint(x: rect.minX + rect.width * x / 32, y: rect.minY + rect.height * y / 32)
         }
+        func box(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) -> CGRect {
+            CGRect(origin: p(x, y), size: CGSize(width: rect.width * w / 32, height: rect.height * h / 32))
+        }
         var path = Path()
-        path.move(to: p(2, 2))
-        path.addLine(to: p(10, 5))
+        // Quiet crown and ears; no cheek spikes or separate brow lines.
+        path.move(to: p(3, 3))
         path.addLine(to: p(12, 7))
-        path.addLine(to: p(16, 4))
-        path.addLine(to: p(20, 7))
-        path.addLine(to: p(22, 5))
-        path.addLine(to: p(30, 2))
-        path.addLine(to: p(28.5, 10))
-        path.addLine(to: p(25, 13))
-        path.addLine(to: p(28, 20))
-        path.addLine(to: p(26, 19))
-        path.addCurve(to: p(16, 30), control1: p(26, 24), control2: p(21, 27))
-        path.addCurve(to: p(6, 19), control1: p(11, 27), control2: p(6, 24))
-        path.addLine(to: p(4, 20))
-        path.addLine(to: p(7, 13))
-        path.addLine(to: p(3.5, 10))
+        path.addQuadCurve(to: p(20, 7), control: p(16, 5))
+        path.addLine(to: p(29, 3))
+        path.addLine(to: p(27, 13))
+        path.addQuadCurve(to: p(26, 21), control: p(28, 17))
+        // Tusks belong to the outer silhouette, rather than tiny face cutouts.
+        path.addQuadCurve(to: p(30, 16), control: p(29, 20))
+        path.addCurve(to: p(23, 27), control1: p(31, 23), control2: p(27, 26))
+        path.addQuadCurve(to: p(16, 29), control: p(20, 30))
+        path.addQuadCurve(to: p(9, 27), control: p(12, 30))
+        path.addCurve(to: p(2, 16), control1: p(5, 26), control2: p(1, 23))
+        path.addQuadCurve(to: p(6, 21), control: p(3, 20))
+        path.addQuadCurve(to: p(5, 13), control: p(4, 17))
         path.closeSubpath()
 
-        // Angled eyes, matching the original icon's forward-facing expression.
-        path.move(to: p(7, 10.5))
-        path.addLine(to: p(13.5, 14.5))
-        path.addLine(to: p(8, 14.5))
+        // Two broad eye slits, clear even in a one-color template.
+        path.move(to: p(7, 12))
+        path.addLine(to: p(13, 14))
+        path.addLine(to: p(12, 16))
+        path.addLine(to: p(7, 15))
         path.closeSubpath()
-        path.move(to: p(25, 10.5))
-        path.addLine(to: p(18.5, 14.5))
-        path.addLine(to: p(24, 14.5))
-        path.closeSubpath()
-
-        // One clean negative-space tusk on each side of the muzzle.
-        path.move(to: p(7.5, 16))
-        path.addCurve(to: p(12.5, 23.5), control1: p(7.5, 21), control2: p(10, 23))
-        path.addLine(to: p(12, 18))
-        path.closeSubpath()
-        path.move(to: p(24.5, 16))
-        path.addCurve(to: p(19.5, 23.5), control1: p(24.5, 21), control2: p(22, 23))
-        path.addLine(to: p(20, 18))
+        path.move(to: p(25, 12))
+        path.addLine(to: p(19, 14))
+        path.addLine(to: p(20, 16))
+        path.addLine(to: p(25, 15))
         path.closeSubpath()
 
-        // A single oval nose keeps the lower face quiet at small sizes.
-        path.addEllipse(in: CGRect(x: p(14, 24).x, y: p(14, 24).y, width: rect.width * 4 / 32, height: rect.height * 2 / 32))
-        path.closeSubpath()
+        // A wide snout, with only two nostrils. No mouth or inner tusk lines.
+        path.addRoundedRect(in: box(10, 19, 12, 8), cornerSize: CGSize(width: rect.width * 3 / 32, height: rect.height * 3 / 32))
+        path.addEllipse(in: box(12, 21.5, 2.5, 3))
+        path.addEllipse(in: box(17.5, 21.5, 2.5, 3))
         return path
     }
 }

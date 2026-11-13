@@ -7,6 +7,7 @@ struct MenuBarView: View {
     @ObservedObject var clashController = ClashController.shared
     @AppStorage(DefaultsKeys.ipReputationEnabled) private var reputationEnabled = false
     @ObservedObject private var reputation = IPReputationService.shared
+    @ObservedObject private var updates = AppUpdateService.shared
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -21,7 +22,9 @@ struct MenuBarView: View {
             openDashboard: { WindowAccessor.showMainWindow(selection: .dashboard, openWindow: openWindow) },
             openActivity: { WindowAccessor.showMainWindow(selection: .connections, openWindow: openWindow) },
             openSettings: { WindowAccessor.showMainWindow(selection: .settings, openWindow: openWindow) },
-            quit: { AppTerminationCoordinator.shared.requestQuit() }
+            quit: { AppTerminationCoordinator.shared.requestQuit() },
+            availableVersion: updates.availableVersion,
+            openUpdate: updates.checkForUpdates
         )
     }
 

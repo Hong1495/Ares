@@ -24,6 +24,23 @@ final class AppUpdateSourceTests: XCTestCase {
         XCTAssertTrue(text.contains("Data(base64Encoded: key)?.count == 32"))
     }
 
+    func testStartupCheckRespectsPreferenceAndScheduledSessionsRemainOpenable() throws {
+        let text = try source("Ares/Services/AppUpdateService.swift")
+        XCTAssertTrue(text.contains("if automaticallyChecks {\n                controller.updater.checkForUpdatesInBackground()"))
+        let method = try XCTUnwrap(text.range(of: "    func checkForUpdates()"))
+        let session = try XCTUnwrap(text.range(of: "if controller.updater.sessionInProgress", range: method.lowerBound..<text.endIndex))
+        let availability = try XCTUnwrap(text.range(of: "guard controller.updater.canCheckForUpdates", range: method.lowerBound..<text.endIndex))
+        XCTAssertLessThan(session.lowerBound, availability.lowerBound)
+    }
+
+    func testUpdateExitDoesNotRepeatCompletedCleanup() throws {
+        let text = try source("Ares/AresApp.swift")
+        let method = try XCTUnwrap(text.range(of: "func applicationWillTerminate"))
+        let skip = try XCTUnwrap(text.range(of: "if AppTerminationCoordinator.shared.updateShutdownPrepared { return }", range: method.lowerBound..<text.endIndex))
+        let cleanup = try XCTUnwrap(text.range(of: "SystemProxyManager.shared.disableAllProxiesSync()", range: method.lowerBound..<text.endIndex))
+        XCTAssertLessThan(skip.lowerBound, cleanup.lowerBound)
+    }
+
     func testIndicatorUsesNativeGeometryAndNoProductionDependencies() throws {
         let text = try source("Ares/UI/DesignSystem/WindowUpdateIndicator.swift")
         XCTAssertTrue(text.contains("g.minX + (g.midX - y.midX)"))

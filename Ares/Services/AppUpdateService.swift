@@ -44,6 +44,11 @@ final class AppUpdateService: NSObject, ObservableObject, SPUUpdaterDelegate, SP
                 Task { @MainActor [weak self] in self?.canCheck = allowed }
             }
             isConfigured = true
+            record("Started Ares \(currentVersion) (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") ?? "—")), PID \(ProcessInfo.processInfo.processIdentifier), path \(Bundle.main.bundlePath)")
+            // Sparkle explicitly supports a launch-time background check immediately after start.
+            if automaticallyChecks {
+                controller.updater.checkForUpdatesInBackground()
+            }
         } catch {
             status = error.localizedDescription
             self.controller = nil
@@ -54,13 +59,12 @@ final class AppUpdateService: NSObject, ObservableObject, SPUUpdaterDelegate, SP
         if controller == nil { start() }
         guard let controller, !preparingInstall else { return }
         if pendingInstall != nil { resumeInstallation(); return }
-        guard controller.updater.canCheckForUpdates else { return }
         // Bringing an existing update window into focus does not start a new check.
         if controller.updater.sessionInProgress {
             controller.checkForUpdates(nil)
             return
         }
-        guard !isChecking else { return }
+        guard controller.updater.canCheckForUpdates, !isChecking else { return }
         isChecking = true
         status = "Checking for updates…"
         controller.checkForUpdates(nil)
@@ -100,6 +104,8 @@ final class AppUpdateService: NSObject, ObservableObject, SPUUpdaterDelegate, SP
 
     func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
         isChecking = false
+        pendingInstall = nil
+        record("Update aborted: \(error.localizedDescription)")
         if AppTerminationCoordinator.shared.updateShutdownPrepared {
             AppTerminationCoordinator.shared.updateShutdownPrepared = false
             ClashViewModel.shared.isToggling = false
@@ -115,6 +121,18 @@ final class AppUpdateService: NSObject, ObservableObject, SPUUpdaterDelegate, SP
         pendingInstall = installHandler
         resumeInstallation()
         return true
+    }
+
+    func updater(_ updater: SPUUpdater, willScheduleUpdateCheckAfterDelay delay: TimeInterval) {
+        record("Automatic check scheduled in \(Int(delay)) seconds")
+    }
+
+    func updaterWillRelaunchApplication(_ updater: SPUUpdater) {
+        record("Sparkle is terminating this process to relaunch the installed application")
+    }
+
+    private func record(_ message: String) {
+        NSLog("[Ares Update] %@", message)
     }
 
     private func resumeInstallation() {
@@ -134,6 +152,7 @@ final class AppUpdateService: NSObject, ObservableObject, SPUUpdaterDelegate, SP
             // Keep runtime controls locked during the handoff to Sparkle.
             AppTerminationCoordinator.shared.updateShutdownPrepared = true
             ClashViewModel.shared.isToggling = true
+            record("Network cleanup complete; handing installation and relaunch to Sparkle")
             install()
         }
     }

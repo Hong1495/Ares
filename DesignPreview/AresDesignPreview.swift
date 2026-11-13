@@ -16,7 +16,7 @@ struct AresDesignPreview: App {
         .defaultSize(width: 1180, height: 780)
         .windowStyle(.titleBar)
         .commands { PreviewCommands() }
-        MenuBarExtra {
+        MenuBarExtra(isInserted: .constant(!CommandLine.arguments.contains("--menu-preview"))) {
             MenuBarPreview()
         } label: {
             AresMenuBarLabel(showsLatency: true, latency: 639)

@@ -13,20 +13,24 @@ struct MenuBarPanel: View {
     let openActivity: () -> Void
     let openSettings: () -> Void
     let quit: () -> Void
+    var availableVersion: String? = nil
+    var openUpdate: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .firstTextBaseline, spacing: 16) {
                     metric(country.flatMap { $0.isEmpty ? nil : $0.uppercased() } ?? "—", label: "Country")
-                        .frame(width: 104, alignment: .leading)
+                        .frame(width: 120, alignment: .leading)
                     metric(ExitIdentity.isAddress(ip) ? ip : "—", label: "Exit IP")
                         .help(ExitIdentity.isAddress(ip) ? ip : "Exit IP unavailable")
                 }
                 HStack(alignment: .firstTextBaseline, spacing: 16) {
                     if showsRisk {
                         metric(risk.map(String.init) ?? "—", label: "IP Risk")
-                            .frame(width: 104, alignment: .leading)
+                            .frame(width: 120, alignment: .leading)
+                    } else {
+                        Color.clear.frame(width: 120, height: 1)
                     }
                     metric(latency.flatMap { $0 > 0 ? String($0) : nil } ?? "—",
                            label: "Latency", unit: "ms", tint: Color.latency(latency))
@@ -35,20 +39,31 @@ struct MenuBarPanel: View {
 
             Divider().opacity(0.6)
 
-            HStack(alignment: .firstTextBaseline, spacing: 20) {
+            HStack(alignment: .firstTextBaseline, spacing: 16) {
                 speed(download, label: "Download", icon: "arrow.down", tint: .seriesDown)
-                Spacer(minLength: 0)
+                    .frame(width: 120, alignment: .leading)
                 speed(upload, label: "Upload", icon: "arrow.up", tint: .seriesUp)
             }
 
             Divider().opacity(0.6)
 
-            HStack(spacing: 14) {
+            if let availableVersion {
+                Button(action: openUpdate) {
+                    HStack(spacing: 8) {
+                        Circle().fill(Color.orange).frame(width: 6, height: 6)
+                        Text("Update to \(availableVersion)")
+                        Spacer()
+                        Image(systemName: "arrow.down.circle")
+                    }.font(.system(size: 12, weight: .medium)).contentShape(Rectangle())
+                }.buttonStyle(.plain)
+            }
+
+            HStack(spacing: 8) {
                 Button("Open Ares", action: openDashboard)
                     .font(.system(size: 12, weight: .medium))
                 Spacer()
-                action("Activity", icon: "arrow.up.arrow.down", perform: openActivity)
-                action("Settings", icon: "slider.horizontal.3", perform: openSettings)
+                action("Activity", icon: "waveform.path", perform: openActivity)
+                action("Settings", icon: "gearshape", perform: openSettings)
                 action("Quit Ares", icon: "power", perform: quit)
             }.buttonStyle(.plain)
         }
@@ -82,9 +97,9 @@ struct MenuBarPanel: View {
 
     private func action(_ title: String, icon: String, perform: @escaping () -> Void) -> some View {
         Button(action: perform) {
-            Image(systemName: icon).font(.system(size: 13, weight: .regular))
-                .symbolRenderingMode(.monochrome).foregroundStyle(.secondary)
-                .frame(width: 22, height: 22).contentShape(Rectangle())
+            Image(systemName: icon).font(.system(size: 14, weight: .medium))
+                .symbolRenderingMode(.monochrome).foregroundStyle(.primary)
+                .frame(width: 28, height: 28).contentShape(Rectangle())
         }.help(title).accessibilityLabel(title)
     }
 }

@@ -7,11 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+        AAF000000000000000000001 /* Ares.icon in Resources */ = {isa = PBXBuildFile; fileRef = AAF000000000000000000002 /* Ares.icon */; };
         AAE000000000000000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = AAE000000000000000000003 /* Sparkle */; };
         AAE000000000000000000011 = {isa = PBXBuildFile; productRef = AAE000000000000000000013; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+        AAF000000000000000000002 /* Ares.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.icon; path = Ares.icon; sourceTree = "<group>"; };
 		D53132D12EF23B3000640BD9 /* Ares.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Ares.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E10000012EF23B3300640BD9 /* AresTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AresTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -52,6 +54,7 @@
 		D53132C82EF23B3000640BD9 = {
 			isa = PBXGroup;
 			children = (
+				AAF000000000000000000002 /* Ares.icon */,
 				D53132D32EF23B3000640BD9 /* Ares */,
 				E10000022EF23B3300640BD9 /* AresTests */,
 				D53132D22EF23B3000640BD9 /* Products */,
@@ -162,6 +165,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+                AAF000000000000000000001 /* Ares.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -333,7 +337,7 @@
 		D53132DF2EF23B3200640BD9 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = Ares;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGNING_ALLOWED = NO;
 				CODE_SIGNING_REQUIRED = NO;
@@ -368,7 +372,7 @@
 		D53132E02EF23B3200640BD9 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = Ares;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGNING_ALLOWED = NO;
 				CODE_SIGNING_REQUIRED = NO;

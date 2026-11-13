@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<defs><linearGradient id="background" x2="0" y2="1"><stop stop-color="#303238"/><stop offset="1" stop-color="#17181C"/></linearGradient><linearGradient id="mark" x2="0" y2="1"><stop stop-color="#FFFFFF"/><stop offset="1" stop-color="#C7CBD2"/></linearGradient></defs>
+<path fill="url(#background)" d="M0 0h1024v1024H0z"/>
+<path transform="translate(128 112) scale(24)" fill="url(#mark)" fill-rule="evenodd" d="M3 3L12 7Q16 5 20 7L29 3L27 13Q28 17 26 21Q29 20 30 16C31 23 27 26 23 27Q20 30 16 29Q12 30 9 27C5 26 1 23 2 16Q3 20 6 21Q4 17 5 13Z M7 12L13 14L12 16L7 15Z M25 12L19 14L20 16L25 15Z M13 19H19Q22 19 22 22V24Q22 27 19 27H13Q10 27 10 24V22Q10 19 13 19Z M14.5 23A1.25 1.5 0 1 0 12 23A1.25 1.5 0 1 0 14.5 23Z M20 23A1.25 1.5 0 1 0 17.5 23A1.25 1.5 0 1 0 20 23Z"/>
+</svg>
