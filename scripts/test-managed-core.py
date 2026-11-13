@@ -58,8 +58,16 @@ try:
     auth=base64.b64encode(b'fixture:fixture-only-password').decode()
     c.sendall(f'CONNECT 127.0.0.1:{origin.server_port} HTTP/1.1\r\nHost: fixture\r\nProxy-Authorization: Basic {auth}\r\n\r\n'.encode())
     assert b'200' in c.recv(4096)
-    with client.open('http://127.0.0.1:29451/connections') as r:rows=json.load(r)['connections']
-    assert any(x['metadata'].get('inboundName')=='Ares Device 11111111-1111-1111-1111-111111111111' for x in rows),[(x['metadata'].get('inboundName'),x['metadata'].get('type')) for x in rows]
+    # CONNECT acknowledgement can precede outbound registration on macOS.
+    # Send an incomplete HTTP request to establish real traffic without allowing
+    # the origin to close the tunnel before we inspect its connection metadata.
+    c.sendall(b'GET / HTTP/1.1\r\nHost: fixture\r\n')
+    rows=[]
+    for _ in range(40):
+      with client.open('http://127.0.0.1:29451/connections',timeout=1) as r:rows=json.load(r).get('connections') or []
+      if any(x['metadata'].get('inboundName')=='Ares Device 11111111-1111-1111-1111-111111111111' for x in rows):break
+      time.sleep(.025)
+    else:raise AssertionError([(x['metadata'].get('inboundName'),x['metadata'].get('type')) for x in rows])
   # SOCKS username/password authentication and TCP forwarding.
   with socket.create_connection(('127.0.0.1',29453),timeout=3) as c:
     c.sendall(b'\x05\x01\x02');assert c.recv(2)==b'\x05\x02'
