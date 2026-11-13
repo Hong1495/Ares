@@ -48,7 +48,10 @@ public enum PolicyConfiguration {
         let edits = try decodeOverrides(overrides)
         if edits.isEmpty { return source }
         var root = try parse(source)
-        guard let sequence = root["proxy-groups"]?.sequence else { return source }
+        guard let sequence = root["proxy-groups"]?.sequence,
+              Set(edits.keys).isSubset(of: Set(sequence.compactMap { $0["name"]?.string })) else {
+            throw EffectiveConfiguration.BuildError.invalidSection
+        }
         root["proxy-groups"] = .sequence(.init(try sequence.map { node in
             guard let name = node["name"]?.string, let type = node["type"]?.string else { throw EffectiveConfiguration.BuildError.invalidSection }
             guard let fields = edits[name] else { return node }
@@ -66,7 +69,7 @@ public enum PolicyConfiguration {
                 case "strategy":
                     guard ["consistent-hashing", "round-robin", "sticky-sessions"].contains(value) else { throw EffectiveConfiguration.BuildError.invalidSection }
                     result[key] = Node(value, Tag(.str))
-                default: result[key] = Node(value, Tag(.str))
+                default: result[key] = Node(value, Tag(.str), .doubleQuoted)
                 }
             }
             return result

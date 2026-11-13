@@ -5,6 +5,7 @@ extension AppState {
 
     func systemWillSleep() {
         systemIsSleeping = true
+        SceneAutomationService.shared.pause(reason: "Paused for sleep · Resume after checking the network")
         wakeVerificationTask?.cancel()
         clashController.stopTrafficMonitor()
     }

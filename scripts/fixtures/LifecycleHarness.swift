@@ -1,5 +1,9 @@
 import Foundation
 
+@MainActor final class SceneAutomationService {
+    static let shared = SceneAutomationService()
+    func pause(reason: String) {}
+}
 enum ClashPorts { static let apiTun = 19097; static let apiNormal = 9097 }
 @MainActor final class ClashViewModel {
     enum State { case ready, stopped; var isAPIReady: Bool { self == .ready } }

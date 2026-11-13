@@ -856,7 +856,7 @@ struct SettingsView: View {
         TextEditor(text: text)
             .font(DS.Typography.secondary.monospaced())
             .scrollContentBackground(.hidden)
-            .scrollIndicators(.hidden)
+            .scrollIndicators(.never)
             .padding(DS.Space.sm)
             .frame(height: height)
             .background(

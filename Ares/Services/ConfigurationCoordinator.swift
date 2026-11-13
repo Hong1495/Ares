@@ -3,16 +3,18 @@ import Foundation
 /// Shared replacement boundary. Callers hold AppState's operation gate and own preference rollback.
 @MainActor enum ConfigurationCoordinator {
     static func activate(configuration: String? = nil, recovery: RuntimeCheckpoint? = nil,
-                         restoreProxy: Bool) async -> Bool {
+                         restoreProxy: Bool, verify: () async throws -> Void = {}, finalCheck: () throws -> Void = {}) async -> Bool {
         let vm = ClashViewModel.shared
         await vm.startCore(isRestart: true, preparedConfiguration: configuration, recovery: recovery, persistCheckpoint: false)
         guard vm.runtimeState.isAPIReady else { return false }
+        do { try await verify() } catch { return false }
         if NetworkMITMService.shared.isRunning {
             guard await NetworkMITMService.shared.updateUpstream(tunEnabled: AppState.shared.tunEnabled) else { return false }
         }
         if restoreProxy {
             guard await AppState.shared.enableSystemProxy(expectedRevision: recovery?.profileRevision) else { return false }
         }
+        do { try finalCheck() } catch { return false }
         await vm.persistActiveCheckpoint()
         return true
     }
@@ -23,7 +25,9 @@ import Foundation
         restoreProxy: Bool,
         preparePreferences: () -> Void = {},
         activatePreferences: () -> Void = {},
-        restorePreferences: () -> Void = {}
+        restorePreferences: () -> Void = {},
+        verify: () async throws -> Void = {},
+        beforeStop: () throws -> Void = {}
     ) async -> ConfigurationTransition.Outcome {
         let vm = ClashViewModel.shared
         let revision = ProfileService.shared.activeProfileRevision
@@ -34,12 +38,13 @@ import Foundation
                 try await ConfigService.shared.buildConfig(tunEnabled: targetMode)
                 prepared = try await ConfigService.shared.savedConfiguration(tunEnabled: targetMode)
                 guard revision == ProfileService.shared.activeProfileRevision else { throw CancellationError() }
+                try beforeStop()
             },
             stop: { await vm.stopCore(intendedRestart: true) },
             activate: {
                 guard revision == ProfileService.shared.activeProfileRevision, let prepared else { return false }
                 activatePreferences()
-                return await activate(configuration: prepared, restoreProxy: restoreProxy)
+                return await activate(configuration: prepared, restoreProxy: restoreProxy, verify: verify, finalCheck: beforeStop)
             },
             stopFailed: { await vm.stopCore(intendedRestart: true) },
             restore: {

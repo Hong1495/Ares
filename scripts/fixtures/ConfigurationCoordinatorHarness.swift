@@ -15,6 +15,7 @@ import SubscriptionKit
 }
 @MainActor final class AppState {
     static let shared = AppState()
+    var currentMode = ClashConfig.Mode.rule
     var tunEnabled = false, systemProxyEnabled = true
     var busy = false
     var lastOperationError: String?
@@ -28,6 +29,14 @@ import SubscriptionKit
 }
 @MainActor final class ProfileService {
     static let shared = ProfileService()
+    var choices: [String: String] = [:]
+    var selectionsFail = false
+    func savedSelections() -> [String: String] { choices }
+    func replaceSavedSelections(_ choices: [String: String], profile: UUID, defaults: UserDefaults) { self.choices = choices }
+    func verifySceneSelections(_ choices: [String: String]) async throws {
+        Trace.shared.events.append("selections")
+        if selectionsFail { throw URLError(.cannotParseResponse) }
+    }
     var activeProfileRevision = "new"
     var activeProfileID: UUID?
     struct Profile { let path: URL }
@@ -92,6 +101,8 @@ import SubscriptionKit
 }
 @main struct Harness {
     @MainActor static func main() async {
+        let historyDir = FileManager.default.temporaryDirectory.appendingPathComponent("ares-history-harness-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: historyDir) }
         let trace = Trace.shared
         let old = ConfigService.shared.checkpoint
         func run() async -> ConfigurationTransition.Outcome {
@@ -257,12 +268,12 @@ import SubscriptionKit
             case "stopped-invalid": ClashViewModel.shared.runtimeState = .stopped; trace.buildFails = true
             default: break
             }
-            let success = await ScenarioService.apply(review, defaults: defaults)
+            let success = await ScenarioService.apply(review, defaults: defaults, storage: historyDir)
             precondition(success == ["success", "stopped"].contains(scenario))
             if success {
                 precondition(ScenarioSettings.capture(profile: sceneProfile, defaults: defaults) == nextScene)
                 let undo = ScenarioService.undoReview(defaults: defaults)!
-                let undone = await ScenarioService.apply(undo, defaults: defaults)
+                let undone = await ScenarioService.apply(undo, defaults: defaults, storage: historyDir)
                 precondition(undone)
                 precondition(ScenarioSettings.capture(profile: sceneProfile, defaults: defaults) == originalScene)
                 precondition(ScenarioService.undoReview(defaults: defaults) == nil)
@@ -276,7 +287,7 @@ import SubscriptionKit
         originalScene.install(profile: sceneProfile, defaults: defaults)
         let initial = try! ScenarioService.context(defaults: defaults)
         let first = ScenarioService.Review(name: "Office", context: initial, target: nextScene, sourceChanged: false, isUndo: false)
-        let switched = await ScenarioService.apply(first, defaults: defaults)
+        let switched = await ScenarioService.apply(first, defaults: defaults, storage: historyDir)
         precondition(switched && ScenarioService.undoReview(defaults: defaults) != nil)
         defaults.set("newer edit", forKey: "localRules")
         precondition(ScenarioService.undoReview(defaults: defaults) == nil)
@@ -285,6 +296,103 @@ import SubscriptionKit
         precondition(ScenarioService.undoReview(defaults: defaults) == nil)
         let scene = try! ManualScenario(name: "Office", profileID: sceneProfile, sourceRevision: "new", settings: nextScene)
         precondition((try! ScenarioService.review(scene, defaults: defaults)).sourceChanged)
+
+        let sceneDir = FileManager.default.temporaryDirectory.appendingPathComponent("ares-editor-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: sceneDir) }
+        try! ScenarioLibrary.save([scene], directory: sceneDir)
+        let editorContext = try! ScenarioService.context(defaults: defaults)
+        trace.reset()
+        try! ScenarioService.update(scene, name: "Edited", settings: originalScene, expected: editorContext, defaults: defaults, storage: sceneDir)
+        precondition(ScenarioSettings.capture(profile: sceneProfile, defaults: defaults) == nextScene)
+        precondition(trace.events.isEmpty) // Saving a draft must not touch the core or live preferences.
+        let editedScene = try! ScenarioLibrary.load(directory: sceneDir)[0]
+        do {
+            try ScenarioService.update(scene, name: "Stale", settings: nextScene, expected: editorContext, defaults: defaults, storage: sceneDir)
+            preconditionFailure("stale scene replaced")
+        } catch {}
+        defaults.set("external edit", forKey: "localRules")
+        do {
+            try ScenarioService.update(editedScene, name: "Stale context", settings: nextScene, expected: editorContext, defaults: defaults, storage: sceneDir)
+            preconditionFailure("stale settings accepted")
+        } catch {}
+        precondition(try! ScenarioLibrary.load(directory: sceneDir) == [editedScene])
+        precondition(trace.events.isEmpty)
+        nextScene.install(profile: sceneProfile, defaults: defaults)
+        let staleSceneReview = ScenarioService.Review(name: scene.name, context: editorContext, target: scene.settings, sourceChanged: true, isUndo: false, scene: scene)
+        let staleApplied = await ScenarioService.apply(staleSceneReview, defaults: defaults, storage: sceneDir)
+        precondition(!staleApplied && !trace.events.contains("prepare") && !trace.events.contains("stop"))
+        precondition(ScenarioSettings.capture(profile: sceneProfile, defaults: defaults) == nextScene)
+
+        // Mode and node choices participate in commit, rollback, undo and stale review rejection.
+        for failure in [false, true] {
+            resetRecovery(); ProfileService.shared.activeProfileID = sceneProfile
+            ProfileService.shared.choices = ["Select": "A"]
+            ProfileService.shared.selectionsFail = failure
+            defaults.removeObject(forKey: DefaultsKeys.clashMode)
+            defaults.removeObject(forKey: "sceneStrictSelections." + sceneProfile.uuidString)
+            originalScene.install(profile: sceneProfile, defaults: defaults)
+            let baseline = try! ScenarioService.context(defaults: defaults)
+            var routing = nextScene; routing.mode = "global"; routing.selections = ["Select": "B"]
+            let request = ScenarioService.Review(name: "Routing", context: baseline, target: routing, sourceChanged: false, isUndo: false)
+            let applied = await ScenarioService.apply(request, defaults: defaults, storage: historyDir)
+            precondition(applied != failure)
+            if failure {
+                precondition(ProfileService.shared.choices == ["Select": "A"])
+                precondition(defaults.object(forKey: DefaultsKeys.clashMode) == nil)
+                precondition(trace.events.contains("start:current"))
+                precondition(trace.events.firstIndex(of: "selections")! < trace.events.lastIndex(of: "proxy:current")!)
+            } else {
+                precondition(ProfileService.shared.choices == ["Select": "B"])
+                precondition(defaults.string(forKey: DefaultsKeys.clashMode) == "global")
+                precondition(trace.events.firstIndex(of: "selections")! < trace.events.firstIndex(of: "proxy:current")!)
+                let undone = await ScenarioService.apply(ScenarioService.undoReview(defaults: defaults)!, defaults: defaults, storage: historyDir)
+                precondition(undone && ProfileService.shared.choices == ["Select": "A"])
+                precondition(defaults.object(forKey: DefaultsKeys.clashMode) == nil)
+            }
+        }
+        ProfileService.shared.selectionsFail = false
+
+        trace.reset(); var validBeforeStop = false
+        let cancelledBeforeStop = await ConfigurationCoordinator.replace(previous: old, targetMode: false, restoreProxy: true,
+            beforeStop: { if !validBeforeStop { throw CancellationError() } })
+        precondition(cancelledBeforeStop == .preparationFailed && !trace.events.contains("stop"))
+        trace.reset(); validBeforeStop = true
+        let cancelledAfterReadback = await ConfigurationCoordinator.replace(previous: old, targetMode: false, restoreProxy: true,
+            verify: { validBeforeStop = false }, beforeStop: { if !validBeforeStop { throw CancellationError() } })
+        precondition(cancelledAfterReadback == .restored)
+        precondition(trace.events.filter { $0 == "checkpoint" }.count == 1)
+
+        // Migration approval requires a successful live transaction, not an offline save or failed activation.
+        for condition in ["live", "stopped", "failure"] {
+            resetRecovery(); ProfileService.shared.activeProfileID = sceneProfile
+            ProfileService.shared.activeProfileRevision = "new revision"
+            originalScene.install(profile: sceneProfile, defaults: defaults)
+            let migrating = try! ManualScenario(name: "Migration", profileID: sceneProfile, sourceRevision: "old revision", settings: nextScene)
+            try! ScenarioLibrary.save([migrating], directory: sceneDir)
+            if condition == "stopped" { ClashViewModel.shared.runtimeState = .stopped }
+            if condition == "failure" { trace.buildFails = true }
+            let request = try! ScenarioService.review(migrating, defaults: defaults)
+            precondition(request.sourceChanged)
+            let success = await ScenarioService.apply(request, defaults: defaults, storage: sceneDir)
+            precondition(success == (condition != "failure"))
+            let saved = try! ScenarioLibrary.load(directory: sceneDir)[0]
+            precondition((saved.validatedRevision == "new revision") == (condition == "live"))
+            precondition(saved.sourceRevision == "old revision" && saved.id == migrating.id)
+            let history = try! SceneExecutionHistory.load(directory: sceneDir)
+            precondition(history[0].sceneID == migrating.id)
+            precondition(history[0].result.contains(condition == "live" ? "verified" : condition == "stopped" ? "Awaiting" : "Failed"))
+            if condition == "live" {
+                precondition(!(try! ScenarioService.review(saved, defaults: defaults)).sourceChanged)
+                var changed = saved.settings; changed.localRules = "MATCH,REJECT"
+                try! ScenarioService.update(saved, name: saved.name, settings: changed,
+                    expected: ScenarioService.context(defaults: defaults), defaults: defaults, storage: sceneDir)
+                precondition(try! ScenarioLibrary.load(directory: sceneDir)[0].validatedRevision == nil)
+            }
+        }
+        print("PASS: migration approved only after live verification; offline/failure stay blocked; edits invalidate approval; execution history records outcomes")
+        print("PASS: stale environment before stop retains runtime; late invalidation restores checkpoint")
+        print("PASS: mode/node commit, readback failure rollback, verification before proxy, undo restores missing mode")
+        print("PASS: scene editing stays offline, retains identity and rejects stale scenes/settings")
         print("PASS: scene switch/undo, multi-section rollback, stale reviews, profile guard and stopped-core validation")
         print("PASS: egress transaction commit, validation, rollback, stale drafts and stopped core")
         print("PASS: DNS transaction commit, validation, activation/cleanup rollback, stale drafts and stopped core")

@@ -278,7 +278,7 @@ struct ConnectionsView: View {
                             }
                         }
                     }
-                    .scrollIndicators(.hidden)
+                    .scrollIndicators(.never)
                     .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
                 }
             }

@@ -5,6 +5,12 @@ import SubscriptionKit
 // Only this mock file supplies service types. No production service or app delegate
 // is linked. The actual ProxiesView reads a synthetic subscription from a temp file.
 @MainActor final class ClashController: ObservableObject {
+    struct Chain {
+        let sourceProcess: String, rule: String, host: String, destinationIP: String
+        let chains: [String]
+    }
+    var activeChains: [Chain] { (1...80).map { Chain(sourceProcess: "Preview App", rule: "Domain", host: "fixture-\($0).test", destinationIP: "", chains: ["Preview Route"]) } }
+    func monitorConnections() async {}
     @Published var runtimeGeneration = UUID()
     func queryDNS(name: String, type: String) async throws -> DNSQueryResult {
         try JSONDecoder().decode(DNSQueryResult.self, from: Data(#"{"Status":0,"TC":false,"Answer":[{"name":"fixture.test.","type":1,"TTL":90,"data":"192.0.2.10"}]}"#.utf8))
@@ -52,6 +58,8 @@ struct PreviewProfile {
 }
 @MainActor final class AppState: ObservableObject {
     @Published var currentMode: ClashConfig.Mode = .rule
+    var animationsEnabled = false
+    var isForeground = true
     var isPerformingNetworkOperation = false
     func setMode(_ mode: ClashConfig.Mode) async { currentMode = mode }
     static let shared = AppState()
@@ -105,6 +113,12 @@ struct PreviewProfile {
     }
     static func apply(_ text: String, snapshot: Snapshot) async -> Bool { false }
 }
+@MainActor enum SceneCatalogService {
+    struct Catalog { let groups: [ProxyGroup]; let live: Bool; let revision: String }
+    static func load() async throws -> Catalog {
+        .init(groups: [.init(name: "Select", type: "Selector", all: ["Tokyo", "Singapore", "Auto"])], live: true, revision: "preview")
+    }
+}
 @MainActor enum ScenarioService {
     struct Context { let profileID: UUID; let revision: String; let settings: ScenarioSettings }
     struct Review: Identifiable {
@@ -118,17 +132,35 @@ struct PreviewProfile {
     }
     static let id = UUID()
     static let settings = ScenarioSettings(localRules: nil, dns: nil, policy: nil, egress: nil)
+    static func history() throws -> [SceneExecution] { [.init(sceneID: nil, name: "Office", automatic: false, result: "Applied and verified", sections: ["DNS", "Proxy Mode"])] }
     static func context() throws -> Context { Context(profileID: id, revision: "preview", settings: settings) }
     static func list() throws -> [ManualScenario] {
-        [try ManualScenario(name: "Office", profileID: id, sourceRevision: "preview", settings: ScenarioSettings(localRules: "MATCH,DIRECT", dns: "{}", policy: nil, egress: nil))]
+        let scrolling = CommandLine.arguments.contains("--scroll-preview")
+        let rules = scrolling ? (1...80).map { "DOMAIN,fixture-\($0).test,DIRECT" }.joined(separator: "\n") : "MATCH,DIRECT"
+        return try (1...(scrolling ? 40 : 1)).map {
+            try ManualScenario(name: scrolling ? "Office \($0)" : "Office", profileID: id, sourceRevision: "preview", settings: ScenarioSettings(localRules: rules, dns: "{}", policy: nil, egress: nil))
+        }
     }
     static func save(name: String, expected: Context) throws {}
     static func remove(_ scenario: ManualScenario) throws {}
+    static func update(_ original: ManualScenario, name: String, settings: ScenarioSettings, expected: Context, trigger: SceneTrigger? = nil) throws {}
     static func review(_ scenario: ManualScenario) throws -> Review {
         Review(name: scenario.name, context: try context(), target: scenario.settings, sourceChanged: false, isUndo: false)
     }
     static func undoReview() -> Review? { nil }
     static func apply(_ review: Review) async -> Bool { false }
+}
+@MainActor final class SceneAutomationService: ObservableObject {
+    static let shared = SceneAutomationService()
+    @Published var enabled = false
+    @Published var paused = false
+    @Published var status = "Automatic switching is off"
+    var environment = SceneEnvironment(available: true, kind: "wifi", interface: "en0", expensive: false, constrained: false)
+    var rows: [SceneMatcher.Row] { [.init(id: UUID(), name: "Office", priority: 10, reason: "All conditions match", matches: true)] }
+    func start() {}
+    func setEnabled(_ value: Bool) { enabled = value }
+    func pause() { paused = true }
+    func resume() { paused = false }
 }
 @MainActor enum ActivityDiagnosticsService {
     struct Row: Identifiable { let id: String; let status: String; let detail: String; let attention: Bool }
@@ -150,7 +182,8 @@ struct RuleSourcesView: View { var body: some View { Text("Inert rule sources pr
     var body: some Scene {
         WindowGroup("Ares · Offline subscription preview", id: "main") {
             Group {
-                if CommandLine.arguments.contains("--scenes") { ScenariosView().frame(width: 740, height: 500) }
+                if CommandLine.arguments.contains("--topology") { TopologyPageView() }
+                else if CommandLine.arguments.contains("--scenes") { ScenariosView().frame(width: 740, height: 500) }
                 else if CommandLine.arguments.contains("--diagnostics") { ActivityDiagnosticsView().frame(width: 800, height: 520) }
                 else if CommandLine.arguments.contains("--egress") { EgressSettingsView().frame(width: 740, height: 560) }
                 else if CommandLine.arguments.contains("--dns") { DNSSettingsView().frame(width: 740, height: 540) }
@@ -158,6 +191,7 @@ struct RuleSourcesView: View { var body: some View { Text("Inert rule sources pr
                 else if CommandLine.arguments.contains("--policies") { PolicyGroupsView() }
                 else { ProxiesView() }
             }
+                .scrollIndicators(.never, axes: [.horizontal, .vertical])
                 .environmentObject(controller)
                 .environmentObject(profiles)
                 .environmentObject(runtime)

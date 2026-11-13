@@ -112,6 +112,14 @@ with tempfile.TemporaryDirectory(prefix='ares-native-core-') as name:
             assert readback[key] == config[key], (key, readback[key])
         assert readback['tun']['enable'] is False
         traffic()
+        for mode in ['global', 'direct', 'rule']:
+            api('PATCH', '/configs', {'mode': mode})
+            assert api()['mode'] == mode
+            if mode == 'global':
+                api('PUT', '/proxies/GLOBAL', {'name': 'DIRECT'})
+                assert api(path='/proxies/GLOBAL')['now'] == 'DIRECT'
+            traffic()
+        print('PASS: Rule/Global/Direct mode readback, GLOBAL selection and real proxy traffic')
         rules = api(path='/rules')['rules']
         assert rules[0]['index'] == 0 and rules[0]['payload'] == 'Fixture Rules'
         # The optional wrapper counter is checked only if this build exposes it.

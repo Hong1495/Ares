@@ -466,7 +466,7 @@ struct DetailContent: View {
             }
             .width(60)
             }
-            .scrollIndicators(.hidden)
+            .scrollIndicators(.never)
         }
 
 

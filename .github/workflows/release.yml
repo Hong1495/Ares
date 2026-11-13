@@ -38,6 +38,8 @@ jobs:
           scripts/test-config-controller.sh
           scripts/test-lifecycle.sh
           scripts/test-configuration-coordinator.sh
+          scripts/test-scene-automation.sh
+          scripts/test-scene-catalog.sh
           scripts/test-activity-diagnostics.sh
           scripts/test-listener-verification.sh
           scripts/test-core-process-reaper.sh
@@ -92,6 +94,7 @@ jobs:
           scripts/test-effective-config.sh "$CORE"
           python3 scripts/test-native-core.py "$CORE"
           python3 scripts/test-native-dns.py "$CORE"
+          python3 scripts/test-native-egress.py "$CORE"
           scripts/test-listener-verification.sh "$CORE"
       - name: Package and generate signed appcast
         run: |

@@ -14,7 +14,17 @@ nonisolated struct NodeSelectionPlan: Codable {
         profiles[profile.uuidString]?.removeValue(forKey: group)
     }
 
+    mutating func replace(profile: UUID, choices: [String: String]) { profiles[profile.uuidString] = choices }
+
     mutating func remove(profile: UUID) { profiles.removeValue(forKey: profile.uuidString) }
+
+    static func validate(_ choices: [String: String], groups: [ProxyGroup]) throws {
+        for (name, node) in choices {
+            guard let group = groups.first(where: { $0.name == name }), group.supportsManualSelection,
+                  group.all.contains(node) else { throw SelectionError.unavailable }
+        }
+    }
+    enum SelectionError: Error { case unavailable }
 
     /// Missing nodes/groups from an updated subscription are ignored. Selection
     /// failures for still-valid choices must fail activation before traffic is routed.

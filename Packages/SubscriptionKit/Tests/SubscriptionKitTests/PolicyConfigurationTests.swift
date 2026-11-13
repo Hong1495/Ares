@@ -33,12 +33,18 @@ final class PolicyConfigurationTests: XCTestCase {
         }
     }
     func testMissingGroupDoesNotCreateItAndMetadataDoesNotExposeSecrets() throws {
-        let result = try PolicyConfiguration.apply(source: source, overrides: #"{"Removed":{"interval":"10"}}"#)
-        let groups = try PolicyConfiguration.read(result)
+        XCTAssertThrowsError(try PolicyConfiguration.apply(source: source, overrides: #"{"Removed":{"interval":"10"}}"#))
+        XCTAssertThrowsError(try PolicyConfiguration.apply(source: "{}", overrides: #"{"Removed":{"interval":"10"}}"#))
+        let groups = try PolicyConfiguration.read(source)
         XCTAssertEqual(groups.count, 2)
         XCTAssertNil(groups[0].fields["url"])
         XCTAssertNil(groups[0].fields["custom-field"])
         XCTAssertEqual(groups[1].providers, ["Remote"])
+    }
+    func testExplicitEmptyFilterRemainsAString() throws {
+        let result = try PolicyConfiguration.apply(source: source, overrides: #"{"Auto":{"filter":""}}"#)
+        XCTAssertEqual(try PolicyConfiguration.read(result)[0].fields["filter"], "")
+        XCTAssertTrue(result.contains("filter: \"\""))
     }
     func testStableOverrideSerialization() throws {
         let values = ["Auto": ["filter": "HK|JP", "interval": "300"]]

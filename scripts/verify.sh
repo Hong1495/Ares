@@ -9,6 +9,8 @@ scripts/test-proxy-controller.sh
 scripts/test-config-controller.sh
 scripts/test-lifecycle.sh
 scripts/test-configuration-coordinator.sh
+scripts/test-scene-automation.sh
+scripts/test-scene-catalog.sh
 scripts/test-effective-config.sh
 scripts/test-activity-diagnostics.sh
 scripts/test-listener-verification.sh

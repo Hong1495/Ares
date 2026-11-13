@@ -18,6 +18,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         AppUpdateService.shared.start()
+        SceneAutomationService.shared.start()
         registerLifecycleObservers()
         registerWorkspaceObservers()
 
@@ -266,6 +267,7 @@ struct AresApp: App {
     var body: some Scene {
         WindowGroup(id: "main") {
             MainView()
+                .scrollIndicators(.never, axes: [.horizontal, .vertical])
                 .environmentObject(clashViewModel)
                 .environmentObject(profileService)
                 .environmentObject(clashController)
@@ -303,6 +305,7 @@ struct AresApp: App {
         WindowGroup(id: "network-inspector", for: String.self) { $requestId in
             if let id = requestId {
                 NetworkInspectorView(requestId: id)
+                    .scrollIndicators(.never, axes: [.horizontal, .vertical])
                     .environmentObject(appState) // Pass environment objects if needed
             } else {
                Text("No Request Selected")
@@ -312,6 +315,7 @@ struct AresApp: App {
         // Enhanced Menu Bar
         MenuBarExtra {
             MenuBarView(appState: appState, clashViewModel: clashViewModel)
+                .scrollIndicators(.never, axes: [.horizontal, .vertical])
                 .environmentObject(clashController)
         } label: {
             MenuBarStatusLabel()

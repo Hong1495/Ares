@@ -179,45 +179,53 @@ struct ProxiesView: View {
                 .controlSize(.small)
                 .frame(minWidth: 130, idealWidth: 200, maxWidth: 200)
 
-            HStack(spacing: DS.Space.xs) {
-                Button { showingPolicies = true } label: { Image(systemName: "slider.horizontal.3") }
-                    .help("Policy groups and parameters").accessibilityLabel("Policy groups")
-                Button { showingResources = true } label: { Image(systemName: "square.stack") }
-                    .disabled(!showingLive).help("Node resources").accessibilityLabel("Node resources")
-                if !clashViewModel.isRunning {
+            HStack(spacing: 8) {
+                HStack(spacing: 6) {
+                    Button { showingPolicies = true } label: { Image(systemName: "slider.horizontal.3") }
+                        .help("Policy groups and parameters").accessibilityLabel("Policy groups")
+                    Button { showingResources = true } label: { Image(systemName: "square.stack") }
+                        .disabled(!showingLive).help("Node resources").accessibilityLabel("Node resources")
+                }
+
+                Divider().frame(height: 14).padding(.horizontal, 4)
+
+                HStack(spacing: 6) {
+                    if !clashViewModel.isRunning {
+                        Button {
+                            Task { await clashViewModel.start() }
+                        } label: {
+                            Image(systemName: "power")
+                        }
+                        .accessibilityLabel("Start Core")
+                        .disabled(clashViewModel.isToggling || appState.isPerformingNetworkOperation)
+                        .help("Start the core to test latency; system proxy remains a separate control")
+                    }
+
                     Button {
-                        Task { await clashViewModel.start() }
+                        Task { await clashController.testAllProxyDelays() }
                     } label: {
-                        Image(systemName: "power")
+                        if clashController.isTestingAllProxies {
+                            ProgressView().controlSize(.mini)
+                        } else {
+                            ProxyLatencySymbol()
+                        }
                     }
-                    .accessibilityLabel("Start Core")
-                    .disabled(clashViewModel.isToggling || appState.isPerformingNetworkOperation)
-                    .help("Start the core to test latency; system proxy remains a separate control")
-                }
+                    .disabled(!showingLive || clashController.isTestingAllProxies)
+                    .help("Test all nodes · Automatically refreshed every 5 minutes while the core runs")
+                    .accessibilityLabel("Test all nodes")
 
-                Button {
-                    Task { await clashController.testAllProxyDelays() }
-                } label: {
-                    if clashController.isTestingAllProxies {
-                        ProgressView().controlSize(.mini)
-                    } else {
-                        ProxyLatencySymbol()
+                    Button {
+                        Task { await refreshProxies() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
                     }
+                    .help("Refresh nodes")
+                    .disabled(isLoading)
                 }
-                .disabled(!showingLive || clashController.isTestingAllProxies)
-                .help("Test all nodes · Automatically refreshed every 5 minutes while the core runs")
-                .accessibilityLabel("Test all nodes")
-
-                Button {
-                    Task { await refreshProxies() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .help("Refresh nodes")
-                .disabled(isLoading)
             }
-            .font(DS.Typography.secondary.weight(.medium))
-            .buttonStyle(.borderless)
+            .buttonStyle(ProxyToolbarButtonStyle())
+            .fixedSize()
+            .padding(.leading, 8)
         }
         .padding(.horizontal, DS.Space.lg)
         .padding(.top, DS.Space.pageTop)
@@ -432,5 +440,21 @@ struct SimpleProxyGroupCard: View {
         case "LoadBalance": return "scale.3d"
         default: return "network"
         }
+    }
+}
+
+/// Stable hit areas keep the utility icons quiet and comfortably separated.
+private struct ProxyToolbarButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var hovering = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: .regular))
+            .foregroundStyle(isEnabled ? Color.primary.opacity(0.75) : Color.secondary.opacity(0.4))
+            .frame(width: 28, height: 28)
+            .background(Color.primary.opacity(configuration.isPressed ? 0.10 : hovering && isEnabled ? 0.05 : 0), in: RoundedRectangle(cornerRadius: 6))
+            .contentShape(Rectangle())
+            .onHover { hovering = $0 }
     }
 }

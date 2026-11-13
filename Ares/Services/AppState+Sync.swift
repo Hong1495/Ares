@@ -62,6 +62,7 @@ extension AppState {
         clashViewModel.addLog("[AppState] 🔄 Switching mode to: \(mode.rawValue.uppercased())")
 
         if !clashViewModel.isRunning {
+            NotificationCenter.default.post(name: .sceneManuallyApplied, object: nil)
             currentMode = mode
             UserDefaults.standard.set(mode.rawValue, forKey: DefaultsKeys.clashMode)
             return
@@ -71,6 +72,7 @@ extension AppState {
             guard try await clashController.getCurrentMode() == mode else {
                 throw NSError(domain: "Mode", code: 1, userInfo: [NSLocalizedDescriptionKey: "Core did not confirm the requested mode"])
             }
+            NotificationCenter.default.post(name: .sceneManuallyApplied, object: nil)
             currentMode = mode
             UserDefaults.standard.set(mode.rawValue, forKey: DefaultsKeys.clashMode)
             if (try? await clashViewModel.captureRecoveryCheckpoint()) != nil { await clashViewModel.persistActiveCheckpoint() }

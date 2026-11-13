@@ -54,4 +54,52 @@ final class ManualScenarioTests: XCTestCase {
         try Data(#"{"schema":9,"scenarios":[]}"#.utf8).write(to: directory.appendingPathComponent("scenarios.json"))
         XCTAssertThrowsError(try ScenarioLibrary.load(directory: directory))
     }
+    func testEditRetainsIdentityAndRejectsStaleReplacement() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ares-scenes-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let settings = ScenarioSettings(localRules: nil, dns: nil, policy: nil, egress: nil)
+        let original = try ManualScenario(name: "Office", profileID: UUID(), sourceRevision: "r1", settings: settings)
+        try ScenarioLibrary.save([original], directory: directory)
+        var changed = settings; changed.localRules = "MATCH,DIRECT"
+        let edited = try original.edited(name: " Office VPN ", settings: changed)
+        try ScenarioLibrary.replace(original, with: edited, directory: directory)
+        XCTAssertEqual(edited.id, original.id)
+        XCTAssertEqual(edited.sourceRevision, "r1")
+        XCTAssertEqual(edited.createdAt, original.createdAt)
+        XCTAssertEqual(edited.name, "Office VPN")
+        XCTAssertNotNil(edited.updatedAt)
+        XCTAssertEqual(try ScenarioLibrary.load(directory: directory), [edited])
+        XCTAssertThrowsError(try ScenarioLibrary.replace(original, with: original, directory: directory))
+        XCTAssertEqual(try ScenarioLibrary.load(directory: directory), [edited])
+        let duplicate = try ManualScenario(name: "Home", profileID: original.profileID, sourceRevision: "r1", settings: settings)
+        try ScenarioLibrary.save([edited, duplicate], directory: directory)
+        XCTAssertThrowsError(try ScenarioLibrary.replace(edited, with: edited.edited(name: "home", settings: changed), directory: directory))
+        XCTAssertEqual(try ScenarioLibrary.load(directory: directory), [edited, duplicate])
+    }
+    func testVersionOneSceneWithoutEditTimestampStillDecodes() throws {
+        let settings = ScenarioSettings(localRules: nil, dns: nil, policy: nil, egress: nil)
+        let original = try ManualScenario(name: "Legacy", profileID: UUID(), sourceRevision: "r1", settings: settings)
+        var object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(original)) as! [String: Any]
+        object.removeValue(forKey: "updatedAt")
+        let decoded = try JSONDecoder().decode(ManualScenario.self, from: JSONSerialization.data(withJSONObject: object))
+        XCTAssertEqual(decoded, original)
+        XCTAssertNil(decoded.updatedAt)
+    }
+
+    func testHistoryIsBoundedPrivateAndDoesNotOverwriteCorruption() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ares-history-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        for index in 0..<105 {
+            try SceneExecutionHistory.append(.init(sceneID: nil, name: "Scene \(index)", automatic: true, result: "Applied and verified", sections: ["DNS"]), directory: directory)
+        }
+        let entries = try SceneExecutionHistory.load(directory: directory)
+        XCTAssertEqual(entries.count, 100)
+        XCTAssertEqual(entries.first?.name, "Scene 104")
+        let path = directory.appendingPathComponent("history.json")
+        XCTAssertEqual(try FileManager.default.attributesOfItem(atPath: path.path)[.posixPermissions] as? Int, 0o600)
+        try Data("broken".utf8).write(to: path)
+        XCTAssertThrowsError(try SceneExecutionHistory.append(entries[0], directory: directory))
+        XCTAssertEqual(try String(contentsOf: path), "broken")
+    }
+
 }

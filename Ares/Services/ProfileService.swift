@@ -42,6 +42,7 @@ class ProfileService: ObservableObject {
             }
             try await ClashController.shared.selectProxy(group: group.name, proxy: node)
         }
+        NotificationCenter.default.post(name: .sceneManuallyApplied, object: nil)
         nodeSelections.select(profile: id, group: group.name, node: node)
         UserDefaults.standard.set(try JSONEncoder().encode(nodeSelections), forKey: "profileNodeSelections")
     }
@@ -59,8 +60,27 @@ class ProfileService: ObservableObject {
             }
             try await ClashController.shared.clearProxySelection(group: group.name)
         }
+        NotificationCenter.default.post(name: .sceneManuallyApplied, object: nil)
         nodeSelections.clear(profile: id, group: group.name)
         UserDefaults.standard.set(try JSONEncoder().encode(nodeSelections), forKey: "profileNodeSelections")
+    }
+
+    func replaceSavedSelections(_ choices: [String: String], profile: UUID, defaults: UserDefaults = .standard) {
+        nodeSelections.replace(profile: profile, choices: choices)
+        if let data = try? JSONEncoder().encode(nodeSelections) { defaults.set(data, forKey: "profileNodeSelections") }
+    }
+
+    func verifySceneSelections(_ choices: [String: String]) async throws {
+        let controller = ClashController.shared
+        try await controller.fetchProxiesData()
+        try NodeSelectionPlan.validate(choices, groups: controller.proxyGroups)
+        try await restoreNodeSelections(choices: choices)
+        try await controller.fetchProxiesData()
+        for (name, node) in choices {
+            guard controller.proxyGroups.first(where: { $0.name == name })?.confirmsSelection(node) == true else {
+                throw NodeSelectionPlan.SelectionError.unavailable
+            }
+        }
     }
 
     func savedSelections() -> [String: String] {
@@ -70,6 +90,9 @@ class ProfileService: ObservableObject {
     func restoreNodeSelections(choices: [String: String]? = nil) async throws {
         let controller = ClashController.shared
         try await controller.fetchProxiesData()
+        if UserDefaults.standard.bool(forKey: "sceneStrictSelections." + (activeProfileID?.uuidString ?? "")) {
+            try NodeSelectionPlan.validate(choices ?? savedSelections(), groups: controller.proxyGroups)
+        }
         try await NodeSelectionPlan.restore(choices ?? savedSelections(), groups: controller.proxyGroups, reset: { group in
             try await controller.clearProxySelection(group: group)
         }) { group, node in

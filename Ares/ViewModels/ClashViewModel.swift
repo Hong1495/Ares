@@ -74,10 +74,14 @@ class ClashViewModel: ObservableObject {
         let checkpoint = try recoveryCheckpoint()
         let generation = ClashController.shared.runtimeGeneration
         let data = try await ClashController.shared.readRuntimeConfiguration()
+        try await ClashController.shared.fetchProxiesData()
+        let choices = Dictionary(uniqueKeysWithValues: ClashController.shared.proxyGroups.compactMap { group in
+            group.manualSelection.map { (group.name, $0) }
+        })
         guard generation == ClashController.shared.runtimeGeneration, runtimeState.isAPIReady else { throw CancellationError() }
         let content = try ConfigurationAudit.recoveryConfiguration(configuration: checkpoint.configuration, response: data)
         let updated = RuntimeCheckpoint(configuration: content, profileID: checkpoint.profileID,
-            profileRevision: checkpoint.profileRevision, selections: checkpoint.selections,
+            profileRevision: checkpoint.profileRevision, selections: choices,
             tunEnabled: checkpoint.tunEnabled)
         activeCheckpoint = updated
         return updated

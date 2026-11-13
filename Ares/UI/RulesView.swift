@@ -73,7 +73,7 @@ struct RulesView: View {
                 }
                 .width(60)
             }
-            .scrollIndicators(.hidden)
+            .scrollIndicators(.never)
         }
         .background(DS.canvas)
         .navigationTitle("")

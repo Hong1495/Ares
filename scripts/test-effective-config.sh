@@ -127,7 +127,7 @@ print("Effective config integration passed (normal, TUN, explicit preferences)."
 SWIFT
 xcrun swiftc -target arm64-apple-macosx14.0 \
   -I "$BIN/Modules" -I "$PACKAGE/.build/checkouts/Yams/Sources/CYaml/include" \
-  "$ROOT/Ares/Utilities/ManualScenario.swift" "$ROOT/Ares/Models/ClashConfig.swift" "$ROOT/Ares/Utilities/ClashPorts.swift" \
+  "$ROOT/Ares/Utilities/SceneEnvironment.swift" "$ROOT/Ares/Utilities/SceneExecutionHistory.swift" "$ROOT/Ares/Utilities/ManualScenario.swift" "$ROOT/Ares/Models/ClashConfig.swift" "$ROOT/Ares/Utilities/ClashPorts.swift" \
   "$ROOT/Ares/Utilities/DefaultsKeys.swift" "$ROOT/Ares/Utilities/ProfileConfigMerge.swift" \
   "$OUT/main.swift" "${OBJECTS[@]}" -o "$OUT/check"
 "$OUT/check" "$OUT"
