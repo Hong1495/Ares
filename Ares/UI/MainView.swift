@@ -35,7 +35,7 @@ struct MainView: View {
             detail
                 .frame(minWidth: 680, minHeight: 540)
                 .background(DS.canvas)
-                .navigationTitle(appState.selection == .dashboard || appState.selection == .proxies || appState.selection == .rules || appState.selection == .logs || appState.selection == .subscriptions || appState.selection == .connections || appState.selection == .topology ? "" : appState.selection.displayName)
+                .navigationTitle([.applications, .quality, .policies, .scenes].contains(appState.selection) || appState.selection == .dashboard || appState.selection == .proxies || appState.selection == .rules || appState.selection == .logs || appState.selection == .subscriptions || appState.selection == .connections || appState.selection == .topology ? "" : appState.selection.displayName)
         }
         .toolbarBackground(.hidden, for: .windowToolbar)
         .background(SidebarToolbarAppearance())
@@ -57,6 +57,19 @@ struct MainView: View {
     @ViewBuilder
     private var detail: some View {
         switch appState.selection {
+        case .applications:
+            ApplicationRoutingView(embedded: true)
+                .toolbar { CollectionTitleToolbar(title: "Applications", count: nil, unit: "") }
+        case .quality:
+            ScrollView { NetworkQualityView(embedded: true).frame(maxWidth: .infinity) }
+                .scrollIndicators(.never, axes: [.horizontal, .vertical])
+                .toolbar { CollectionTitleToolbar(title: "Network Quality", count: nil, unit: "") }
+        case .policies:
+            PolicyGroupsView(embedded: true)
+        case .scenes:
+            ScenariosView(embedded: true)
+                .scrollIndicators(.never, axes: [.horizontal, .vertical])
+                .toolbar { CollectionTitleToolbar(title: "Scenes", count: nil, unit: "") }
         case .dashboard:
             DashboardView()
         case .proxies:

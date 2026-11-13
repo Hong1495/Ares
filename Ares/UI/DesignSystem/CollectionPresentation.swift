@@ -3,17 +3,17 @@ import SwiftUI
 /// Shared title metrics and tools for the small collection pages.
 struct CollectionTitleToolbar: ToolbarContent {
     let title: String
-    let count: Int
+    let count: Int?
     let unit: String
     var body: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
             HStack(spacing: 24) {
                 Text(title).font(.system(size: 13, weight: .semibold))
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                if let count { HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text(String(count))
                         .font(.system(size: 18, weight: .medium, design: .rounded)).monospacedDigit()
                     Text(unit).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
-                }.accessibilityElement(children: .ignore).accessibilityLabel("\(count) \(unit)")
+                }.accessibilityElement(children: .ignore).accessibilityLabel("\(count) \(unit)") }
             }.padding(.leading, 16)
         }.aresUnframed()
     }

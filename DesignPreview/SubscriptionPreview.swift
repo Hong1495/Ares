@@ -71,6 +71,8 @@ struct PreviewProfile {
     isolated deinit { if let path = activeProfile?.path { try? FileManager.default.removeItem(at: path) } }
 }
 @MainActor final class AppState: ObservableObject {
+    enum NavigationItem { case policies, scenes }
+    var selection = NavigationItem.policies
     @Published var currentMode: ClashConfig.Mode = .rule
     var animationsEnabled = false
     var isForeground = true
@@ -89,7 +91,7 @@ struct PreviewProfile {
         let stored: String
         let inherited: [PolicyConfiguration.Group]
         let effective: [PolicyConfiguration.Group]
-        var source = "proxy-groups: [{name: Automatic, type: url-test, proxies: [DIRECT]}]"
+        var source = "proxies: [{name: Sample 1, type: vless, server: example.invalid, port: 443}]\nproxy-groups: [{name: Automatic, type: url-test, proxies: [Sample 1]}]"
         var localRules = ""
     }
     static var canReadRuntime: Bool { false }
@@ -201,17 +203,17 @@ struct RuleSourcesView: View { var provider: String? = nil; var body: some View 
     @StateObject private var profiles = ProfileService()
     @StateObject private var runtime = ClashViewModel()
     var body: some Scene {
-        WindowGroup("Ares · Offline subscription preview", id: "main") {
+        WindowGroup("Ares · Offline subscription preview", id: CommandLine.arguments.contains("--compact") ? "compact-" + (CommandLine.arguments.dropFirst().first ?? "main") : "main") {
             Group {
                 if CommandLine.arguments.contains("--topology") { TopologyPageView() }
-                else if CommandLine.arguments.contains("--scenes") { ScenariosView().frame(width: 740, height: 500) }
+                else if CommandLine.arguments.contains("--scenes") { ScenariosView(embedded: true).toolbar { CollectionTitleToolbar(title: "Scenes", count: nil, unit: "") } }
                 else if CommandLine.arguments.contains("--diagnostics") { ActivityDiagnosticsView().frame(width: 800, height: 520) }
-                else if CommandLine.arguments.contains("--quality") { NetworkQualityView() }
-                else if CommandLine.arguments.contains("--apps") { ApplicationRoutingView(initialPaths: ["/Applications/Preview.app/Contents/MacOS/Preview"]) }
+                else if CommandLine.arguments.contains("--quality") { ScrollView { NetworkQualityView(embedded: true) }.toolbar { CollectionTitleToolbar(title: "Network Quality", count: nil, unit: "") } }
+                else if CommandLine.arguments.contains("--apps") { ApplicationRoutingView(embedded: true, initialPaths: ["/Applications/Preview.app/Contents/MacOS/Preview"]).toolbar { CollectionTitleToolbar(title: "Applications", count: nil, unit: "") } }
                 else if CommandLine.arguments.contains("--egress") { EgressSettingsView().frame(width: 740, height: 560) }
                 else if CommandLine.arguments.contains("--dns") { DNSSettingsView().frame(width: 740, height: 540) }
                 else if CommandLine.arguments.contains("--resources") { ProxyResourcesView() }
-                else if CommandLine.arguments.contains("--policies") { PolicyGroupsView() }
+                else if CommandLine.arguments.contains("--policies") { PolicyGroupsView(embedded: true) }
                 else { ProxiesView() }
             }
                 .scrollIndicators(.never, axes: [.horizontal, .vertical])
@@ -219,11 +221,11 @@ struct RuleSourcesView: View { var provider: String? = nil; var body: some View 
                 .environmentObject(profiles)
                 .environmentObject(runtime)
                 .environmentObject(AppState.shared)
-                .frame(minWidth: CommandLine.arguments.contains("--dns") ? 740 : 1000, minHeight: CommandLine.arguments.contains("--dns") ? 540 : 700)
+                .frame(minWidth: CommandLine.arguments.contains("--compact") ? 680 : CommandLine.arguments.contains("--dns") ? 740 : 1000, minHeight: CommandLine.arguments.contains("--compact") || CommandLine.arguments.contains("--dns") ? 540 : 700)
                 .alert("Settings preview", isPresented: $showingSettings) {
                     Button("Done", role: .cancel) { }
                 } message: { Text("Native Settings menu action received. No production service is running.") }
-        }.defaultSize(width: CommandLine.arguments.contains("--dns") ? 740 : 1100, height: CommandLine.arguments.contains("--dns") ? 540 : 760)
+        }.defaultSize(width: CommandLine.arguments.contains("--compact") ? 680 : CommandLine.arguments.contains("--dns") ? 740 : 1100, height: CommandLine.arguments.contains("--compact") || CommandLine.arguments.contains("--dns") ? 540 : 760)
         .commands {
             WorkspaceCommands(showSettings: { showingSettings = true }, showMainWindow: { openWindow(id: "main") })
         }

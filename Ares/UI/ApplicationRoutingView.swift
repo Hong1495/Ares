@@ -3,6 +3,7 @@ import AppKit
 import SubscriptionKit
 
 struct ApplicationRoutingView: View {
+    var embedded = false
     var initialPaths: [String] = []
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var controller = ClashController.shared
@@ -21,12 +22,12 @@ struct ApplicationRoutingView: View {
     private var matching: [Connection] { live.filter { selection.contains($0.metadata.processPath ?? "") } }
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("Application Routing").font(DS.Typography.secondary.weight(.semibold))
+            if !embedded || undo != nil { HStack {
+                if !embedded { Text("Application Routing").font(DS.Typography.secondary.weight(.semibold)) }
                 Spacer()
                 if let undo { Button("Undo Last Change") { Task { await revert(undo) } } }
-                Button("Done") { dismiss() }
-            }.controlSize(.small).padding(DS.Space.lg)
+                if !embedded { Button("Done") { dismiss() } }
+            }.controlSize(.small).padding(DS.Space.lg) }
             HSplitView {
                 VStack(spacing: DS.Space.md) {
                     HStack {
@@ -41,17 +42,18 @@ struct ApplicationRoutingView: View {
                     }
                     Text("Exact executables · Select observed helper processes separately. Unknown and remote processes are not inferred.")
                         .font(DS.Typography.metadata).foregroundStyle(.secondary)
-                }.padding(DS.Space.lg).frame(minWidth: 250, idealWidth: 300, maxWidth: 370)
-                VStack(alignment: .leading, spacing: DS.Space.md) {
-                    HStack {
+                }.padding(DS.Space.lg).frame(minWidth: 200, idealWidth: 240, maxWidth: 300)
+                ScrollView { VStack(alignment: .leading, spacing: DS.Space.md) {
+                    VStack(alignment: .leading, spacing: DS.Space.sm) {
                         Picker("Route", selection: $target) {
                             ForEach(snapshot?.targets ?? ["DIRECT", "REJECT"], id: \.self) { name in
                                 Text(name == "DIRECT" ? "Direct" : name == "REJECT" ? "Block" : name).tag(name)
                             }
                         }.frame(maxWidth: 320)
-                        Spacer()
+                        HStack {
                         Button("Use Subscription") { apply(nil) }.disabled(selected.isEmpty || snapshot == nil)
                         Button("Apply Route") { apply(target) }.buttonStyle(.borderedProminent).disabled(selected.isEmpty || snapshot == nil)
+                        }
                     }.controlSize(.small)
                     Text("Local rules apply across subscriptions, to new connections in Rule mode. Existing connections keep their route; reconnect the application to verify. Removing a local rule restores normal rule evaluation.")
                         .font(DS.Typography.metadata).foregroundStyle(.secondary)
@@ -85,11 +87,11 @@ struct ApplicationRoutingView: View {
                         TableColumn("↓ / ↑") { Text(bytes($0.download) + " / " + bytes($0.upload)).monospacedDigit() }.width(110)
                     }.font(DS.Typography.metadata).frame(minHeight: 120)
                     if matching.isEmpty { Text("No matching core-reported executable. Process routing requires core process identification; unavailable identity may require privileged/TUN mode. Blocked or closed connections may not appear.").font(DS.Typography.metadata).foregroundStyle(.secondary) }
-                }.padding(DS.Space.lg).frame(minWidth: 540)
+                }.padding(DS.Space.lg).frame(minHeight: 640) }.frame(minWidth: 440)
             }
             if let message { Text(message).font(DS.Typography.metadata).foregroundStyle(.secondary).padding(.horizontal, DS.Space.lg) }
             if let error { Text(error).font(DS.Typography.metadata).foregroundStyle(Color.statusBad).padding(DS.Space.md) }
-        }.frame(minWidth: 940, minHeight: 680).background(DS.canvas).scrollIndicators(.never, axes: [.horizontal, .vertical])
+        }.frame(minWidth: embedded ? 0 : 940, minHeight: embedded ? 0 : 680).background(DS.canvas).scrollIndicators(.never, axes: [.horizontal, .vertical])
             .disabled(busy).interactiveDismissDisabled(busy)
             .onChange(of: controller.runtimeGeneration) { _, _ in live = []; capturedAt = nil }
             .task { paths = initialPaths.filter(ApplicationRouting.validPath).sorted(); selection = Set(paths); await load(); await readConnections() }

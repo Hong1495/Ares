@@ -1,4 +1,5 @@
 import SwiftUI
+import SubscriptionKit
 
 struct DashboardView: View {
     var body: some View {
@@ -8,6 +9,7 @@ struct DashboardView: View {
             } controls: {
                 ControlCenterCard()
             } details: {
+                DashboardWorkspaceSummary()
                 ConnectivityCard()
             }
         }
@@ -110,5 +112,70 @@ private struct TrafficCard: View {
         formatter.allowedUnits = [.useKB, .useMB, .useGB]
         formatter.countStyle = .file
         return formatter.string(fromByteCount: bytes) + "/s"
+    }
+}
+
+
+private struct DashboardWorkspaceSummary: View {
+    @EnvironmentObject private var appState: AppState
+    @ObservedObject private var quality = NetworkQualityService.shared
+    @ObservedObject private var controller = ClashController.shared
+    @State private var rows: [OverviewWorkspaceSummary.ProcessRow] = []
+    @State private var connectionCount: Int?
+    @State private var processCount: Int?
+    @State private var activityStatus = "Waiting for activity"
+    @Environment(\.scenePhase) private var phase
+
+    var body: some View {
+        let summary = NetworkQuality.Summary(quality.window.samples["gstatic"] ?? [])
+        OverviewWorkspaceSummary(processes: rows, activityStatus: activityStatus,
+            connections: connectionCount, processCount: processCount,
+            qualityStatus: quality.enabled ? quality.status : "Monitoring is off · Open Network Quality to start",
+            qualityGroup: quality.group.isEmpty ? "No monitored policy" : quality.group,
+            qualityValue: quality.enabled ? summary.successPercent.map { String(format: "%.1f%%", $0) } ?? "—" : "—",
+            qualityDetail: "Google probe success",
+            route: quality.enabled ? quality.window.route?.path.joined(separator: " → ") ?? "Waiting for measured results" : "Periodic HTTPS and DNS measurements",
+            openActivity: { appState.selection = .connections },
+            openApplications: { appState.selection = .applications },
+            openQuality: { appState.selection = .quality },
+            openPolicies: { appState.selection = .policies },
+            openScenes: { appState.selection = .scenes })
+        .task(id: phase) {
+            guard phase == .active else { return }
+            while !Task.isCancelled {
+                await refresh()
+                do { try await Task.sleep(for: .seconds(5)) } catch { return }
+            }
+        }
+        .onChange(of: controller.runtimeGeneration) { _, _ in
+            rows = []; connectionCount = nil; processCount = nil
+            activityStatus = "Waiting for current runtime"
+        }
+    }
+    private func refresh() async {
+        guard PolicyGroupService.canReadRuntime else {
+            rows = []; connectionCount = nil; processCount = nil; activityStatus = "Activity is available when the core is ready"; return
+        }
+        let generation = ClashController.shared.runtimeGeneration
+        do {
+            let raw = try await ApplicationRoutingService.connections()
+            let connections = await ConnectionProcessResolver.shared.resolve(raw)
+            guard !Task.isCancelled, generation == ClashController.shared.runtimeGeneration, PolicyGroupService.canReadRuntime else { return }
+            let visible = connections.filter { !$0.identity.isAres }
+            let groups = Dictionary(grouping: visible, by: { $0.identity.key })
+            var allRows: [OverviewWorkspaceSummary.ProcessRow] = []
+            for (key, members) in groups {
+                allRows.append(.init(id: key, name: members.first?.identity.name ?? "Unknown", connections: members.count))
+            }
+            allRows.sort { lhs, rhs in
+                if lhs.connections == rhs.connections { return lhs.name < rhs.name }
+                return lhs.connections > rhs.connections
+            }
+            connectionCount = visible.count; processCount = groups.count; rows = Array(allRows.prefix(3))
+            activityStatus = visible.isEmpty ? "No active connections" : "Top \(rows.count) sources by connections · Ares excluded"
+        } catch {
+            guard !Task.isCancelled else { return }
+            rows = []; connectionCount = nil; processCount = nil; activityStatus = "Activity could not be read"
+        }
     }
 }

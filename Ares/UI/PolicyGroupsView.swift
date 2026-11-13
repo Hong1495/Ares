@@ -2,6 +2,7 @@ import SwiftUI
 import SubscriptionKit
 
 struct PolicyGroupsView: View {
+    var embedded = false
     @EnvironmentObject private var controller: ClashController
     @Environment(\.dismiss) private var dismiss
     @State private var snapshot: PolicyGroupService.Snapshot?
@@ -10,21 +11,27 @@ struct PolicyGroupsView: View {
     @State private var error: String?
     @State private var editing: PolicyConfiguration.Group?
     @State private var busy = false
-    @State private var composing = false
+    private struct CompositionRequest: Identifiable {
+        let id = UUID()
+        let recommended: Bool
+    }
+    @State private var composition: CompositionRequest?
     @State private var liveGroups: [ProxyGroup] = []
     @State private var graph: PolicyGraph.Snapshot?
     @State private var capturedAt: Date?
     private var selected: PolicyConfiguration.Group? { snapshot?.effective.first { $0.name == selection } }
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
+            if !embedded { HStack {
                 Text("Policy Groups").font(DS.Typography.secondary.weight(.semibold)).fixedSize()
                 Spacer()
                 Button("Done") { dismiss() }.controlSize(.small).fixedSize()
-            }.padding(DS.Space.lg)
+            }.padding(DS.Space.lg) }
             CollectionTools(placeholder: "Search groups", search: $search) {
-                Button { composing = true } label: { Image(systemName: "square.and.pencil") }
+                Button { composition = .init(recommended: false) } label: { Label("Compose", systemImage: "square.and.pencil") }
                     .disabled(snapshot == nil || busy).help("Compose policies and routing rules").accessibilityLabel("Compose policies")
+                Button("Recommended…") { composition = .init(recommended: true) }
+                    .disabled(snapshot == nil || busy).help("Review recommended groups before applying")
                 Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") }
                     .disabled(busy).help("Read policy groups").accessibilityLabel("Read policy groups")
             }
@@ -65,9 +72,13 @@ struct PolicyGroupsView: View {
             }
             Text(capturedAt.map { "Runtime snapshot: " + $0.formatted(date: .omitted, time: .standard) + " · Membership is not a physical network route." } ?? "Saved subscription · Runtime membership is unavailable.")
                 .font(DS.Typography.metadata).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(DS.Space.lg)
-        }.frame(minWidth: 800, minHeight: 560).background(DS.canvas)
+        }.frame(minWidth: embedded ? 0 : 800, minHeight: 500).background(DS.canvas)
+        .scrollIndicators(.never, axes: [.horizontal, .vertical])
+        .toolbar { if embedded { CollectionTitleToolbar(title: "Policies", count: snapshot?.effective.count, unit: "Groups") } }
         .task { await load() }
-        .sheet(isPresented: $composing, onDismiss: { Task { await load() } }) { if let snapshot { PolicyCompositionView(snapshot: snapshot) } }
+        .sheet(item: $composition, onDismiss: { Task { await load() } }) { request in
+            if let snapshot { PolicyCompositionView(snapshot: snapshot, startWithRecommended: request.recommended) }
+        }
         .sheet(item: $editing, onDismiss: { Task { await load() } }) { group in
             if let snapshot { PolicyParameterEditor(group: group, snapshot: snapshot) }
         }

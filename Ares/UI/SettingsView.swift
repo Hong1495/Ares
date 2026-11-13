@@ -94,7 +94,6 @@ struct SettingsView: View {
     @State private var sourceError: String?
     @State private var showChanges = false
     @State private var showDNS = false
-    @State private var showScenes = false
     @State private var showEgress = false
     @State private var showRuntimeAudit = false
     @State private var showSourceDiff = false
@@ -121,7 +120,7 @@ struct SettingsView: View {
                 Menu {
                     Button("Subscription → Saved Configuration") { showSourceDiff = true }
                     Button("Verify Running Configuration") { showRuntimeAudit = true }
-                    Button("Scenes…") { showScenes = true }.disabled(hasPendingChanges)
+                    Button("Scenes…") { appState.selection = .scenes }.disabled(hasPendingChanges)
                     Button("Routing & Listeners…") { showEgress = true }.disabled(hasPendingChanges)
                     Button("DNS Configuration & Query…") { showDNS = true }.disabled(hasPendingChanges)
                     Divider()
@@ -169,7 +168,6 @@ struct SettingsView: View {
         .onAppear { if savedNetworkValues.isEmpty { savedNetworkValues = networkValues }; autoStart = LaunchService.shared.isEnabled(); certManager.checkRootCA() }
         .task(id: profiles.activeProfileRevision) { await refreshSources() }
         .sheet(isPresented: $showEgress) { EgressSettingsView() }
-        .sheet(isPresented: $showScenes, onDismiss: { discardChanges() }) { ScenariosView() }
         .sheet(isPresented: $showDNS) { DNSSettingsView() }
         .sheet(isPresented: $showChanges) { changesReview }
         .sheet(isPresented: $showRuntimeAudit) { runtimeAudit }

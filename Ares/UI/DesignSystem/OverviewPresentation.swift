@@ -21,13 +21,15 @@ struct DashboardComposition<Traffic: View, Controls: View, Details: View>: View 
     @ViewBuilder var details: () -> Details
 
     var body: some View {
-        VStack(spacing: 20) {
-            controls().fixedSize(horizontal: false, vertical: true)
-            traffic().frame(maxWidth: .infinity, maxHeight: .infinity)
-            details().fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(.horizontal, 28).padding(.vertical, 20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        ScrollView {
+            VStack(spacing: 24) {
+                controls().fixedSize(horizontal: false, vertical: true)
+                traffic().frame(height: 210)
+                details()
+            }
+            .padding(.horizontal, 28).padding(.vertical, 20)
+            .frame(maxWidth: .infinity, alignment: .top)
+        }.scrollIndicators(.never, axes: [.horizontal, .vertical])
         .background(DS.canvas)
     }
 }
@@ -66,13 +68,7 @@ struct OverviewConnectionCard: View {
     }
 
     private var modes: some View {
-        Picker("Routing mode", selection: $mode) {
-            ForEach(0..<3) { index in
-                Text(["Rule", "Global", "Direct"][index]).tag(index)
-            }
-        }
-        .pickerStyle(.segmented).labelsHidden().controlSize(.regular)
-        .font(.system(size: 12)).frame(width: 204)
+        OverviewRoutingModePicker(selection: $mode)
     }
 
     private func capability(_ title: String, icon: String, value: Binding<Bool>) -> some View {
@@ -82,9 +78,99 @@ struct OverviewConnectionCard: View {
                 Text(title).font(.system(size: 12, weight: .medium))
             }
             .foregroundStyle(.primary)
-        }.toggleStyle(.switch).controlSize(.small).tint(DS.accent)
+        }.toggleStyle(OverviewRecessedToggleStyle()).tint(DS.accent)
             .accessibilityLabel(title).accessibilityValue(value.wrappedValue ? "On" : "Off")
             .help("\(value.wrappedValue ? "Disable" : "Enable") \(title)")
+    }
+}
+
+/// Shared raised surface for the dashboard's discrete controls.
+private struct OverviewRaisedThumb: View {
+    @Environment(\.colorScheme) private var scheme
+    var body: some View {
+        Capsule()
+            .fill(LinearGradient(colors: scheme == .dark
+                ? [Color(nsColor: .init(white: 0.30, alpha: 1)), Color(nsColor: .init(white: 0.22, alpha: 1))]
+                : [.white, Color(nsColor: .init(white: 0.96, alpha: 1))], startPoint: .top, endPoint: .bottom))
+            .overlay { Capsule().strokeBorder(LinearGradient(colors: [.white.opacity(scheme == .dark ? 0.24 : 0.9), Color.black.opacity(0.10)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.75) }
+            .shadow(color: .black.opacity(scheme == .dark ? 0.30 : 0.13), radius: 2, x: 0, y: 1)
+    }
+}
+
+private struct OverviewRecessedToggleStyle: ToggleStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isEnabled) private var isEnabled
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 8) {
+            configuration.label
+            Button { configuration.isOn.toggle() } label: {
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.primary.opacity(0.075))
+                        .overlay { Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5) }
+                    OverviewRaisedThumb().frame(width: 38, height: 26)
+                        .offset(x: configuration.isOn ? 2 : 40)
+                        .animation(reduceMotion ? nil : .smooth(duration: 0.22), value: configuration.isOn)
+                    HStack(spacing: 0) {
+                        Text("On").foregroundStyle(configuration.isOn ? DS.accent : Color.secondary).frame(width: 38)
+                        Text("Off").foregroundStyle(configuration.isOn ? Color.secondary : Color.primary).frame(width: 38)
+                    }.font(.system(size: 10, weight: .medium))
+                        .frame(width: 76).padding(.horizontal, 2)
+                }.frame(width: 80, height: 30).contentShape(Capsule())
+            }.buttonStyle(.plain)
+                .accessibilityLabel(configuration.isOn ? "On" : "Off")
+        }.opacity(isEnabled ? 1 : 0.5)
+    }
+}
+
+/// Three discrete routing modes, connected by a horizontal rail.
+/// Buttons retain native focus and keyboard activation; position never implies a numeric value.
+struct OverviewRoutingModePicker: View {
+    @Binding var selection: Int
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hovered: Int?
+    private let titles = ["Rule", "Global", "Direct"]
+    private let symbols = ["slider.horizontal.3", "globe", "arrow.up.right"]
+    private let hints = ["Follow routing rules", "Use the global proxy group", "Connect directly"]
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            ForEach(0..<2) { index in
+                Capsule().fill(Color.primary.opacity(0.22))
+                    .frame(width: 24, height: 2)
+                    .offset(x: 88 + CGFloat(index) * 112)
+            }
+            OverviewRaisedThumb()
+                .frame(width: 88, height: 30)
+                .offset(x: CGFloat(selection) * 112)
+                .animation(reduceMotion ? nil : .smooth(duration: 0.24), value: selection)
+            HStack(spacing: 24) {
+                ForEach(0..<3) { index in
+                    Button { selection = index } label: {
+                        HStack(spacing: 7) {
+                            Image(systemName: symbols[index])
+                                .font(.system(size: 13, weight: .regular))
+                                .symbolRenderingMode(.monochrome)
+                                .foregroundStyle(selection == index ? DS.accent : Color.secondary)
+                                .frame(width: 16, height: 16)
+                            Text(titles[index]).font(.system(size: 12, weight: selection == index ? .medium : .regular))
+                                .foregroundStyle(selection == index ? Color.primary : Color.secondary)
+                        }.frame(width: 88, height: 30)
+                            .background {
+                                if selection != index {
+                                    Capsule().fill(DS.canvas)
+                                    Capsule().fill(hovered == index ? DS.soft : Color.clear)
+                                }
+                            }.contentShape(Capsule())
+                    }.buttonStyle(.plain)
+                        .onHover { hovered = $0 ? index : nil }
+                        .accessibilityLabel(titles[index])
+                        .accessibilityValue(selection == index ? "Selected" : "Not selected")
+                        .accessibilityAddTraits(selection == index ? [.isSelected] : [])
+                        .help(hints[index])
+                }
+            }
+        }.frame(width: 312, height: 30)
+            .accessibilityElement(children: .contain).accessibilityLabel("Routing mode")
     }
 }
 
@@ -160,12 +246,14 @@ struct OverviewTrafficCard: View {
     }
 
     var body: some View {
-        VStack(spacing: 18) {
-            lane("Download", value: selectedPoint.map { format($0.download) } ?? download,
-                 color: .seriesDown, uploadLane: false)
-            Rectangle().fill(DS.line).frame(height: 0.5)
-            lane("Upload", value: selectedPoint.map { format($0.upload) } ?? upload,
-                 color: .seriesUp, uploadLane: true)
+        VStack(spacing: 12) {
+            HStack(spacing: 24) {
+                lane("Download", value: selectedPoint.map { format($0.download) } ?? download,
+                     color: .seriesDown, uploadLane: false)
+                Rectangle().fill(DS.line).frame(width: 0.5)
+                lane("Upload", value: selectedPoint.map { format($0.upload) } ?? upload,
+                     color: .seriesUp, uploadLane: true)
+            }
             HStack {
                 Text("60s ago")
                 Spacer()
@@ -242,5 +330,111 @@ private struct DashboardSymbol: View {
             .symbolRenderingMode(.monochrome)
             .frame(width: 16, height: 16)
             .accessibilityHidden(true)
+    }
+}
+
+/// Compact overview of existing workflows; all values and destinations are supplied by the owner.
+struct OverviewWorkspaceSummary: View {
+    struct ProcessRow: Identifiable {
+        let id: String
+        let name: String
+        let connections: Int
+    }
+    let processes: [ProcessRow]
+    let activityStatus: String
+    let connections: Int?
+    let processCount: Int?
+    let qualityStatus: String
+    let qualityGroup: String
+    let qualityValue: String
+    let qualityDetail: String
+    let route: String
+    let openActivity: () -> Void
+    let openApplications: () -> Void
+    let openQuality: () -> Void
+    let openPolicies: () -> Void
+    let openScenes: () -> Void
+
+    var body: some View {
+        VStack(spacing: 20) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 24) {
+                    activity.frame(minWidth: 270, maxWidth: .infinity)
+                    quality.frame(minWidth: 270, maxWidth: .infinity)
+                }
+                VStack(spacing: 24) { activity; quality }
+            }
+            HStack(spacing: 24) {
+                destination("Applications", icon: "app.connected.to.app.below.fill", detail: "Route by executable", action: openApplications)
+                destination("Policies", icon: "slider.horizontal.3", detail: "Automatic · Fallback · Manual", action: openPolicies)
+                destination("Scenes", icon: "square.stack.3d.up", detail: "Saved routing configurations", action: openScenes)
+            }
+        }
+    }
+    private var activity: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            heading("Activity", action: openActivity)
+            HStack(alignment: .firstTextBaseline, spacing: 18) {
+                metric(connections.map(String.init) ?? "—", "connections")
+                metric(processCount.map(String.init) ?? "—", "sources")
+                    .help("Grouped by application or executable; unidentified traffic is grouped by source address.")
+            }
+            if processes.isEmpty {
+                Text(activityStatus).font(DS.Typography.metadata).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 86, alignment: .leading)
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(processes) { row in
+                        HStack {
+                            Text(row.name).font(DS.Typography.secondary).lineLimit(1)
+                            Spacer()
+                            Text(String(row.connections)).font(DS.Typography.secondary.monospacedDigit()).foregroundStyle(.secondary)
+                        }
+                    }
+                }.frame(maxWidth: .infinity, minHeight: 86, alignment: .topLeading)
+                Text(activityStatus).font(DS.Typography.metadata).foregroundStyle(.secondary)
+            }
+        }.padding(.top, 16).overlay(alignment: .top) { Rectangle().fill(DS.line).frame(height: 0.5) }
+    }
+    private var quality: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            heading("Network Quality", action: openQuality)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(qualityValue).font(.system(size: 20, weight: .medium, design: .rounded)).monospacedDigit()
+                Text(qualityDetail).font(DS.Typography.metadata).foregroundStyle(.secondary)
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                Text(qualityGroup).font(DS.Typography.secondary).lineLimit(1)
+                Text(route).font(DS.Typography.metadata).foregroundStyle(.secondary).lineLimit(2)
+                Text(qualityStatus).font(DS.Typography.metadata).foregroundStyle(.secondary).lineLimit(2)
+            }.frame(maxWidth: .infinity, minHeight: 86, alignment: .topLeading)
+        }.padding(.top, 16).overlay(alignment: .top) { Rectangle().fill(DS.line).frame(height: 0.5) }
+    }
+    private func heading(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                Text(title).font(DS.Typography.secondary.weight(.medium))
+                Spacer()
+                Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(.secondary)
+            }.contentShape(Rectangle())
+        }.buttonStyle(.plain).help("Open " + title)
+    }
+    private func metric(_ value: String, _ label: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text(value).font(.system(size: 20, weight: .medium, design: .rounded)).monospacedDigit()
+            Text(label).font(DS.Typography.metadata).foregroundStyle(.secondary)
+        }
+    }
+    private func destination(_ title: String, icon: String, detail: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 9) {
+                Image(systemName: icon).font(.system(size: 13)).foregroundStyle(.secondary).frame(width: 18)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title).font(DS.Typography.secondary.weight(.medium))
+                    Text(detail).font(DS.Typography.metadata).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }.padding(.vertical, 12).contentShape(Rectangle())
+        }.buttonStyle(.plain).frame(maxWidth: .infinity, alignment: .leading)
     }
 }

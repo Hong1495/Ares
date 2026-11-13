@@ -4,6 +4,7 @@ import SubscriptionKit
 /// One isolated draft for group structure and its local routing rules. No preference writes before Apply.
 struct PolicyCompositionView: View {
     let snapshot: PolicyGroupService.Snapshot
+    var startWithRecommended = false
     @Environment(\.dismiss) private var dismiss
     @State private var edits: [String: [String: String]] = [:]
     @State private var groups: [PolicyConfiguration.Group] = []
@@ -65,7 +66,7 @@ struct PolicyCompositionView: View {
         }.frame(minWidth: 820, minHeight: 570).background(DS.canvas).scrollIndicators(.never, axes: [.horizontal, .vertical]).interactiveDismissDisabled(applying)
         .onAppear {
             rules = snapshot.localRules; ruleDocument = RuleDraftDocument(rules)
-            do { edits = try PolicyConfiguration.decodeOverrides(snapshot.stored); refresh() }
+            do { edits = try PolicyConfiguration.decodeOverrides(snapshot.stored); refresh(); if startWithRecommended { addRecommended() } }
             catch { self.error = "Saved policy overrides could not be decoded." }
         }
         .sheet(item: $editing) { target in

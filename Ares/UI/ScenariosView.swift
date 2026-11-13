@@ -2,6 +2,7 @@ import SwiftUI
 import SubscriptionKit
 
 struct ScenariosView: View {
+    var embedded = false
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var profiles: ProfileService
     @State private var scenarios: [ManualScenario] = []
@@ -17,12 +18,12 @@ struct ScenariosView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Scenes").font(DS.Typography.secondary.weight(.semibold)).fixedSize()
+                if !embedded { Text("Scenes").font(DS.Typography.secondary.weight(.semibold)).fixedSize() }
                 Spacer()
-                Button { showingHistory = true } label: { Image(systemName: "clock.arrow.circlepath") }.help("Scene execution history").accessibilityLabel("Scene execution history")
-                Button { showingAutomation = true } label: { Image(systemName: "bolt.badge.clock") }.help("Automatic scenes").accessibilityLabel("Automatic scenes")
+                Button { showingHistory = true } label: { Label("History", systemImage: "clock.arrow.circlepath") }.help("Scene execution history").accessibilityLabel("Scene execution history")
+                Button { showingAutomation = true } label: { Label("Automation", systemImage: "bolt.badge.clock") }.help("Automatic scenes").accessibilityLabel("Automatic scenes")
                 Button("Undo Last Switch") { review = ScenarioService.undoReview() }.disabled(ScenarioService.undoReview() == nil)
-                Button("Done") { dismiss() }.fixedSize()
+                if !embedded { Button("Done") { dismiss() }.fixedSize() }
             }.controlSize(.small).padding(DS.Space.lg)
             HStack {
                 TextField("Scene name", text: $name).textFieldStyle(.roundedBorder).accessibilityLabel("Scene name")
@@ -50,7 +51,7 @@ struct ScenariosView: View {
                 }.width(130)
             }.font(DS.Typography.metadata)
             if let error { Text(error).font(DS.Typography.metadata).foregroundStyle(Color.statusBad).padding(DS.Space.lg) }
-        }.frame(minWidth: 740, minHeight: 500).background(DS.canvas).disabled(busy).task { load() }
+        }.frame(minWidth: embedded ? 0 : 740, minHeight: 500).background(DS.canvas).disabled(busy).task { load() }
         .onChange(of: profiles.activeProfileRevision) { _, _ in if !busy { review = nil; load() } }
         .sheet(isPresented: $showingHistory) { SceneHistoryView() }
         .sheet(isPresented: $showingAutomation) { SceneAutomationView() }

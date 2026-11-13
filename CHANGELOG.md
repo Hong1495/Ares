@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.13
+
+- Exposed Applications, Network Quality, Policies and Scenes as independent sidebar pages.
+- Reclaimed Dashboard space with compact traffic charts, activity and quality summaries, and named navigation links.
+- Unified Dashboard On / Off switches and the connected Rule / Global / Direct selector with subtle raised surfaces and adaptive appearances.
+- Added a direct, reviewable recommended-policy draft entry and retained existing runtime safeguards.
+
 ## 1.0.0
 
 - Rebuilt the macOS workspace, dashboard, typography and sidebar controls.

@@ -3,6 +3,7 @@ import Charts
 import SubscriptionKit
 
 struct NetworkQualityView: View {
+    var embedded = false
     @ObservedObject private var service = NetworkQualityService.shared
     @Environment(\.dismiss) private var dismiss
     @State private var target = "gstatic"
@@ -13,10 +14,10 @@ struct NetworkQualityView: View {
     var body: some View {
         VStack(spacing: DS.Space.lg) {
             HStack {
-                Text("Network Quality").font(DS.Typography.secondary.weight(.semibold))
+                if !embedded { Text("Network Quality").font(DS.Typography.secondary.weight(.semibold)) }
                 Spacer()
                 Toggle("Monitor", isOn: Binding(get: { service.enabled }, set: service.setEnabled)).toggleStyle(.switch).controlSize(.mini)
-                Button("Done") { dismiss() }.controlSize(.small)
+                if !embedded { Button("Done") { dismiss() }.controlSize(.small) }
             }
             HStack {
                 Picker("Policy", selection: Binding(get: { service.group }, set: { service.configure(group: $0, interval: service.interval) })) {
@@ -28,7 +29,7 @@ struct NetworkQualityView: View {
                     Text("30 sec").tag(30); Text("1 min").tag(60); Text("5 min").tag(300)
                 }.frame(width: 155)
                 Spacer()
-                Button("Policies") { policies = true }
+                Button("Policies") { if embedded { AppState.shared.selection = .policies } else { policies = true } }
                 Button { service.reset() } label: { Image(systemName: "arrow.counterclockwise") }.help("Reset this session’s measurements")
             }.controlSize(.small)
             HStack {
@@ -87,7 +88,7 @@ struct NetworkQualityView: View {
             Text("Automatic selection and fallback run in mihomo, including when this window is closed. Intermediate switches between observations may be missed. Enabling monitoring sends periodic requests to the listed services.")
                 .font(DS.Typography.metadata).foregroundStyle(.secondary)
             if let error = service.error { Text(error).font(DS.Typography.metadata).foregroundStyle(Color.statusBad) }
-        }.padding(DS.Space.lg).frame(minWidth: 880, minHeight: 720).background(DS.canvas).scrollIndicators(.never, axes: [.horizontal, .vertical])
+        }.padding(DS.Space.lg).frame(minWidth: embedded ? 0 : 880, minHeight: 720).background(DS.canvas).scrollIndicators(.never, axes: [.horizontal, .vertical])
             .task { service.start(); await service.readGroups() }
             .onChange(of: service.group) { _, _ in manual = "" }
             .sheet(isPresented: $policies, onDismiss: { Task { await service.readGroups() } }) { PolicyGroupsView().environmentObject(ClashController.shared) }

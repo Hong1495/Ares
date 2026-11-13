@@ -28,7 +28,7 @@ struct PreviewWorkspace: View {
     @State private var showUpdate = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var page = CommandLine.arguments.contains("--settings-sources") ? "Settings" : "Dashboard"
-    @State private var dark = false
+    @State private var dark = CommandLine.arguments.contains("--dark")
     @State private var enabled = true
     @State private var tun = false
     @State private var inspection = false
@@ -44,13 +44,17 @@ struct PreviewWorkspace: View {
     @State private var theme = 0
 
     private let destinations = [
-        WorkspaceDestination(id: "Dashboard", title: "Dashboard", icon: "gauge.with.dots.needle.50percent", section: "Monitoring"),
-        WorkspaceDestination(id: "Activity", title: "Activity", icon: "arrow.up.arrow.down", section: "Monitoring"),
-        WorkspaceDestination(id: "Proxies", title: "Proxies", icon: "network", section: "Proxy"),
-        WorkspaceDestination(id: "Rules", title: "Rules", icon: "list.bullet.indent", section: "Proxy"),
-        WorkspaceDestination(id: "Subscriptions", title: "Subscriptions", icon: "rectangle.stack", section: "Proxy"),
-        WorkspaceDestination(id: "Analysis", title: "Analysis", icon: "waveform.path.ecg.rectangle", section: "Developer"),
-        WorkspaceDestination(id: "Logs", title: "Logs", icon: "text.alignleft", section: "Developer"),
+        WorkspaceDestination(id: "Dashboard", title: "Dashboard", icon: "gauge.with.dots.needle.50percent", section: "Overview"),
+        WorkspaceDestination(id: "Activity", title: "Activity", icon: "arrow.up.arrow.down", section: "Overview"),
+        WorkspaceDestination(id: "Network Quality", title: "Network Quality", icon: "waveform.path.ecg", section: "Overview"),
+        WorkspaceDestination(id: "Proxies", title: "Proxies", icon: "network", section: "Routing"),
+        WorkspaceDestination(id: "Applications", title: "Applications", icon: "app.connected.to.app.below.fill", section: "Routing"),
+        WorkspaceDestination(id: "Policies", title: "Policies", icon: "slider.horizontal.3", section: "Routing"),
+        WorkspaceDestination(id: "Rules", title: "Rules", icon: "list.bullet.indent", section: "Routing"),
+        WorkspaceDestination(id: "Scenes", title: "Scenes", icon: "square.stack.3d.up", section: "Routing"),
+        WorkspaceDestination(id: "Subscriptions", title: "Subscriptions", icon: "rectangle.stack", section: "Library"),
+        WorkspaceDestination(id: "Analysis", title: "Analysis", icon: "waveform.path.ecg.rectangle", section: "Tools"),
+        WorkspaceDestination(id: "Logs", title: "Logs", icon: "text.alignleft", section: "Tools"),
         WorkspaceDestination(id: "Settings", title: "Settings", icon: "slider.horizontal.3", section: "Preferences")
     ]
 
@@ -117,10 +121,19 @@ struct PreviewWorkspace: View {
 
     private var dashboard: some View {
         DashboardComposition {
-            OverviewTrafficCard(points: points, download: snapshot.download, upload: snapshot.upload)
+            TimelineView(.periodic(from: .now, by: 1)) { _ in
+                OverviewTrafficCard(points: points, download: snapshot.download, upload: snapshot.upload)
+            }
         } controls: {
             OverviewConnectionCard(snapshot: snapshot, systemProxy: $enabled, tun: $tun, interception: $inspection, mode: $mode)
         } details: {
+            OverviewWorkspaceSummary(
+                processes: empty ? [] : [.init(id: "browser", name: "Safari", connections: 12), .init(id: "editor", name: "Code Editor", connections: 8), .init(id: "mail", name: "Mail", connections: 4)],
+                activityStatus: empty ? "No active connections" : "Top 3 sources by connections · Ares excluded",
+                connections: empty ? 0 : 28, processCount: empty ? 0 : 6,
+                qualityStatus: "Synthetic preview · latest 20 samples", qualityGroup: "Ares Auto", qualityValue: empty ? "—" : "95.0%", qualityDetail: "Google probe success",
+                route: "Ares Route → Ares Auto → Japan",
+                openActivity: { page = "Activity" }, openApplications: { page = "Applications" }, openQuality: { page = "Network Quality" }, openPolicies: { page = "Policies" }, openScenes: { page = "Scenes" })
             OverviewReachability(
                 items: [("Google", "magnifyingglass"), ("GitHub", "chevron.left.forwardslash.chevron.right"), ("Gemini", "sparkles")].map {
                     .init(id: $0.0, name: $0.0, icon: $0.1, latency: empty ? nil : (error ? -1 : (measured ? 42 : 38)), loading: false)
