@@ -11,6 +11,7 @@ scripts/test-lifecycle.sh
 scripts/test-configuration-coordinator.sh
 scripts/test-scene-automation.sh
 scripts/test-scene-catalog.sh
+scripts/test-managed-workspace.sh
 scripts/test-effective-config.sh
 scripts/test-resource-activity.sh
 scripts/test-network-quality.sh

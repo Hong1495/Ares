@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.16
+
+- Added Resources for node/provider editing, VLESS/Trojan/Shadowsocks link import, local overrides and policy integration.
+- Added Devices for authenticated HTTP/SOCKS TCP access, per-entry routes and live connection attribution.
+- Integrated saved resource and device summaries into Dashboard with a shared three-column layout.
+- Added private configuration storage, stale-edit guards and rollback validation for both workflows.
+
 ## 1.0.13
 
 - Exposed Applications, Network Quality, Policies and Scenes as independent sidebar pages.

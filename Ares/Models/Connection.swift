@@ -46,6 +46,7 @@ nonisolated struct ConnectionMetadata: Codable, Sendable {
     let host: String
     var processPath: String?
     var process: String? = nil
+    var inboundName: String? = nil
     var inboundIP: String? = nil
     var inboundPort: String? = nil
    
@@ -56,6 +57,6 @@ nonisolated struct ConnectionMetadata: Codable, Sendable {
         case sourcePort = "sourcePort"
         case destinationPort = "destinationPort"
         case host
-        case processPath, process, inboundIP, inboundPort
+        case processPath, process, inboundName, inboundIP, inboundPort
     }
 }

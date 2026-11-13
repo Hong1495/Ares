@@ -5,6 +5,8 @@ import SwiftUI
 extension AppState.NavigationItem {
     var sidebarIcon: String {
         switch self {
+        case .resources: return "shippingbox"
+        case .devices: return "laptopcomputer.and.iphone"
         case .applications: return "app.connected.to.app.below.fill"
         case .quality: return "waveform.path.ecg"
         case .policies: return "slider.horizontal.3"
@@ -28,8 +30,8 @@ struct DSSidebarSection: Identifiable {
 
     static let all: [DSSidebarSection] = [
         .init(id: "Overview", items: [.dashboard, .connections, .quality]),
-        .init(id: "Routing", items: [.proxies, .applications, .policies, .rules, .scenes]),
-        .init(id: "Library", items: [.subscriptions]),
+        .init(id: "Routing", items: [.proxies, .applications, .devices, .policies, .rules, .scenes]),
+        .init(id: "Library", items: [.subscriptions, .resources]),
         .init(id: "Tools", items: [.analysis, .logs]),
         .init(id: "Preferences", items: [.settings])
     ]

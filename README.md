@@ -14,6 +14,8 @@ Requires an Apple Silicon Mac and macOS 14 or later. Starting with 1.0.2, Intel 
 - HTTP, SOCKS5 and mixed proxy ports, plus TUN mode.
 - Remote subscriptions, local profiles, node selection and latency checks.
 - Routing rules, DNS settings, active connections and topology views.
+- Resources: independent nodes, provider definitions and local subscription overrides.
+- Devices: authenticated HTTP/SOCKS TCP access with per-entry routing and live connection visibility.
 - Optional MITM inspection and certificate management.
 - Automatic update checks, manual checks and an orange update indicator next to the window controls. Downloads and installation are user initiated.
 
@@ -49,7 +51,7 @@ Read [development/testing](docs/development/testing.md) before testing live serv
 
 ## Release status
 
-Version 1.0.2 continues the subscription fixes from 1.0.1 and supports Apple Silicon only. Compilation and isolated tests are covered by CI. Full live-network and in-place update acceptance on Apple Silicon is still pending; see [functional verification](docs/diagnostics/functional-audit.md).
+The latest published version is available through Releases and the signed in-app updater. Resources and Devices are currently in development; see [workflow and validation details](docs/managed-resources-and-devices.md). Compilation and isolated tests are covered by CI. Full live-network and in-place update acceptance on Apple Silicon is still pending; see [functional verification](docs/diagnostics/functional-audit.md).
 
 ## License and credits
 

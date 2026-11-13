@@ -23,6 +23,8 @@ class AppState: ObservableObject {
         case proxies
         case rules
         case subscriptions
+        case resources
+        case devices
         case connections
         case analysis
         case topology
@@ -38,6 +40,8 @@ class AppState: ObservableObject {
             case .scenes: return "Scenes"
             case .proxies: return "Proxies"
             case .rules: return "Rules"
+            case .resources: return "Resources"
+            case .devices: return "Devices"
             case .subscriptions: return "Subscriptions"
             case .connections: return "Activity"
             case .analysis: return "Analysis"

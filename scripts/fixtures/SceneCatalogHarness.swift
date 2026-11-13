@@ -1,4 +1,5 @@
 import Foundation
+import SubscriptionKit
 
 @MainActor final class ProfileService {
     static let shared = ProfileService()
@@ -52,4 +53,9 @@ import Foundation
         precondition(!mismatched.live)
         print("PASS: scene catalog offline metadata, runtime provider members, non-selectable filtering, stale generation and HTTP failure")
     }
+}
+
+@MainActor enum ManagedWorkspaceService {
+    struct Document { var resources = ManagedResources.Draft() }
+    static func read(_ id: UUID?) throws -> Document { Document() }
 }

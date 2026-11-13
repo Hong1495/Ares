@@ -217,6 +217,19 @@ class ProfileService: ObservableObject {
         }
     }
 
+    /// An offline starting point for independent nodes. Never starts the core.
+    func createResourceWorkspace() throws {
+        guard !AppState.shared.isPerformingNetworkOperation, ClashViewModel.shared.runtimeState == .stopped else {
+            throw ManagedResources.Failure.invalid("Stop the core before creating an independent workspace.")
+        }
+        let destination = profilesDir.appendingPathComponent(UUID().uuidString + ".yaml")
+        let content = "proxies: []\nproxy-groups: [{name: Outbound, type: select, proxies: [DIRECT], include-all-proxies: true, include-all-providers: true}]\nrules: [\"MATCH,Outbound\"]\n"
+        try content.write(to: destination, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: destination.path)
+        let profile = Profile.local(name: "Local Workspace", path: destination)
+        profiles.append(profile); activeProfileID = profile.id; saveProfiles()
+    }
+
     /// Add a local profile
     func addLocalProfile(name: String, fileURL: URL) throws {
         // Copy file to profiles directory
@@ -403,6 +416,9 @@ class ProfileService: ObservableObject {
 
         let profile = profiles[index]
         let wasActive = activeProfileID == id
+
+        do { try ManagedWorkspaceService.remove(id) }
+        catch { AppState.shared.reportError("Private resource and device settings could not be removed. The subscription was retained."); return }
 
         // Delete file if exists
         if let path = profile.path {

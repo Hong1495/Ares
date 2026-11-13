@@ -124,6 +124,9 @@ private struct DashboardWorkspaceSummary: View {
     @State private var applications = OverviewWorkspaceSummary.ConfigurationSummary(value: "—", unit: "rules", rows: [], status: "Loading")
     @State private var policies = OverviewWorkspaceSummary.ConfigurationSummary(value: "—", unit: "groups", rows: [], status: "Loading")
     @State private var scenes = OverviewWorkspaceSummary.ConfigurationSummary(value: "—", unit: "saved", rows: [], status: "Loading")
+    @State private var resources = OverviewWorkspaceSummary.ConfigurationSummary(value: "—", unit: "resources", rows: [], status: "Loading")
+    @State private var devices = OverviewWorkspaceSummary.ConfigurationSummary(value: "—", unit: "configured", rows: [], status: "Loading")
+    @State private var deviceConnections: [String: Int]?
     @State private var lastConfigurationRead = Date.distantPast
     @State private var rows: [OverviewWorkspaceSummary.ProcessRow] = []
     @State private var connectionCount: Int?
@@ -132,7 +135,7 @@ private struct DashboardWorkspaceSummary: View {
     @Environment(\.scenePhase) private var phase
 
     var body: some View {
-        OverviewWorkspaceSummary(probes: probes, applications: applications, policies: policies, scenes: sceneSummary, processes: rows, activityStatus: activityStatus,
+        OverviewWorkspaceSummary(probes: probes, applications: applications, policies: policies, scenes: sceneSummary, resources: resources, devices: devices, openResources: { appState.selection = .resources }, openDevices: { appState.selection = .devices }, processes: rows, activityStatus: activityStatus,
             connections: connectionCount, processCount: processCount,
             qualityStatus: quality.enabled ? quality.status : "Monitoring is off · Open Network Quality to start",
             qualityGroup: quality.group.isEmpty ? "No monitored policy" : quality.group,
@@ -147,16 +150,21 @@ private struct DashboardWorkspaceSummary: View {
             applications = .init(value: "—", unit: "rules", rows: [], status: "Loading")
             policies = .init(value: "—", unit: "groups", rows: [], status: "Loading")
             scenes = .init(value: "—", unit: "saved", rows: [], status: "Loading")
+            resources = .init(value: "—", unit: "resources", rows: [], status: "Loading")
+            devices = .init(value: "—", unit: "configured", rows: [], status: "Loading")
+            deviceConnections = nil
             lastConfigurationRead = .distantPast
             while !Task.isCancelled {
                 if Date().timeIntervalSince(lastConfigurationRead) >= 30 { await refreshConfiguration() }
                 await refresh()
+                refreshDevices()
                 do { try await Task.sleep(for: .seconds(5)) } catch { return }
             }
         }
         .onChange(of: controller.runtimeGeneration) { _, _ in
             rows = []; connectionCount = nil; processCount = nil
             activityStatus = "Waiting for current runtime"
+            deviceConnections = nil; refreshDevices()
         }
     }
     private var probes: [OverviewWorkspaceSummary.Probe] {
@@ -192,19 +200,42 @@ private struct DashboardWorkspaceSummary: View {
             policies = .init(value: "—", unit: "groups", rows: [], status: "Configuration unavailable")
         }
         do {
+            let managed = try await ManagedWorkspaceService.load()
+            guard !Task.isCancelled, revision == profiles.activeProfileRevision else { return }
+            let entries = try ManagedResources.entries(source: managed.source, draft: managed.document.resources)
+            let nodes = entries.filter { !$0.provider }.count
+            let providers = entries.filter(\.provider).count
+            let local = entries.filter(\.local).count
+            resources = .init(value: String(entries.count), unit: "resources", rows: ["\(nodes) nodes · \(providers) providers", "\(local) local · \(entries.count - local) inherited"], status: "Saved definitions · Current subscription")
+        } catch {
+            guard !Task.isCancelled, revision == profiles.activeProfileRevision else { return }
+            resources = .init(value: "—", unit: "resources", rows: [], status: "Configuration unavailable")
+        }
+        do {
             let saved = try ScenarioService.list().sorted { $0.name < $1.name }
             scenes = .init(value: String(saved.count), unit: "saved", rows: Array(saved.prefix(3).map(\.name)), status: saved.count > 3 ? "First 3 scenes · Current subscription" : "Current subscription")
         } catch { scenes = .init(value: "—", unit: "saved", rows: [], status: "Unavailable") }
     }
+    private func refreshDevices() {
+        do {
+            let saved = try ManagedWorkspaceService.read(profiles.activeProfileID).devices
+            let enabled = saved.filter(\.enabled)
+            let names = Set(enabled.map(\.listenerName))
+            let count = deviceConnections.map { values in values.filter { names.contains($0.key) }.values.reduce(0, +) }
+            let active = deviceConnections.map { values in values.filter { names.contains($0.key) && $0.value > 0 }.count }
+            devices = .init(value: String(saved.count), unit: "configured", rows: ["\(enabled.count) enabled · \(saved.count - enabled.count) disabled", "\(active.map(String.init) ?? "—") active entries · \(count.map(String.init) ?? "—") connections"], status: "Saved access · Current proxy connections")
+        } catch { devices = .init(value: "—", unit: "configured", rows: [], status: "Configuration unavailable") }
+    }
     private func refresh() async {
         guard PolicyGroupService.canReadRuntime else {
-            rows = []; connectionCount = nil; processCount = nil; activityStatus = "Activity is available when the core is ready"; return
+            deviceConnections = nil; rows = []; connectionCount = nil; processCount = nil; activityStatus = "Activity is available when the core is ready"; return
         }
         let generation = ClashController.shared.runtimeGeneration
         do {
             let raw = try await ApplicationRoutingService.connections()
             let connections = await ConnectionProcessResolver.shared.resolve(raw)
             guard !Task.isCancelled, generation == ClashController.shared.runtimeGeneration, PolicyGroupService.canReadRuntime else { return }
+            deviceConnections = Dictionary(grouping: raw.filter { !($0.metadata.inboundName ?? "").isEmpty }, by: { $0.metadata.inboundName! }).mapValues(\.count)
             let visible = connections.filter { !$0.identity.isAres }
             let groups = Dictionary(grouping: visible, by: { $0.identity.key })
             var allRows: [OverviewWorkspaceSummary.ProcessRow] = []
@@ -219,7 +250,7 @@ private struct DashboardWorkspaceSummary: View {
             activityStatus = visible.isEmpty ? "No active connections" : "All sources · Ares excluded"
         } catch {
             guard !Task.isCancelled, generation == controller.runtimeGeneration else { return }
-            rows = []; connectionCount = nil; processCount = nil; activityStatus = "Activity could not be read"
+            deviceConnections = nil; rows = []; connectionCount = nil; processCount = nil; activityStatus = "Activity could not be read"
         }
     }
 }

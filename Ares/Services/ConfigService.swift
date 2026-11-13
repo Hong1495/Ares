@@ -78,17 +78,23 @@ actor ConfigService {
         return result
     }
 
+    private func resourceSource(_ source: String) async throws -> String {
+        let managed = try await MainActor.run { try ManagedWorkspaceService.read(ProfileService.shared.activeProfileID) }
+        return try ManagedResources.apply(source: source, draft: managed.resources)
+    }
+
     func policyGroups(profilePath: URL, overrides: String) async throws -> ([PolicyConfiguration.Group], [PolicyConfiguration.Group], String) {
         let source = try await fileManager.readText(from: profilePath)
-        let inherited = try PolicyConfiguration.read(source)
-        let effective = try PolicyConfiguration.read(PolicyConfiguration.preview(source: source, overrides: overrides))
+        let resourceSource = try await resourceSource(source)
+        let inherited = try PolicyConfiguration.read(resourceSource)
+        let effective = try PolicyConfiguration.read(PolicyConfiguration.preview(source: resourceSource, overrides: overrides))
         guard source == (try await fileManager.readText(from: profilePath)) else { throw CancellationError() }
-        return (inherited, effective, source)
+        return (inherited, effective, resourceSource)
     }
 
     func egressSettings(profilePath: URL, overrides: String, policyOverrides: String = "{}") async throws -> (EgressConfiguration.Document, EgressConfiguration.Document) {
         let source = try await fileManager.readText(from: profilePath)
-        let inherited = try EgressConfiguration.read(PolicyConfiguration.preview(source: source, overrides: policyOverrides))
+        let inherited = try EgressConfiguration.read(PolicyConfiguration.preview(source: try await resourceSource(source), overrides: policyOverrides))
         // Keep outdated drafts editable after a subscription removes or renames a node.
         // The UI overlays explicit fields; applying always runs the complete validation.
         _ = try EgressConfiguration.decode(overrides)
@@ -183,7 +189,9 @@ actor ConfigService {
                 UserDefaults.standard.string(forKey: PolicyGroupService.key($0)) ?? "{}"
             } ?? "{}"
         }
-        let policySource = try PolicyConfiguration.apply(source: profileContent, overrides: policyOverrides)
+        let managed = try await MainActor.run { try ManagedWorkspaceService.read(ProfileService.shared.activeProfileID) }
+        let resourceConfig = try ManagedResources.apply(source: profileContent, draft: managed.resources)
+        let policySource = try PolicyConfiguration.apply(source: resourceConfig, overrides: policyOverrides)
         let dnsOverrides = await MainActor.run {
             ProfileService.shared.activeProfileID.map {
                 UserDefaults.standard.string(forKey: DNSSettingsService.key($0)) ?? "{}"
@@ -199,7 +207,8 @@ actor ConfigService {
                 UserDefaults.standard.string(forKey: EgressSettingsService.key($0)) ?? EgressConfiguration.empty
             } ?? EgressConfiguration.empty
         }
-        let finalConfig = try EgressConfiguration.apply(source: dnsConfig, overrides: egressOverrides)
+        let egressConfig = try EgressConfiguration.apply(source: dnsConfig, overrides: egressOverrides)
+        let finalConfig = try DeviceAccess.apply(source: egressConfig, devices: managed.devices)
         if try EgressConfiguration.decode(egressOverrides) != EgressConfiguration.Overrides() {
             let routing = try EgressConfiguration.read(finalConfig)
             for interface in Set(routing.nodes.map(\.interface) + [routing.interface]) where !interface.isEmpty {

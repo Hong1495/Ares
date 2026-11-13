@@ -21,9 +21,10 @@ import SubscriptionKit
             return Catalog(groups: controller.proxyGroups.filter(\.supportsManualSelection).sorted { $0.name < $1.name }, live: true, revision: revision)
         }
         let policy = profiles.activeProfileID.flatMap { UserDefaults.standard.string(forKey: "policyGroupOverrides." + $0.uuidString) } ?? "{}"
+        let resources = try ManagedWorkspaceService.read(profiles.activeProfileID).resources
         let groups = try await Task.detached {
             let source = try String(contentsOf: path, encoding: .utf8)
-            return try PolicyConfiguration.read(PolicyConfiguration.preview(source: source, overrides: policy)).compactMap { group -> ProxyGroup? in
+            return try PolicyConfiguration.read(PolicyConfiguration.preview(source: ManagedResources.apply(source: source, draft: resources), overrides: policy)).compactMap { group -> ProxyGroup? in
                 let type: String
                 switch group.type { case "select": type = "Selector"; case "url-test": type = "URLTest"; case "fallback": type = "Fallback"; default: return nil }
                 return ProxyGroup(name: group.name, type: type, all: group.members)

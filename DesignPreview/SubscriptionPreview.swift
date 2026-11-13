@@ -55,6 +55,9 @@ struct PreviewProfile {
     let lastUpdated: Date? = Date()
 }
 @MainActor final class ProfileService: ObservableObject {
+    static let shared = ProfileService()
+    var activeProfileID: UUID? { activeProfile?.id }
+    func createResourceWorkspace() throws {}
     @Published var activeProfile: PreviewProfile?
     @Published private var choices: [String: String] = [:]
     var activeProfileRevision: String { activeProfile?.id.uuidString ?? "" }
@@ -205,7 +208,9 @@ struct RuleSourcesView: View { var provider: String? = nil; var body: some View 
     var body: some Scene {
         WindowGroup("Ares · Offline subscription preview", id: CommandLine.arguments.contains("--compact") ? "compact-" + (CommandLine.arguments.dropFirst().first ?? "main") : "main") {
             Group {
-                if CommandLine.arguments.contains("--topology") { TopologyPageView() }
+                if CommandLine.arguments.contains("--managed") { ManagedResourcesView() }
+                else if CommandLine.arguments.contains("--devices") { DevicesView() }
+                else if CommandLine.arguments.contains("--topology") { TopologyPageView() }
                 else if CommandLine.arguments.contains("--scenes") { ScenariosView(embedded: true).toolbar { CollectionTitleToolbar(title: "Scenes", count: nil, unit: "") } }
                 else if CommandLine.arguments.contains("--diagnostics") { ActivityDiagnosticsView().frame(width: 800, height: 520) }
                 else if CommandLine.arguments.contains("--quality") { ScrollView { NetworkQualityView(embedded: true) }.toolbar { CollectionTitleToolbar(title: "Network Quality", count: nil, unit: "") } }
@@ -272,4 +277,19 @@ struct RuleSourcesView: View { var provider: String? = nil; var body: some View 
     static func apply(paths: [String], target: String?, snapshot: Snapshot) async throws -> Undo? { nil }
     static func undo(_ undo: Undo) async -> Bool { true }
     static func connections() async throws -> [Connection] { [] }
+}
+
+@MainActor enum ManagedWorkspaceService {
+    struct Document: Equatable { var resources = ManagedResources.Draft(); var devices: [DeviceAccess.Device] = [] }
+    struct Snapshot {
+        let document: Document
+        let source: String
+        var targets: [String] { ["DIRECT", "Automatic", "Work"] }
+    }
+    static var saved = Document(devices: [.init(name: "Phone", enabled: true, address: "192.0.2.10", port: 10810, username: "phone", password: "preview-only-credential", target: "Automatic"), .init(name: "Tablet", username: "tablet", password: "preview-only-credential")])
+    static func read(_ id: UUID?) throws -> Document { saved }
+    static func load() async throws -> Snapshot {
+        Snapshot(document: saved, source: "proxies: [{name: Personal, type: vless, server: example.invalid, port: 443, uuid: 11111111-1111-1111-1111-111111111111, tls: true}]\nproxy-providers: {Work: {type: http, url: 'https://example.invalid/nodes', interval: 3600}}")
+    }
+    static func apply(_ document: Document, snapshot: Snapshot) async throws { saved = document }
 }

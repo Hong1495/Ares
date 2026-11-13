@@ -108,10 +108,11 @@ struct ProxiesView: View {
         loadError = nil
         defer { if loadRevision == revision { isLoading = false } }
         do {
+            let resources = try ManagedWorkspaceService.read(profileService.activeProfileID).resources
             let snapshot: SubscriptionSnapshot? = try await Task.detached {
                 guard let path else { return nil }
                 let source = try String(contentsOf: path, encoding: .utf8)
-                return try SubscriptionSnapshot.parse(PolicyConfiguration.preview(source: source, overrides: policy))
+                return try SubscriptionSnapshot.parse(PolicyConfiguration.preview(source: ManagedResources.apply(source: source, draft: resources), overrides: policy))
             }.value
             try Task.checkCancellation()
             guard key == profileKey, loadRevision == revision else { return }

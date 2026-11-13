@@ -46,7 +46,7 @@ nonisolated enum ConnectionSnapshot {
         return rows.compactMap { row in
             guard let id = row["id"] as? String, let m = row["metadata"] as? [String: Any] else { return nil }
             func text(_ key: String) -> String { (m[key] as? String) ?? (m[key] as? NSNumber)?.stringValue ?? "" }
-            let metadata = ConnectionMetadata(network: text("network"), type: text("type"), sourceIP: text("sourceIP"), destinationIP: text("destinationIP"), sourcePort: text("sourcePort"), destinationPort: text("destinationPort"), host: text("host").isEmpty ? text("sniffHost") : text("host"), processPath: text("processPath"), process: text("process"), inboundIP: text("inboundIP"), inboundPort: text("inboundPort"))
+            let metadata = ConnectionMetadata(network: text("network"), type: text("type"), sourceIP: text("sourceIP"), destinationIP: text("destinationIP"), sourcePort: text("sourcePort"), destinationPort: text("destinationPort"), host: text("host").isEmpty ? text("sniffHost") : text("host"), processPath: text("processPath"), process: text("process"), inboundName: text("inboundName"), inboundIP: text("inboundIP"), inboundPort: text("inboundPort"))
             return Connection(id: id, metadata: metadata, upload: (row["upload"] as? NSNumber)?.int64Value ?? 0, download: (row["download"] as? NSNumber)?.int64Value ?? 0, start: date.date(from: row["start"] as? String ?? "") ?? Date(), chains: row["chains"] as? [String] ?? [], rule: row["rule"] as? String ?? "", rulePayload: row["rulePayload"] as? String ?? "")
         }
     }

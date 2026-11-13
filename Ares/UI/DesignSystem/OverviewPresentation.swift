@@ -308,6 +308,10 @@ struct OverviewWorkspaceSummary: View {
     var applications = ConfigurationSummary(value: "—", unit: "rules", rows: [], status: "Unavailable")
     var policies = ConfigurationSummary(value: "—", unit: "groups", rows: [], status: "Unavailable")
     var scenes = ConfigurationSummary(value: "—", unit: "saved", rows: [], status: "Unavailable")
+    var resources = ConfigurationSummary(value: "—", unit: "resources", rows: [], status: "Unavailable")
+    var devices = ConfigurationSummary(value: "—", unit: "configured", rows: [], status: "Unavailable")
+    var openResources: () -> Void = {}
+    var openDevices: () -> Void = {}
     let processes: [ProcessRow]
     let activityStatus: String
     let connections: Int?
@@ -330,36 +334,57 @@ struct OverviewWorkspaceSummary: View {
                 }
                 VStack(spacing: 24) { activity; quality }
             }
-            configurationGrid
+            ViewThatFits(in: .horizontal) {
+                configurationGrid(columns: 3)
+                configurationGrid(columns: 2)
+            }
         }
     }
 
-    // Shared rows keep headings, values and footers aligned even when content differs.
-    private var configurationGrid: some View {
-        Grid(alignment: .topLeading, horizontalSpacing: 24, verticalSpacing: 12) {
-            GridRow {
-                heading("Applications", action: openApplications)
-                heading("Policies", action: openPolicies)
-                heading("Scenes", action: openScenes)
-            }
-            GridRow {
-                configurationMetric(applications)
-                configurationMetric(policies)
-                configurationMetric(scenes)
-            }
-            GridRow {
-                configurationRows(applications)
-                configurationRows(policies)
-                configurationRows(scenes)
-            }
-            GridRow {
-                configurationStatus(applications)
-                configurationStatus(policies)
-                configurationStatus(scenes)
+    private struct SummarySection {
+        let title: String
+        let summary: ConfigurationSummary
+        let action: () -> Void
+    }
+    private var summarySections: [SummarySection] {
+        [
+            .init(title: "Resources", summary: resources, action: openResources),
+            .init(title: "Devices", summary: devices, action: openDevices),
+            .init(title: "Applications", summary: applications, action: openApplications),
+            .init(title: "Policies", summary: policies, action: openPolicies),
+            .init(title: "Scenes", summary: scenes, action: openScenes)
+        ]
+    }
+
+    // One column system across every row. Shared grid rows align the headings,
+    // metrics, detail lines and footers even when one section has fewer entries.
+    private func configurationGrid(columns: Int) -> some View {
+        let sections = summarySections
+        return Grid(alignment: .topLeading, horizontalSpacing: 24, verticalSpacing: 12) {
+            ForEach(0..<((sections.count + columns - 1) / columns), id: \.self) { row in
+                let start = row * columns
+                let end = min(start + columns, sections.count)
+                GridRow {
+                    ForEach(start..<end, id: \.self) { index in
+                        heading(sections[index].title, action: sections[index].action)
+                            .frame(minWidth: 176, maxWidth: .infinity)
+                            .padding(.top, row == 0 ? 16 : 20)
+                            .overlay(alignment: .top) { Rectangle().fill(DS.line).frame(height: 0.5) }
+                    }
+                }
+                GridRow {
+                    ForEach(start..<end, id: \.self) { index in configurationMetric(sections[index].summary) }
+                }
+                GridRow {
+                    ForEach(start..<end, id: \.self) { index in configurationRows(sections[index].summary) }
+                }
+                GridRow {
+                    ForEach(start..<end, id: \.self) { index in
+                        configurationStatus(sections[index].summary).padding(.bottom, 8)
+                    }
+                }
             }
         }
-        .padding(.top, 16)
-        .overlay(alignment: .top) { Rectangle().fill(DS.line).frame(height: 0.5) }
     }
 
     private var activity: some View {

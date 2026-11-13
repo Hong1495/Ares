@@ -132,6 +132,8 @@ struct PreviewWorkspace: View {
                 applications: .init(value: "4", unit: "local rules", rows: ["Safari → Automatic", "Mail → DIRECT", "Editor → Work"], status: "First 3 rules · Saved configuration"),
                 policies: .init(value: "8", unit: "groups", rows: ["select · 4", "url-test · 3", "fallback · 1"], status: "Saved configuration"),
                 scenes: .init(value: "2", unit: "saved", rows: ["Home", "Office"], status: "Automation off"),
+                resources: .init(value: "34", unit: "resources", rows: ["32 nodes · 2 providers", "4 local · 30 inherited"], status: "Saved definitions · Current subscription"),
+                devices: .init(value: "3", unit: "configured", rows: ["2 enabled · 1 disabled", "1 active entry · 4 connections"], status: "Saved access · Current proxy connections"),
                 processes: empty ? [] : [.init(id: "browser", name: "Safari", connections: 12), .init(id: "editor", name: "Code Editor", connections: 8), .init(id: "mail", name: "Mail", connections: 4), .init(id: "music", name: "Music", connections: 2), .init(id: "calendar", name: "Calendar", connections: 1), .init(id: "sync", name: "Sync", connections: 1)],
                 activityStatus: empty ? "No active connections" : "All sources · Ares excluded",
                 connections: empty ? 0 : 28, processCount: empty ? 0 : 6,

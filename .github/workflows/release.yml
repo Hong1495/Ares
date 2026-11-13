@@ -40,6 +40,7 @@ jobs:
           scripts/test-configuration-coordinator.sh
           scripts/test-scene-automation.sh
           scripts/test-scene-catalog.sh
+          scripts/test-managed-workspace.sh
           scripts/test-resource-activity.sh
           scripts/test-network-quality.sh
           scripts/test-activity-diagnostics.sh
@@ -95,6 +96,8 @@ jobs:
           CORE="$PWD/.build/release/Build/Products/Release/Ares.app/Contents/Resources/clash-meta"
           scripts/test-effective-config.sh "$CORE"
           scripts/test-policy-composition.sh "$CORE"
+          scripts/build-managed-fixtures.sh .build/managed-fixtures
+          python3 scripts/test-managed-core.py "$CORE" .build/managed-fixtures
           python3 scripts/test-native-dns.py "$CORE"
           python3 scripts/test-native-egress.py "$CORE"
           python3 scripts/test-native-workflows.py "$CORE"
