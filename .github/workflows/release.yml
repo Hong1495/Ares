@@ -9,7 +9,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   package:
-    runs-on: macos-15
+    runs-on: macos-26
     env:
       ARES_UPDATE_PUBLIC_KEY: ${{ vars.ARES_UPDATE_PUBLIC_KEY }}
       SIGNING_KEY: ${{ secrets.ARES_UPDATE_PRIVATE_KEY }}
