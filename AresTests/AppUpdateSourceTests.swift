@@ -7,12 +7,14 @@ final class AppUpdateSourceTests: XCTestCase {
 
     func testInstallationWaitsForNetworkCleanupAndKeepsRetry() throws {
         let text = try source("Ares/Services/AppUpdateService.swift")
-        let cleanup = try XCTUnwrap(text.range(of: "guard await AppTerminationCoordinator.shared.prepareForTermination() else"))
+        let cleanup = try XCTUnwrap(text.range(of: "let prepared = await AppTerminationCoordinator.shared.prepareForTermination()"))
         let install = try XCTUnwrap(text.range(of: "            install()"))
         XCTAssertLessThan(cleanup.lowerBound, install.lowerBound)
         XCTAssertTrue(text.contains("pendingInstall = installHandler"))
         XCTAssertTrue(text.contains("if pendingInstall != nil { resumeInstallation(); return }"))
         XCTAssertTrue(text.contains("updateShutdownPrepared = true"))
+        XCTAssertTrue(text.contains("guard generation == installGeneration else"))
+        XCTAssertTrue(text.contains("cancelUpdateHandoff()"))
     }
 
     func testAutomaticChecksUseGentleReminderWithoutAutomaticInstall() throws {
@@ -36,7 +38,7 @@ final class AppUpdateSourceTests: XCTestCase {
     func testUpdateExitDoesNotRepeatCompletedCleanup() throws {
         let text = try source("Ares/AresApp.swift")
         let method = try XCTUnwrap(text.range(of: "func applicationWillTerminate"))
-        let skip = try XCTUnwrap(text.range(of: "if AppTerminationCoordinator.shared.updateShutdownPrepared { return }", range: method.lowerBound..<text.endIndex))
+        let skip = try XCTUnwrap(text.range(of: "if AppTerminationCoordinator.shared.isPrepared { return }", range: method.lowerBound..<text.endIndex))
         let cleanup = try XCTUnwrap(text.range(of: "SystemProxyManager.shared.disableAllProxiesSync()", range: method.lowerBound..<text.endIndex))
         XCTAssertLessThan(skip.lowerBound, cleanup.lowerBound)
     }

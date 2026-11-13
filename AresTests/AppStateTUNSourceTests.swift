@@ -7,9 +7,9 @@ final class AppStateTUNSourceTests: XCTestCase {
             .deletingLastPathComponent()
             .appendingPathComponent("Ares/Services/AppState+TUN.swift"))
 
-        XCTAssertTrue(source.contains("RuntimeTransition.perform("))
+        XCTAssertTrue(source.contains("ConfigurationCoordinator.replace("))
         XCTAssertTrue(source.contains("setTUNConfiguration(oldTUN)"))
-        XCTAssertTrue(source.contains("startAndVerifyTUN(expected: oldTUN, restoreProxy: hadProxy)"))
+        XCTAssertTrue(source.contains("previous: checkpoint, targetMode: !oldTUN"))
         XCTAssertTrue(source.contains("CoreAPIContract.verifyTUN(data, expected: expected)"))
         XCTAssertFalse(source.contains("try? await self.verifyTUNStatus()"))
     }

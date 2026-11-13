@@ -22,4 +22,16 @@ final class ProcessOwnershipSourceTests: XCTestCase {
         XCTAssertFalse(privileges.contains("/usr/bin/pkill"))
         XCTAssertFalse(privileges.contains("ares_dummy_process_check"))
     }
+    func testExitCallbackIsInstanceScopedAndDoesNotAutomaticallyRelaunch() throws {
+        let core = try source("Ares/Services/ClashServiceActor.swift")
+        XCTAssertTrue(core.contains("token == processToken"))
+        XCTAssertTrue(core.contains("processToken = UUID()"))
+        let vm = try source("Ares/ViewModels/ClashViewModel.swift")
+        let start = try XCTUnwrap(vm.range(of: "    func handleUnexpectedExit()"))
+        let end = try XCTUnwrap(vm.range(of: "    func markProcessLaunched()"))
+        let handler = String(vm[start.lowerBound..<end.lowerBound])
+        XCTAssertTrue(handler.contains("setSystemProxy(enabled: false)"))
+        XCTAssertFalse(handler.contains("startCore("))
+    }
+
 }

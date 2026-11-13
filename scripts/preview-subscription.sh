@@ -12,6 +12,10 @@ OBJECTS=()
 while IFS= read -r file; do OBJECTS+=("$file"); done < <(find "$BIN/Yams.build" "$BIN/CYaml.build" "$BIN/SubscriptionKit.build" -name '*.o')
 xcrun swiftc -parse-as-library -target arm64-apple-macosx14.0 \
   -I "$BIN/Modules" -I "$PACKAGE/.build/checkouts/Yams/Sources/CYaml/include" \
+  "$ROOT/Ares/Models/DNSQueryResult.swift" "$ROOT/Ares/UI/DNSSettingsView.swift" "$ROOT/Ares/UI/EgressSettingsView.swift" \
+  "$ROOT/Ares/Utilities/ManualScenario.swift" "$ROOT/Ares/UI/ScenariosView.swift" "$ROOT/Ares/UI/ActivityDiagnosticsView.swift" \
+  "$ROOT/Ares/UI/DesignSystem/SettingsPresentation.swift" \
+  "$ROOT/Ares/Models/ProxyResourceModels.swift" \
   "$ROOT/Ares/Models/ProxyModels.swift" \
   "$ROOT/Ares/Models/ClashConfig.swift" \
   "$ROOT/Ares/Utilities/ClashPorts.swift" \
@@ -20,6 +24,8 @@ xcrun swiftc -parse-as-library -target arm64-apple-macosx14.0 \
   "$ROOT/Ares/UI/DesignSystem/WorkspaceChrome.swift" \
   "$ROOT/Ares/UI/DesignSystem/ProxyNodeTile.swift" \
   "$ROOT/Ares/UI/DesignSystem/WorkspaceCommands.swift" \
+  "$ROOT/Ares/UI/DesignSystem/CollectionPresentation.swift" \
+  "$ROOT/Ares/UI/PolicyGroupsView.swift" "$ROOT/Ares/UI/ProxyResourcesView.swift" \
   "$ROOT/Ares/UI/ProxiesView.swift" \
   "$ROOT/DesignPreview/SubscriptionPreview.swift" \
   "${OBJECTS[@]}" -o "$APP/Contents/MacOS/SubscriptionPreview"

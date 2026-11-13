@@ -12,18 +12,13 @@ extension AppState {
 
         // 2. Auto-detect and repair stale sudoers paths (migration/rebuild protection)
         // This MUST run before any sudo-dependent operations
-        await PrivilegeService.shared.checkAndRepairSudoers()
+        if tunEnabled || systemProxyEnabled {
+            await PrivilegeService.shared.checkAndRepairSudoers()
+        }
 
         // 3. Ensure privileges if TUN is enabled (or just general check)
         // If TUN is requested, we MUST have privileges ready before Clash launches
-        var shouldCheckPrivileges = tunEnabled
-        if !shouldCheckPrivileges {
-            // Even if TUN is off, we might want to check for future toggle speed,
-            // but let's check if we don't have them
-            shouldCheckPrivileges = !(await PrivilegeService.shared.checkPrivileges())
-        }
-
-        if shouldCheckPrivileges {
+        if tunEnabled {
             clashViewModel.addLog("[Init] 🔐 Checking privileges for startup...")
             if !(await PrivilegeService.shared.checkPrivileges()) {
                 if await PrivilegeService.shared.installSudoers() {

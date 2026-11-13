@@ -7,15 +7,6 @@ struct TrafficStats: Codable {
     var down: Int64 = 0
 }
 
-/// Clash Rule
-struct ClashRule: Codable, Identifiable {
-    let id: UUID
-    let type: String
-    let payload: String
-    let proxy: String
-    let hit: Int
-}
-
 /// Represents a topological connection chain
 struct ConnectionChain: Identifiable, Equatable {
     let id: String
@@ -51,7 +42,7 @@ class ClashController: ObservableObject {
 
     var selectingProxyGroups: Set<String> = []
     var runtimeGeneration = UUID() {
-        didSet { measuredDelays.removeAll() }
+        didSet { measuredDelays.removeAll(); rules = []; rulesError = nil }
     }
     @Published var testingProxyNames: Set<String> = []
     @Published var isTestingAllProxies = false
@@ -64,6 +55,7 @@ class ClashController: ObservableObject {
     @Published var proxyNodes: [String: ProxyNode] = [:]
 
     @Published var rules: [ClashRule] = []
+    @Published var rulesError: String?
 
     // Topology Data
     @Published var activeChains: [ConnectionChain] = []

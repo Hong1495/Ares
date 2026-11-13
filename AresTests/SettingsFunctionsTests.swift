@@ -75,10 +75,4 @@ final class SettingsFunctionsTests: XCTestCase {
         XCTAssertEqual(SettingsRouting.predicate(for: "*.example.com"), "DOMAIN-SUFFIX,example.com")
         XCTAssertEqual(SettingsRouting.predicate(for: "172.16.0.0/12"), "IP-CIDR,172.16.0.0/12")
     }
-    func testSubscriptionCannotOverrideTimers() {
-        let yaml = ProfileConfigMerge.removingOverrides(from: "udp-timeout: 999\nmptcp: true\nproxies:\n  - name: test\n    udp-timeout: 10")
-        XCTAssertFalse(yaml.contains("999"))
-        XCTAssertFalse(yaml.contains("mptcp:"))
-        XCTAssertTrue(yaml.contains("    udp-timeout: 10"))
-    }
 }

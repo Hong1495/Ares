@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import SubscriptionKit
 
 /// ViewModel for Clash service - handles UI state only
 /// Business logic delegated to ClashService actor
@@ -54,6 +55,34 @@ class ClashViewModel: ObservableObject {
 
     // MARK: - Published UI State
     @Published private(set) var appliedProfileRevision = ""
+    private(set) var verifiedMixedPort: Int?
+    private(set) var verifiedSocksPort: Int?
+    private(set) var activeCheckpoint: RuntimeCheckpoint?
+
+    /// Capture the running file, not a candidate already written to config.yaml.
+    func recoveryCheckpoint() throws -> RuntimeCheckpoint {
+        guard runtimeState.isAPIReady, let checkpoint = activeCheckpoint else {
+            throw NSError(domain: "Runtime", code: 1, userInfo: [NSLocalizedDescriptionKey: "No verified running configuration is available for recovery."])
+        }
+        return RuntimeCheckpoint(configuration: checkpoint.configuration, profileID: checkpoint.profileID,
+            profileRevision: checkpoint.profileRevision,
+            selections: checkpoint.profileRevision == ProfileService.shared.activeProfileRevision
+                ? ProfileService.shared.savedSelections() : checkpoint.selections,
+            tunEnabled: checkpoint.tunEnabled, verifiedAt: checkpoint.verifiedAt)
+    }
+    func captureRecoveryCheckpoint() async throws -> RuntimeCheckpoint {
+        let checkpoint = try recoveryCheckpoint()
+        let generation = ClashController.shared.runtimeGeneration
+        let data = try await ClashController.shared.readRuntimeConfiguration()
+        guard generation == ClashController.shared.runtimeGeneration, runtimeState.isAPIReady else { throw CancellationError() }
+        let content = try ConfigurationAudit.recoveryConfiguration(configuration: checkpoint.configuration, response: data)
+        let updated = RuntimeCheckpoint(configuration: content, profileID: checkpoint.profileID,
+            profileRevision: checkpoint.profileRevision, selections: checkpoint.selections,
+            tunEnabled: checkpoint.tunEnabled)
+        activeCheckpoint = updated
+        return updated
+    }
+
     @Published var isRunning: Bool = false
     @Published var logs: [String] = []
     @Published var isToggling: Bool = false
@@ -98,16 +127,23 @@ class ClashViewModel: ObservableObject {
     }
     
     /// Internal methods for core operations - NO GATING
-    func startCore(isRestart: Bool = false) async {
+    func startCore(isRestart: Bool = false, preparedConfiguration: String? = nil, recovery: RuntimeCheckpoint? = nil, persistCheckpoint: Bool = true) async {
         // Sync Controller port with App State BEFORE activating monitors
         let tunEnabled = await MainActor.run { AppState.shared.tunEnabled }
         ClashController.shared.updatePort(tunEnabled: tunEnabled)
 
-        let profileRevision = ProfileService.shared.activeProfileRevision
+        let profileRevision = recovery?.profileRevision ?? ProfileService.shared.activeProfileRevision
+        let requestedRevision = ProfileService.shared.activeProfileRevision
+        guard recovery == nil || recovery?.tunEnabled == tunEnabled else {
+            runtimeState = .failed("Recovery configuration does not match the requested mode")
+            return
+        }
+        let selectedProfileID = recovery.map(\.profileID) ?? ProfileService.shared.activeProfileID
+        let selections = recovery?.selections ?? ProfileService.shared.savedSelections()
         appliedProfileRevision = ""
         runtimeState = .launching
         AppState.shared.activeConnectionsCount = nil
-        let started = await ClashServiceActor.shared.start(isRestart: isRestart)
+        let started = await ClashServiceActor.shared.start(isRestart: isRestart, preparedConfiguration: recovery?.configuration ?? preparedConfiguration)
 
         guard started else {
             isRunning = false
@@ -123,13 +159,21 @@ class ClashViewModel: ObservableObject {
         let readyTimeout: TimeInterval = tunEnabled ? 15.0 : 8.0
         if await ClashController.shared.waitForAPIReady(timeout: readyTimeout) {
             do {
-                try await ProfileService.shared.restoreNodeSelections()
-                guard profileRevision == ProfileService.shared.activeProfileRevision else { throw CancellationError() }
-                // Read back TUN before reporting the runtime ready or enabling routing.
-                guard let url = URL(string: "\(ClashController.shared.baseURL)/configs") else { throw URLError(.badURL) }
-                let (data, response) = try await URLSession.shared.data(for: URLRequest(url: url, timeoutInterval: 5))
-                try CoreAPIContract.requireSuccess(response)
+                try await ProfileService.shared.restoreNodeSelections(choices: selections)
+                guard requestedRevision == ProfileService.shared.activeProfileRevision else { throw CancellationError() }
+                let data = try await ClashController.shared.readRuntimeConfiguration()
                 try CoreAPIContract.verifyTUN(data, expected: tunEnabled)
+                let config = try await ConfigService.shared.savedConfiguration(tunEnabled: tunEnabled)
+                try ConfigurationAudit.verifyStartup(configuration: config, response: data)
+                try await ClashServiceActor.shared.verifyAdditionalListeners(configuration: config, tunEnabled: tunEnabled)
+                guard requestedRevision == ProfileService.shared.activeProfileRevision else { throw CancellationError() }
+                let runtime = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+                verifiedMixedPort = runtime?["mixed-port"] as? Int
+                verifiedSocksPort = runtime?["socks-port"] as? Int
+                let checkpoint = RuntimeCheckpoint(configuration: config, profileID: selectedProfileID,
+                    profileRevision: profileRevision, selections: selections, tunEnabled: tunEnabled)
+                activeCheckpoint = checkpoint
+                if persistCheckpoint { await persistActiveCheckpoint() }
                 appliedProfileRevision = profileRevision
                 runtimeState = .apiReady
                 isRunning = true
@@ -146,9 +190,17 @@ class ClashViewModel: ObservableObject {
         }
     }
     
+    func persistActiveCheckpoint() async {
+        guard let checkpoint = activeCheckpoint else { return }
+        do { try await ConfigService.shared.rememberSuccessfulRuntime(checkpoint) }
+        catch { addLog("[Config] Runtime verified, but recovery snapshot could not be saved", level: .warning) }
+    }
+
     @discardableResult
     func stopCore(intendedRestart: Bool = false) async -> Bool {
         appliedProfileRevision = ""
+        verifiedMixedPort = nil
+        verifiedSocksPort = nil
         runtimeState = .stopping
         ClashController.shared.runtimeGeneration = UUID()
         AppState.shared.activeConnectionsCount = nil
@@ -165,11 +217,19 @@ class ClashViewModel: ObservableObject {
     func restart() async {
         // Global operation gate
         guard !AppTerminationCoordinator.shared.isCleaningUp, !isToggling else { return }
+        guard AppState.shared.beginOperation("Restarting Core") else { return }
         isToggling = true
-        defer { isToggling = false }
-        
-        guard await stopCore(intendedRestart: true) else { return }
-        await startCore(isRestart: true)
+        defer {
+            isToggling = false
+            AppState.shared.finishOperation(error: AppState.shared.lastOperationError)
+        }
+        guard runtimeState.isAPIReady else { await startCore(isRestart: true); return }
+        do {
+            let checkpoint = try await captureRecoveryCheckpoint()
+            let result = await ConfigurationCoordinator.replace(previous: checkpoint,
+                targetMode: AppState.shared.tunEnabled, restoreProxy: AppState.shared.systemProxyEnabled)
+            if result != .committed { AppState.shared.reportError("Restart did not commit (\(result)). Check the runtime status.") }
+        } catch { AppState.shared.reportError("No verified configuration is available for restart recovery.") }
     }
     
     /// Log levels matching Clash core levels
@@ -240,6 +300,36 @@ class ClashViewModel: ObservableObject {
             if !running, self.runtimeState != .stopping {
                 self.runtimeState = .stopped
             }
+        }
+    }
+
+    func handleUnexpectedExit() {
+        guard runtimeState.isAPIReady, !isToggling, !AppTerminationCoordinator.shared.isCleaningUp else { return }
+        isRunning = false
+        verifiedMixedPort = nil
+        verifiedSocksPort = nil
+        appliedProfileRevision = ""
+        runtimeState = .failed("The core exited unexpectedly")
+        ClashController.shared.runtimeGeneration = UUID()
+        ClashController.shared.stopTrafficMonitor()
+        AppState.shared.activeConnectionsCount = nil
+        Task { @MainActor in
+            let app = AppState.shared
+            guard app.beginOperation("Restoring Network After Core Exit") else {
+                app.reportError("The core exited. Check the system proxy before reconnecting.")
+                return
+            }
+            defer { app.finishOperation(error: app.lastOperationError) }
+            if app.systemProxyEnabled {
+                if await SystemProxyManager.shared.setSystemProxy(enabled: false) {
+                    app.systemProxyEnabled = false
+                    // Keep the saved user preference for a later deliberate reconnect.
+                } else {
+                    app.reportError("The core exited and the system proxy could not be restored. Recovery is required.")
+                    return
+                }
+            }
+            app.reportError("The core exited. Restart or restore the last verified configuration to reconnect.")
         }
     }
 

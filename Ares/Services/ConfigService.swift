@@ -1,4 +1,6 @@
 import Foundation
+import SubscriptionKit
+import Darwin
 
 /// Service for building and managing Clash configuration
 /// Handles profile merging and conflict resolution
@@ -30,6 +32,98 @@ actor ConfigService {
         return baseDir.appendingPathComponent(dirName)
     }
     
+    func rememberSuccessfulRuntime(_ checkpoint: RuntimeCheckpoint) throws {
+        try RuntimeCheckpointStore.save(checkpoint, directory: baseDir.appendingPathComponent("recovery"))
+    }
+
+    func successfulRuntime(tunEnabled: Bool) throws -> RuntimeCheckpoint {
+        try RuntimeCheckpointStore.load(directory: baseDir.appendingPathComponent("recovery"), tunEnabled: tunEnabled)
+    }
+
+    /// The last validated file on disk, not a claim that the running core loaded it.
+    func savedConfiguration(tunEnabled: Bool) async throws -> String {
+        try await fileManager.readText(from: getConfigPath(tunEnabled: tunEnabled))
+    }
+
+    /// Reuse a previously captured configuration during rollback instead of rebuilding
+    /// it from a possibly updated subscription. It still passes strict core validation.
+    func restoreConfiguration(_ content: String, tunEnabled: Bool) async throws {
+        let directory = getConfigDir(tunEnabled: tunEnabled)
+        try await ConfigDirectoryPreparation.shared.prepare(directory)
+        try await writeValidatedConfig(content, to: getConfigPath(tunEnabled: tunEnabled), directory: directory)
+    }
+
+    /// Complete structural source-to-saved diff; raw documents never leave this service.
+    func sourceDifferences(profilePath: URL?, tunEnabled: Bool) async throws -> [ConfigurationDiff.Row] {
+        let source: String
+        if let profilePath { source = try await fileManager.readText(from: profilePath) }
+        else { source = "{}" }
+        let saved = try await savedConfiguration(tunEnabled: tunEnabled)
+        let rows = try ConfigurationDiff.compare(before: source, after: saved)
+        guard saved == (try await savedConfiguration(tunEnabled: tunEnabled)) else { throw CancellationError() }
+        if let profilePath {
+            guard source == (try await fileManager.readText(from: profilePath)) else { throw CancellationError() }
+        }
+        return rows
+    }
+
+    func ruleSources(configuration: String, profilePath: URL?, localRules: String?) async throws -> RuleSourceDocument.Document {
+        let source: String?
+        if let profilePath { source = try await fileManager.readText(from: profilePath) }
+        else { source = nil }
+        let result = try RuleSourceDocument.read(configuration: configuration, subscription: source, localRules: localRules)
+        if let profilePath {
+            guard source == (try await fileManager.readText(from: profilePath)) else { throw CancellationError() }
+        }
+        return result
+    }
+
+    func policyGroups(profilePath: URL, overrides: String) async throws -> ([PolicyConfiguration.Group], [PolicyConfiguration.Group]) {
+        let source = try await fileManager.readText(from: profilePath)
+        let inherited = try PolicyConfiguration.read(source)
+        let effective = try PolicyConfiguration.read(PolicyConfiguration.apply(source: source, overrides: overrides))
+        guard source == (try await fileManager.readText(from: profilePath)) else { throw CancellationError() }
+        return (inherited, effective)
+    }
+
+    func egressSettings(profilePath: URL, overrides: String) async throws -> (EgressConfiguration.Document, EgressConfiguration.Document) {
+        let source = try await fileManager.readText(from: profilePath)
+        let inherited = try EgressConfiguration.read(source)
+        // Keep outdated drafts editable after a subscription removes or renames a node.
+        // The UI overlays explicit fields; applying always runs the complete validation.
+        _ = try EgressConfiguration.decode(overrides)
+        let effective = inherited
+        guard source == (try await fileManager.readText(from: profilePath)) else { throw CancellationError() }
+        return (inherited, effective)
+    }
+
+    func dnsSettings(profilePath: URL, overrides: String) async throws -> ([String: String], [String: String], [String: String]) {
+        let source = try await fileManager.readText(from: profilePath)
+        let base = await MainActor.run { ClashConfig().toYAML() }
+        let baseline = try EffectiveConfiguration.build(source: source, defaults: base, overrides: [])
+        let inherited = try DNSConfiguration.read(baseline)
+        let subscription = try DNSConfiguration.read(source)
+        let sources = Dictionary(uniqueKeysWithValues: inherited.keys.map { ($0, subscription[$0] == nil ? "App default" : "Subscription") })
+        let effective = try DNSConfiguration.read(DNSConfiguration.apply(source: baseline, overrides: overrides))
+        guard source == (try await fileManager.readText(from: profilePath)) else { throw CancellationError() }
+        return (inherited, effective, sources)
+    }
+
+    /// Prospective inherited settings; no core validation, resource downloads or runtime writes.
+    func inheritedSettings(profilePath: URL?) async throws -> [String: EffectiveConfiguration.Field] {
+        let source: String
+        if let profilePath { source = try await fileManager.readText(from: profilePath) }
+        else { source = "{}" }
+        let base = await MainActor.run {
+            var config = ClashConfig()
+            // TUN fields describe the configuration to use when TUN is enabled.
+            config.enableTun = true
+            return config.toYAML()
+        }
+        return try EffectiveConfiguration.inheritedFields(source: source, defaults: base,
+            paths: ProfileConfigMerge.inheritablePaths)
+    }
+
     /// Build config.yaml by merging profile with Clash settings
     func buildConfig(tunEnabled: Bool = false) async throws {
         // Log on MainActor
@@ -61,9 +155,6 @@ actor ConfigService {
              throw error
         }
         
-        // Parse profile YAML to remove conflicting keys (Performed on Actor background thread)
-        var cleanedProfile = ProfileConfigMerge.removingOverrides(from: profileContent)
-        
         // Dynamic Rules: Inject Bypass rules and MITM rules
         let (mitmEnabled, mitmPort, bypassRules, localRules, mitmPortsString, mitmHosts, tlsFingerprint) = await MainActor.run {
             let mitm = NetworkMITMService.shared
@@ -79,45 +170,48 @@ actor ConfigService {
             )
         }
         
-        let activeFingerprint = tlsFingerprint
-        
-        // Inject TLS Fingerprint if enabled (Do this before rule injection for cleaner logic)
-        if activeFingerprint != "none" {
-            cleanedProfile = injectFingerprint(into: cleanedProfile, fingerprint: activeFingerprint)
+        let (baseConfig, overrides) = await MainActor.run {
+            var config = ClashConfig(fromUserDefaults: true)
+            config.enableTun = tunEnabled
+            return (config.toYAML(), ProfileConfigMerge.overridePaths(defaults: .standard, tunEnabled: tunEnabled))
         }
-        
-        // Override subscription's url-test interval for faster failover
-        cleanedProfile = overrideURLTestInterval(in: cleanedProfile, newInterval: 300)
-
-        cleanedProfile = injectDynamicRules(into: cleanedProfile, tunEnabled: tunEnabled, mitmEnabled: mitmEnabled, mitmPort: mitmPort, bypassRules: bypassRules, localRules: localRules, mitmPortsString: mitmPortsString, mitmHosts: mitmHosts)
-        
-        // Build base Clash config with TUN setting (MainActor required for ClashConfig)
-        let baseConfig = await MainActor.run {
-            var clashConfig = ClashConfig(fromUserDefaults: true)
-            clashConfig.enableTun = tunEnabled
-            if tunEnabled {
-                clashConfig.skipDNS = false         // Always use our DNS
-                clashConfig.skipSniffer = false     // Always use our Sniffer
+        let injections = dynamicRules(tunEnabled: tunEnabled, mitmEnabled: mitmEnabled,
+            mitmPort: mitmPort, bypassRules: bypassRules, localRules: localRules,
+            mitmPortsString: mitmPortsString, mitmHosts: mitmHosts)
+        let policyOverrides = await MainActor.run {
+            ProfileService.shared.activeProfileID.map {
+                UserDefaults.standard.string(forKey: PolicyGroupService.key($0)) ?? "{}"
+            } ?? "{}"
+        }
+        let policySource = try PolicyConfiguration.apply(source: profileContent, overrides: policyOverrides)
+        let dnsOverrides = await MainActor.run {
+            ProfileService.shared.activeProfileID.map {
+                UserDefaults.standard.string(forKey: DNSSettingsService.key($0)) ?? "{}"
+            } ?? "{}"
+        }
+        // Apply advanced DNS after default inheritance; basic/runtime-owned keys stay separate.
+        let mergedConfig = try EffectiveConfiguration.build(source: policySource, defaults: baseConfig,
+            overrides: overrides, rules: injections.rules, localProxy: injections.proxy,
+            fingerprint: tlsFingerprint)
+        let dnsConfig = try DNSConfiguration.apply(source: mergedConfig, overrides: dnsOverrides)
+        let egressOverrides = await MainActor.run {
+            ProfileService.shared.activeProfileID.map {
+                UserDefaults.standard.string(forKey: EgressSettingsService.key($0)) ?? EgressConfiguration.empty
+            } ?? EgressConfiguration.empty
+        }
+        let finalConfig = try EgressConfiguration.apply(source: dnsConfig, overrides: egressOverrides)
+        if try EgressConfiguration.decode(egressOverrides) != EgressConfiguration.Overrides() {
+            let routing = try EgressConfiguration.read(finalConfig)
+            for interface in Set(routing.nodes.map(\.interface) + [routing.interface]) where !interface.isEmpty {
+                guard interface.withCString({ if_nametoindex($0) }) != 0 else { throw EgressConfiguration.ValidationError.invalid }
             }
-            return clashConfig.toYAML()
         }
-        
-        // Merge: base config + cleaned profile
-        // Get profile name for comment
-        let profileName = await MainActor.run { ProfileService.shared.activeProfile?.name ?? "Unknown" }
-        
+
         let targetPath = getConfigPath(tunEnabled: tunEnabled)
         let targetDir = getConfigDir(tunEnabled: tunEnabled)
         
         // Ensure directory exists
         try await ConfigDirectoryPreparation.shared.prepare(targetDir)
-        
-        let finalConfig = """
-        \(baseConfig)
-        
-        # Profile Content (\(profileName))
-        \(cleanedProfile)
-        """
         
         // Write to config.yaml (Async, non-blocking)
         do {
@@ -136,13 +230,9 @@ actor ConfigService {
     
     /// Validate a candidate with the same resource directory before replacing the working file.
     private func writeValidatedConfig(_ content: String, to destination: URL, directory: URL) async throws {
-        let candidate = directory.appendingPathComponent("candidate-\(UUID().uuidString).yaml")
-        defer { try? FileManager.default.removeItem(at: candidate) }
-        try await fileManager.writeText(content, to: candidate)
-        guard try await CoreManager.shared.validateConfigStrict(configDir: directory, configFile: candidate) else {
-            throw NSError(domain: "ConfigService", code: 2, userInfo: [NSLocalizedDescriptionKey: "Generated configuration is invalid. The previous configuration was kept."])
+        try await ValidatedConfigurationFile.commit(content, to: destination) { candidate in
+            try await CoreManager.shared.validateConfigStrict(configDir: directory, configFile: candidate)
         }
-        try await fileManager.writeText(content, to: destination)
     }
 
     /// Inject Dynamic Rules (Bypass & MITM) into existing profile sections
@@ -150,13 +240,8 @@ actor ConfigService {
     /// - localRules: User-defined raw rules (from Rules interface)
     /// - mitm: MITM interception rules (hijack configured ports/domains)
     /// - mitmHosts: Whitelist domains - only these will be routed to MITM
-    nonisolated private func injectDynamicRules(into yaml: String, tunEnabled: Bool, mitmEnabled: Bool, mitmPort: Int, bypassRules: String, localRules: String, mitmPortsString: String, mitmHosts: String) -> String {
-        var result = yaml
+    nonisolated private func dynamicRules(tunEnabled: Bool, mitmEnabled: Bool, mitmPort: Int, bypassRules: String, localRules: String, mitmPortsString: String, mitmHosts: String) -> (rules: [String], proxy: EffectiveConfiguration.LocalProxy?) {
         var rulesToInject: [String] = []  // No indentation yet
-        
-        // --- TLS Fingerprint Injection (Before rule processing) ---
-        // This is handled by a separate helper, but we should make sure this method focuses on Rules.
-        // Fingerprint injection is best done before rule injection to keep logic clean.
         
         // 1. Generate Local Overrides (Highest Priority)
         // Accept lines with or without a leading "- " (YAML list marker) for user-friendliness.
@@ -164,7 +249,7 @@ actor ConfigService {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty && !$0.hasPrefix("#") }
             .map { line -> String in
-                if line.hasPrefix("-") {
+                if line.hasPrefix("- ") {
                     return line
                 } else {
                     return "- " + line
@@ -209,85 +294,11 @@ actor ConfigService {
                 }
             }
             
-            // Inject MITM Proxy Definition
-            // Detect indentation for proxies
-            var proxyIndent = "  " // Default 2 spaces
-            if let range = result.range(of: "(?m)^\\s*proxies:.*$", options: .regularExpression) {
-                proxyIndent = detectIndentation(in: result, after: range)
-            }
-            
-            let mitmProxy = """
-            \(proxyIndent)- name: MITM-Intercept
-            \(proxyIndent)  type: http
-            \(proxyIndent)  server: 127.0.0.1
-            \(proxyIndent)  port: \(mitmPort)
-            """
-            
-            // Regex to find "proxies:" at start of line
-            if let range = result.range(of: "(?m)^\\s*proxies:.*$", options: .regularExpression) {
-                result.insert(contentsOf: "\n" + mitmProxy, at: range.upperBound)
-            } else {
-                // If missing, append (using default 2 space indent)
-                result.append("\nproxies:\n" + mitmProxy)
-            }
         }
-        
-        // 4. Inject Rules Buffer at the top of "rules:"
-        if !rulesToInject.isEmpty {
-            // Detect indentation for rules
-            var ruleIndent = "  "
-            if let range = result.range(of: "(?m)^\\s*rules:.*$", options: .regularExpression) {
-                ruleIndent = detectIndentation(in: result, after: range)
-            }
-            
-            // Apply indentation to all rules
-            let dynamicRulesBuffer = rulesToInject.map { ruleIndent + $0 }.joined(separator: "\n")
-            
-            // Regex to find "rules:" at start of line
-            if let range = result.range(of: "(?m)^\\s*rules:.*$", options: .regularExpression) {
-                result.insert(contentsOf: "\n" + dynamicRulesBuffer, at: range.upperBound)
-            } else {
-                 // If missing, append
-                result.append("\nrules:\n" + dynamicRulesBuffer)
-            }
-        }
-        
-        return result
-    }
-    
-    /// Helper to detect indentation of list items
-    nonisolated private func detectIndentation(in yaml: String, after range: Range<String.Index>) -> String {
-        let defaultIndent = "  "
-        // Look at the next 20 lines max
-        let substring = yaml[range.upperBound...]
-        let lines = substring.components(separatedBy: .newlines).prefix(20)
-        
-        for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.isEmpty || trimmed.hasPrefix("#") { continue }
-            
-            // If we find a list item, calculate its indentation
-            if trimmed.hasPrefix("-") {
-                let leadingSpaces = line.prefix(while: { $0 == " " }).count
-                return String(repeating: " ", count: leadingSpaces)
-            }
-            
-            // If we hit something that's NOT a list item (and not a comment/empty), 
-            // the list might be empty or formatted differently. Stop.
-            // Exception: sub-keys (e.g. key: value). But we are looking for list items of the parent.
-            if !trimmed.hasPrefix("-") && trimmed.contains(":") {
-                 // Might be end of section
-                 break
-            }
-        }
-        return defaultIndent
-    }
-
-    /// Override url-test group intervals for faster failover (default: 300s)
-    nonisolated private func overrideURLTestInterval(in yaml: String, newInterval: Int) -> String {
-        let pattern = "(type:\\s*url-test[\\s\\S]*?interval:\\s*)\\d+"
-        let regex = try? NSRegularExpression(pattern: pattern)
-        return regex?.stringByReplacingMatches(in: yaml, range: NSRange(yaml.startIndex..., in: yaml), withTemplate: "$1\(newInterval)") ?? yaml
+        let rules = rulesToInject.map { String($0.dropFirst(2)) }
+        let proxy: EffectiveConfiguration.LocalProxy? = tunEnabled && mitmEnabled && mitmPort > 0
+            ? .init(name: "MITM-Intercept", port: mitmPort) : nil
+        return (rules, proxy)
     }
 
     /// Build a safe fallback config when no profile is available
@@ -307,23 +318,17 @@ actor ConfigService {
             return clashConfig.toYAML()
         }
         
-        let dynamicRules = await MainActor.run {
+        let localSettings = await MainActor.run {
             let defaults = UserDefaults.standard
             return (defaults.string(forKey: DefaultsKeys.bypassRules) ?? "",
                     defaults.string(forKey: DefaultsKeys.localRules) ?? "")
         }
-        let fallback = injectDynamicRules(into: "proxies: []\nproxy-groups: []\nrules:\n  - MATCH,DIRECT",
-            tunEnabled: tunEnabled, mitmEnabled: false, mitmPort: 0,
-            bypassRules: dynamicRules.0, localRules: dynamicRules.1, mitmPortsString: "", mitmHosts: "")
-        let config = """
-        \(configYAML)
-        
-        # Safe Fallback Configuration
-        # No active profile selected
-        
-        \(fallback)
-        """
-        
+        let injections = dynamicRules(tunEnabled: tunEnabled, mitmEnabled: false, mitmPort: 0,
+            bypassRules: localSettings.0, localRules: localSettings.1, mitmPortsString: "", mitmHosts: "")
+        let config = try EffectiveConfiguration.build(
+            source: "proxies: []\nproxy-groups: []\nrules: [\"MATCH,DIRECT\"]",
+            defaults: configYAML, overrides: [], rules: injections.rules)
+
         try await writeValidatedConfig(config, to: targetPath, directory: targetDir)
         await MainActor.run {
             ClashViewModel.shared.addLog("[Config] Safe fallback config created", level: .debug)
@@ -331,133 +336,4 @@ actor ConfigService {
     }
 
     
-    /// Inject TLS Fingerprint into proxy definitions (Robust Flow & Block support)
-    nonisolated private func injectFingerprint(into yaml: String, fingerprint: String) -> String {
-        let lines = yaml.components(separatedBy: .newlines)
-        var result: [String] = []
-        var count = 0
-        
-        // Target protocols for fingerprint injection
-        let targets = ["ss", "vmess", "vless", "trojan", "hysteria", "hysteria2", "tuic"]
-        
-        // State Machine
-        var inProxiesSection = false
-        var proxyBuffer: [String] = []
-        
-        // Helper: Process and flush the current buffered proxy item
-        func flushBuffer() {
-            guard !proxyBuffer.isEmpty else { return }
-            
-            let joined = proxyBuffer.joined(separator: "\n")
-            let lowerJoined = joined.lowercased()
-            
-            // Check if this proxy block contains a target protocol
-            var isTarget = false
-            for t in targets {
-                // Check for "type: t" or "type: "t""
-                if lowerJoined.contains("type: \(t)") || lowerJoined.contains("type: \"\(t)\"") {
-                    isTarget = true
-                    break
-                }
-            }
-            
-            // Check if fingerprint already exists
-            let hasFingerprint = lowerJoined.contains("client-fingerprint")
-            
-            if isTarget && !hasFingerprint {
-                // Determine injection strategy
-                var injected = false
-                
-                // Strategy A: Flow Style (Single line with braces)
-                // If buffer is 1 line and has braces
-                if proxyBuffer.count == 1 && proxyBuffer[0].contains("{") && proxyBuffer[0].contains("}") {
-                    var line = proxyBuffer[0]
-                    if let lastBrace = line.lastIndex(of: "}") {
-                        line.insert(contentsOf: ", client-fingerprint: \(fingerprint)", at: lastBrace)
-                        result.append(line)
-                        count += 1
-                        injected = true
-                    }
-                }
-                
-                // Strategy B: Block Style (Multi-line)
-                if !injected {
-                    // Find the "type:" line and inject after it
-                    for line in proxyBuffer {
-                        result.append(line)
-                        
-                        let trimmed = line.trimmingCharacters(in: .whitespaces).lowercased()
-                        if !injected && (trimmed.hasPrefix("type:") || trimmed.hasPrefix("- type:")) {
-                            // Calculate indentation
-                            let indent = String(line.prefix(while: { $0 == " " || $0 == "\t" }))
-                            var padding = indent
-                            
-                            // If line starts with "-", usually subsequent keys are indented by 2 more spaces
-                            if line.trimmingCharacters(in: .whitespaces).hasPrefix("-") {
-                                padding += "  "
-                            }
-                            
-                            result.append("\(padding)client-fingerprint: \(fingerprint)")
-                            
-                            count += 1
-                            injected = true
-                        }
-                    }
-                }
-            } else {
-                // No injection needed, passthrough
-                result.append(contentsOf: proxyBuffer)
-            }
-            
-            proxyBuffer.removeAll()
-        }
-        
-        for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            
-            // 1. Detect Section Headers
-            // Root keys have no indentation (or minimal if messy) and end with colon.
-            // Be careful not to trigger on comments or empty lines.
-            if !trimmed.isEmpty && !trimmed.hasPrefix("#") {
-                let isRootKey = !line.hasPrefix(" ") && !line.hasPrefix("\t") && trimmed.hasSuffix(":")
-                
-                if isRootKey {
-                    if inProxiesSection {
-                        flushBuffer() // Flush last proxy item
-                        inProxiesSection = false
-                    }
-                    
-                    if trimmed == "proxies:" {
-                        inProxiesSection = true
-                        result.append(line)
-                        continue
-                    }
-                }
-            }
-            
-            // 2. Proxies Section Logic
-            if inProxiesSection {
-                // Check if it's a new list item
-                if trimmed.hasPrefix("-") {
-                    flushBuffer() // Flush previous proxy
-                    proxyBuffer.append(line)
-                } else {
-                    // Continuation or Comment?
-                    if proxyBuffer.isEmpty {
-                        // Random noise in proxies section
-                        result.append(line)
-                    } else {
-                        proxyBuffer.append(line)
-                    }
-                }
-            } else {
-                // Passthrough for non-proxy lines
-                result.append(line)
-            }
-        }
-        
-        flushBuffer() // Final flush if ended in proxy section
-        
-        return result.joined(separator: "\n")
-    }
 }

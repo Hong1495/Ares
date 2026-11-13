@@ -20,6 +20,7 @@ final class AppUpdateService: NSObject, ObservableObject, SPUUpdaterDelegate, SP
     private var controller: SPUStandardUpdaterController?
     private var pendingInstall: (() -> Void)?
     private var preparingInstall = false
+    private var installGeneration = UUID()
     private var canCheckObservation: NSKeyValueObservation?
     @Published private(set) var canCheck = false
 
@@ -105,9 +106,10 @@ final class AppUpdateService: NSObject, ObservableObject, SPUUpdaterDelegate, SP
     func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
         isChecking = false
         pendingInstall = nil
+        installGeneration = UUID()
         record("Update aborted: \(error.localizedDescription)")
         if AppTerminationCoordinator.shared.updateShutdownPrepared {
-            AppTerminationCoordinator.shared.updateShutdownPrepared = false
+            AppTerminationCoordinator.shared.cancelUpdateHandoff()
             ClashViewModel.shared.isToggling = false
         }
         if (error as NSError).code != 1001 { status = error.localizedDescription }
@@ -118,6 +120,7 @@ final class AppUpdateService: NSObject, ObservableObject, SPUUpdaterDelegate, SP
     }
 
     func updater(_ updater: SPUUpdater, shouldPostponeRelaunchForUpdate item: SUAppcastItem, untilInvokingBlock installHandler: @escaping () -> Void) -> Bool {
+        installGeneration = UUID()
         pendingInstall = installHandler
         resumeInstallation()
         return true
@@ -138,9 +141,17 @@ final class AppUpdateService: NSObject, ObservableObject, SPUUpdaterDelegate, SP
     private func resumeInstallation() {
         guard !preparingInstall, let install = pendingInstall else { return }
         preparingInstall = true
+        let generation = installGeneration
         Task { @MainActor in
             defer { preparingInstall = false }
-            guard await AppTerminationCoordinator.shared.prepareForTermination() else {
+            let prepared = await AppTerminationCoordinator.shared.prepareForTermination()
+            // Sparkle can abort while cleanup is awaiting an operation or authorization.
+            // A stale install closure must never run after that abort.
+            guard generation == installGeneration else {
+                if prepared { AppTerminationCoordinator.shared.cancelUpdateHandoff() }
+                return
+            }
+            guard prepared else {
                 status = "Update is ready. Network cleanup failed; click the update dot to retry."
                 canCheck = true
                 AppState.shared.reportError(status)

@@ -20,11 +20,11 @@ final class SystemProxyTerminationSourceTests: XCTestCase {
             .deletingLastPathComponent()
             .appendingPathComponent("Ares/AresApp.swift"))
 
-        let cleanupGuard = try XCTUnwrap(source.range(of: "guard SystemProxyManager.shared.disableAllProxiesSync() else"))
+        let cleanupGuard = try XCTUnwrap(source.range(of: "await SystemProxyManager.shared.setSystemProxy(enabled: false)"))
         let stopCore = try XCTUnwrap(source.range(of: "await ClashViewModel.shared.stopCore()"))
         XCTAssertLessThan(cleanupGuard.lowerBound, stopCore.lowerBound)
         XCTAssertTrue(source.contains("sender.reply(toApplicationShouldTerminate: isSafeToTerminate)"))
         XCTAssertTrue(source.contains("for _ in 0..<300"))
-        XCTAssertTrue(source.contains("guard !isCleaningUp else { return false }"))
+        XCTAssertTrue(source.contains("await transition.prepare("))
     }
 }

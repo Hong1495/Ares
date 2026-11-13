@@ -26,6 +26,8 @@ struct ProxiesView: View {
     @State private var selectedTab: ProxyTab = .rule
     @State private var expandedGroups = Set<String>()
     @State private var searchText = ""
+    @State private var showingResources = false
+    @State private var showingPolicies = false
     private var profileKey: String { profileService.activeProfileRevision }
 
     private var showingLive: Bool {
@@ -82,6 +84,8 @@ struct ProxiesView: View {
         }
         .navigationTitle("")
         .toolbar { ProxiesTitleToolbar(count: nodeCount) }
+        .sheet(isPresented: $showingResources) { ProxyResourcesView().environmentObject(clashController) }
+        .sheet(isPresented: $showingPolicies) { PolicyGroupsView().environmentObject(clashController) }
         .onAppear { selectedTab = ProxyTab(rawValue: appState.currentMode.rawValue.capitalized) ?? .rule }
         .onChange(of: appState.currentMode) { _, mode in
             selectedTab = ProxyTab(rawValue: mode.rawValue.capitalized) ?? .rule
@@ -176,6 +180,10 @@ struct ProxiesView: View {
                 .frame(minWidth: 130, idealWidth: 200, maxWidth: 200)
 
             HStack(spacing: DS.Space.xs) {
+                Button { showingPolicies = true } label: { Image(systemName: "slider.horizontal.3") }
+                    .help("Policy groups and parameters").accessibilityLabel("Policy groups")
+                Button { showingResources = true } label: { Image(systemName: "square.stack") }
+                    .disabled(!showingLive).help("Node resources").accessibilityLabel("Node resources")
                 if !clashViewModel.isRunning {
                     Button {
                         Task { await clashViewModel.start() }
@@ -344,7 +352,7 @@ struct SimpleProxyGroupCard: View {
 
             Spacer(minLength: DS.Space.sm)
 
-            if let now = group.now {
+            if let now = group.now, group.type != "LoadBalance" {
                 HStack(spacing: 5) {
                     Circle()
                         .fill(Color.accentColor)

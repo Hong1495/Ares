@@ -43,6 +43,8 @@ class AppState: ObservableObject {
     @Published var animationsEnabled: Bool = true
     var isForeground = true
     var didSendInitialWake = false
+    var systemIsSleeping = false
+    var wakeVerificationTask: Task<Void, Never>?
 
     // System toggles
     @Published var systemProxyEnabled = false

@@ -38,22 +38,16 @@ extension AppState {
                     return
                 }
             }
-            // Compile/validate the target configuration before interrupting the old core.
-            do { try await ConfigService.shared.buildConfig(tunEnabled: !oldTUN) }
-            catch { finishOperation(error: error.localizedDescription); return }
-            let outcome = await RuntimeTransition.perform(
-                stopCurrent: { await self.clashViewModel.stopCore(intendedRestart: true) },
-                activateNew: {
-                    self.setTUNConfiguration(!oldTUN)
-                    return await self.startAndVerifyTUN(expected: !oldTUN, restoreProxy: hadProxy)
-                },
-                stopNew: { await self.clashViewModel.stopCore(intendedRestart: true) },
-                restorePrevious: {
-                    self.setTUNConfiguration(oldTUN)
-                    return await self.startAndVerifyTUN(expected: oldTUN, restoreProxy: hadProxy)
-                })
+            let checkpoint: RuntimeCheckpoint
+            do { checkpoint = try await clashViewModel.captureRecoveryCheckpoint() }
+            catch { finishOperation(error: "No verified configuration is available for TUN recovery."); return }
+            let outcome = await ConfigurationCoordinator.replace(previous: checkpoint, targetMode: !oldTUN,
+                restoreProxy: hadProxy,
+                activatePreferences: { self.setTUNConfiguration(!oldTUN) },
+                restorePreferences: { self.setTUNConfiguration(oldTUN) })
             switch outcome {
             case .committed: finishOperation()
+            case .preparationFailed: finishOperation(error: "TUN configuration was rejected; previous settings were restored.")
             case .unchanged: finishOperation(error: "Core could not stop; TUN switch cancelled.")
             case .restored: finishOperation(error: "TUN switch failed; the previous core and proxy configuration were restored.")
             case .recoveryRequired: finishOperation(error: "TUN switch failed; recovery of the previous core or proxy could not be verified.")

@@ -38,7 +38,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        if AppTerminationCoordinator.shared.updateShutdownPrepared { return .terminateNow }
+        if AppTerminationCoordinator.shared.isPrepared { return .terminateNow }
         guard !isTerminatingAfterCleanup else { return .terminateLater }
 
         isTerminatingAfterCleanup = true
@@ -61,9 +61,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        // Sparkle's handoff already restored networking and stopped the owned core.
-        // Do not run a second synchronous proxy cleanup while the installer waits for exit.
-        if AppTerminationCoordinator.shared.updateShutdownPrepared { return }
+        // Normal quit and Sparkle share the same completed cleanup.
+        // The synchronous fallback is only for an unprepared termination.
+        if AppTerminationCoordinator.shared.isPrepared { return }
         // Force cleanup on exit
         ClashViewModel.shared.addLog("[AppDelegate] App terminating - cleaning up", level: .debug)
 
@@ -138,6 +138,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func registerWorkspaceObservers() {
         let center = NSWorkspace.shared.notificationCenter
+        workspaceObservers.append(center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { _ in
+            Task { @MainActor in AppState.shared.systemWillSleep() }
+        })
+        workspaceObservers.append(center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { _ in
+            Task { @MainActor in AppState.shared.systemDidWake() }
+        })
         workspaceObservers.append(
             center.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { notification in
                 guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
@@ -158,44 +164,50 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 final class AppTerminationCoordinator {
     static let shared = AppTerminationCoordinator()
 
-    private(set) var isCleaningUp = false
+    private let transition = TerminationTransition()
+    var isCleaningUp: Bool { transition.blocksOperations }
+    var isPrepared: Bool { transition.state == .prepared }
 
     private init() {}
 
     var updateShutdownPrepared = false
+
+    func cancelUpdateHandoff() {
+        updateShutdownPrepared = false
+        transition.cancelHandoff()
+    }
 
     func requestQuit() {
         NSApp.terminate(nil)
     }
 
     func prepareForTermination() async -> Bool {
-        guard !isCleaningUp else { return false }
-        isCleaningUp = true
-        defer { isCleaningUp = false }
-
-        // Block new actions and allow an already-running transition to settle.
-        for _ in 0..<300 {
-            if !ClashViewModel.shared.isToggling && AppState.shared.operationStatus == nil { break }
-            try? await Task.sleep(for: .milliseconds(100))
-        }
-        guard !ClashViewModel.shared.isToggling, AppState.shared.operationStatus == nil else { return false }
-        ClashViewModel.shared.addLog("[AppTermination] Preparing safe shutdown", level: .debug)
-
-        guard SystemProxyManager.shared.disableAllProxiesSync() else {
-            ClashViewModel.shared.addLog("[AppTermination] Failed to restore system proxy; keeping core alive", level: .error)
-            return false
-        }
-
-        guard await ClashViewModel.shared.stopCore() else { return false }
-        if NetworkMITMService.shared.isRunning {
-            await NetworkMITMService.shared.stop()
-        }
-
-        AppState.shared.systemProxyEnabled = false
-        AppState.shared.objectWillChange.send()
-
-        ClashViewModel.shared.addLog("[AppTermination] Safe shutdown complete", level: .debug)
-        return true
+        await transition.prepare(
+            waitUntilIdle: {
+                for _ in 0..<300 {
+                    if !ClashViewModel.shared.isToggling && AppState.shared.operationStatus == nil { return true }
+                    do { try await Task.sleep(for: .milliseconds(100)) } catch { return false }
+                }
+                return false
+            },
+            restoreProxy: {
+                ClashViewModel.shared.addLog("[AppTermination] Preparing safe shutdown", level: .debug)
+                let restored = await SystemProxyManager.shared.setSystemProxy(enabled: false)
+                if !restored {
+                    ClashViewModel.shared.addLog("[AppTermination] Failed to restore system proxy; keeping core alive", level: .error)
+                }
+                return restored
+            },
+            stopCore: { await ClashViewModel.shared.stopCore() },
+            stopDependents: {
+                AppState.shared.wakeVerificationTask?.cancel()
+                if NetworkMITMService.shared.isRunning { await NetworkMITMService.shared.stop() }
+            },
+            didPrepare: {
+                AppState.shared.systemProxyEnabled = false
+                AppState.shared.objectWillChange.send()
+                ClashViewModel.shared.addLog("[AppTermination] Safe shutdown complete", level: .debug)
+            })
     }
 }
 

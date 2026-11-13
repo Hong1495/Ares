@@ -1,5 +1,6 @@
 import Foundation
 import OSLog
+import SubscriptionKit
 
 /// Actor-based Clash service - properly isolated from MainActor
 /// Replaces @MainActor ClashService to prevent Signal 9 watchdog kills
@@ -19,6 +20,7 @@ actor ClashServiceActor {
     private var process: Process?
     private var pipe: Pipe?
     private var lifecycleBusy = false
+    private var processToken = UUID()
     
     // MARK: - Configuration
     private var configDir: URL {
@@ -49,9 +51,18 @@ actor ClashServiceActor {
     
     // MARK: - Public Methods
     
+    func verifyAdditionalListeners(configuration: String, tunEnabled: Bool) async throws {
+        guard !(try EgressConfiguration.endpoints(configuration: configuration)).isEmpty else { return }
+        let token = processToken
+        let owned = try await processReaper.ownedProcesses()
+        try await ListenerVerification.verify(configuration: configuration,
+            apiPort: tunEnabled ? ClashPorts.apiTun : ClashPorts.apiNormal, ownedPIDs: Set(owned.map(\.pid)))
+        guard token == processToken, process?.isRunning == true else { throw CancellationError() }
+    }
+
     /// Start Clash process
     /// - Parameter isRestart: If true, bypasses "already running" check
-    func start(isRestart: Bool = false) async -> Bool {
+    func start(isRestart: Bool = false, preparedConfiguration: String? = nil) async -> Bool {
         guard !lifecycleBusy else { return false }
         lifecycleBusy = true
         defer { lifecycleBusy = false }
@@ -94,7 +105,11 @@ actor ClashServiceActor {
         addLog("[ClashServiceActor] 📝 Building configuration...")
         do {
             let tunEnabled = await MainActor.run { AppState.shared.tunEnabled }
-            try await ConfigService.shared.buildConfig(tunEnabled: tunEnabled)
+            if let preparedConfiguration {
+                try await ConfigService.shared.restoreConfiguration(preparedConfiguration, tunEnabled: tunEnabled)
+            } else {
+                try await ConfigService.shared.buildConfig(tunEnabled: tunEnabled)
+            }
         } catch {
             addLog("[ClashServiceActor] ❌ Config build failed: \(error)")
             await MainActor.run {
@@ -168,11 +183,19 @@ actor ClashServiceActor {
             }
             guard !proc.isRunning else { return false }
         }
+        processToken = UUID()
         process = nil
         pipe?.fileHandleForReading.readabilityHandler = nil
         pipe = nil
         isRunning = false
         return true
+    }
+
+    private func processDidExit(token: UUID) async {
+        guard token == processToken, !lifecycleBusy, isRunning else { return }
+        isRunning = false
+        pipe?.fileHandleForReading.readabilityHandler = nil
+        await MainActor.run { ClashViewModel.shared.handleUnexpectedExit() }
     }
 
     // MARK: - Private Methods
@@ -232,6 +255,11 @@ actor ClashServiceActor {
         proc.standardOutput = outputPipe
         proc.standardError = outputPipe
         
+        let token = UUID()
+        processToken = token
+        proc.terminationHandler = { [weak self] _ in
+            Task { await self?.processDidExit(token: token) }
+        }
         do {
             try proc.run()
             process = proc
@@ -296,6 +324,11 @@ actor ClashServiceActor {
         proc.standardOutput = outputPipe
         proc.standardError = outputPipe
         
+        let token = UUID()
+        processToken = token
+        proc.terminationHandler = { [weak self] _ in
+            Task { await self?.processDidExit(token: token) }
+        }
         do {
             try proc.run()
             process = proc

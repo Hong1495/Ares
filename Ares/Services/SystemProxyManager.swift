@@ -31,13 +31,15 @@ class SystemProxyManager {
         isUpdating = true
         defer { isUpdating = false }
         lastError = nil
-        let services = await targetServices(from: getNetworkServices())
-        guard !services.isEmpty else { lastError = "Cannot read network services"; return false }
         if !enabled {
+            // No owned baseline means no network mutation or authorization is necessary.
+            guard UserDefaults.standard.data(forKey: snapshotKey) != nil else { return true }
             let restored = await restoreSnapshot(for: getNetworkServices())
             if !restored { lastError = "Could not verify restoration. The saved network baseline has been retained." }
             return restored
         }
+        let services = await targetServices(from: getNetworkServices())
+        guard !services.isEmpty else { lastError = "Cannot read network services"; return false }
         guard (1...65535).contains(httpPort), (1...65535).contains(socksPort),
               let before = await readSnapshots(for: services) else {
             lastError = "Cannot read a complete network baseline"

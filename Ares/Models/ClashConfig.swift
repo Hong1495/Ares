@@ -201,6 +201,10 @@ struct ClashConfig: Codable {
             }
         }
 
+        if !enableTun {
+            yaml += "\ntun:\n  enable: false\n"
+        }
+
         // The DNS settings are shared by normal and TUN configurations.
         if !skipDNS {
             let dnsEntries = dnsServers.map { "    - \(yamlString($0))" }.joined(separator: "\n")

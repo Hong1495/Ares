@@ -63,11 +63,14 @@ class ProfileService: ObservableObject {
         UserDefaults.standard.set(try JSONEncoder().encode(nodeSelections), forKey: "profileNodeSelections")
     }
 
-    func restoreNodeSelections() async throws {
-        guard let id = activeProfileID else { return }
+    func savedSelections() -> [String: String] {
+        activeProfileID.map { nodeSelections.choices(for: $0) } ?? [:]
+    }
+
+    func restoreNodeSelections(choices: [String: String]? = nil) async throws {
         let controller = ClashController.shared
         try await controller.fetchProxiesData()
-        try await NodeSelectionPlan.restore(nodeSelections.choices(for: id), groups: controller.proxyGroups, reset: { group in
+        try await NodeSelectionPlan.restore(choices ?? savedSelections(), groups: controller.proxyGroups, reset: { group in
             try await controller.clearProxySelection(group: group)
         }) { group, node in
             try await controller.selectProxy(group: group, proxy: node)
@@ -462,29 +465,36 @@ class ProfileService: ObservableObject {
         vm.isToggling = true
         defer {
             vm.isToggling = false
-            if AppState.shared.operationStatus != nil { AppState.shared.finishOperation() }
+            if AppState.shared.operationStatus != nil { AppState.shared.finishOperation(error: AppState.shared.lastOperationError) }
         }
         let tunEnabled = AppState.shared.tunEnabled
         let proxyEnabled = AppState.shared.systemProxyEnabled
-        do {
-            try await ConfigService.shared.buildConfig(tunEnabled: tunEnabled)
-            guard await vm.stopCore(intendedRestart: true) else {
-                AppState.shared.finishOperation(error: "Profile saved; the old core could not stop.")
-                return false
-            }
-            await vm.startCore(isRestart: true)
-            guard vm.runtimeState.isAPIReady else {
-                AppState.shared.finishOperation(error: "Profile saved but the core did not become ready.")
-                return false
-            }
-            if proxyEnabled, !(await AppState.shared.enableSystemProxy()) { return false }
-            try await ClashController.shared.fetchProxiesData()
-            try await ClashController.shared.fetchRules()
+        let checkpoint: RuntimeCheckpoint
+        do { checkpoint = try await vm.captureRecoveryCheckpoint() }
+        catch { AppState.shared.finishOperation(error: "No verified configuration is available for profile recovery."); return false }
+        let outcome = await ConfigurationCoordinator.replace(previous: checkpoint, targetMode: tunEnabled,
+            restoreProxy: proxyEnabled,
+            restorePreferences: {
+                // Switching profiles can revert the selection. Updating the same profile keeps its new
+                // source on disk; the recovered runtime retains its older revision until applied again.
+                if let id = checkpoint.profileID, self.profiles.contains(where: { $0.id == id }) {
+                    self.activeProfileID = id
+                    self.saveProfiles()
+                }
+            })
+        switch outcome {
+        case .committed:
             return true
-        } catch {
-            AppState.shared.finishOperation(error: "Profile saved but could not be applied: \(error.localizedDescription)")
-            return false
+        case .preparationFailed:
+            AppState.shared.finishOperation(error: "Profile could not be prepared. Previous configuration was retained.")
+        case .unchanged:
+            AppState.shared.finishOperation(error: "The old core could not stop. No replacement core was started.")
+        case .restored:
+            AppState.shared.finishOperation(error: "Profile activation failed. The previous core and proxy configuration were recovered.")
+        case .recoveryRequired:
+            AppState.shared.finishOperation(error: "Profile activation and recovery could not be verified.")
         }
+        return false
     }
 
     /// Parse subscription info from HTTP headers

@@ -3,9 +3,14 @@ import SwiftUI
 struct RulesView: View {
     @EnvironmentObject var clashController: ClashController
     @State private var searchText = ""
-    @AppStorage("localRules") private var localRules = ""
-    @State private var showingLocalRulesEditor = false
-    @State private var sortOrder = [KeyPathComparator(\ClashRule.hit, order: .reverse)]
+    private struct RuleDraft: Identifiable {
+        let id = UUID()
+        let text: String
+        let revision: String
+    }
+    @State private var editor: RuleDraft?
+    @State private var showingProviders = false
+    @State private var showingSources = false
 
     var filteredRules: [ClashRule] {
         let result: [ClashRule]
@@ -18,7 +23,7 @@ struct RulesView: View {
                 $0.proxy.localizedCaseInsensitiveContains(searchText)
             }
         }
-        return result.sorted(using: sortOrder)
+        return result
     }
 
     var body: some View {
@@ -27,15 +32,25 @@ struct RulesView: View {
 
             Divider()
 
-            // Table is the right control for uniform, sortable rule rows.
-            Table(filteredRules, sortOrder: $sortOrder) {
-                TableColumn("Type", value: \.type) { rule in
+            if let error = clashController.rulesError {
+                Text(error).font(DS.Typography.metadata).foregroundStyle(.secondary)
+                    .padding(DS.Space.md)
+            }
+            // Order is the core's matching priority, including when filtering.
+            Table(filteredRules) {
+                TableColumn("Order") { rule in
+                    Text("\(rule.index + 1)").font(DS.Typography.metadata.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }.width(50)
+                TableColumn("Type") { rule in
                     Text(rule.type).font(DS.Typography.metadata)
+                        .strikethrough(rule.extra?.disabled == true)
+                        .help(rule.extra?.disabled == true ? "Disabled in the running core" : rule.type)
                         .foregroundStyle(RuleKindTint.tint(for: rule.type)).lineLimit(1)
                 }
                 .width(min: 96, ideal: 120, max: 170)
 
-                TableColumn("Payload", value: \.payload) { rule in
+                TableColumn("Payload") { rule in
                     Text(rule.payload)
                         .font(DS.Typography.metadata.monospaced())
                         .lineLimit(1)
@@ -43,16 +58,16 @@ struct RulesView: View {
                         .foregroundStyle(.primary)
                 }
 
-                TableColumn("Proxy", value: \.proxy) { rule in
+                TableColumn("Proxy") { rule in
                     proxyCell(rule.proxy)
                 }
                 .width(min: 100, ideal: 160, max: 220)
 
-                TableColumn("Hits", value: \.hit) { rule in
-                    Text("\(rule.hit)")
+                TableColumn("Hits") { rule in
+                    Text(rule.hit.map(String.init) ?? "—")
                         .font(DS.Typography.metadata.monospaced())
                         .monospacedDigit()
-                        .foregroundStyle(rule.hit > 0 ? HierarchicalShapeStyle.secondary : HierarchicalShapeStyle.tertiary)
+                        .foregroundStyle((rule.hit ?? 0) > 0 ? HierarchicalShapeStyle.secondary : HierarchicalShapeStyle.tertiary)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                         .padding(.trailing, DS.Space.xs)
                 }
@@ -67,13 +82,12 @@ struct RulesView: View {
             await Task.yield()
             try? await clashController.fetchRules()
         }
-        .sheet(isPresented: $showingLocalRulesEditor) {
-            LocalRulesEditorView(rules: $localRules) {
-                Task {
-                    // Rebuild config and reload Clash
-                    await ProfileService.shared.reloadClashWithCurrentProfile()
-                }
-            }
+        .sheet(item: $editor) { draft in
+            LocalRulesEditorView(initialRules: draft.text, revision: draft.revision)
+        }
+        .sheet(isPresented: $showingSources) { RuleSourcesView() }
+        .sheet(isPresented: $showingProviders) {
+            RuleProvidersView().environmentObject(clashController)
         }
     }
 
@@ -81,7 +95,16 @@ struct RulesView: View {
 
     private var toolbar: some View {
         CollectionTools(placeholder: "Search rules", search: $searchText) {
-            Button { showingLocalRulesEditor = true } label: {
+            Button { showingSources = true } label: {
+                Image(systemName: "doc.text.magnifyingglass").frame(width: 16, height: 16)
+            }.help("Inspect rule sources").accessibilityLabel("Inspect rule sources")
+            Button { showingProviders = true } label: {
+                Image(systemName: "square.stack").frame(width: 16, height: 16)
+            }.help("Rule sets").accessibilityLabel("Rule sets")
+            Button {
+                editor = RuleDraft(text: UserDefaults.standard.string(forKey: DefaultsKeys.localRules) ?? "",
+                    revision: ProfileService.shared.activeProfileRevision)
+            } label: {
                 Image(systemName: "text.badge.plus").frame(width: 16, height: 16)
             }
             .help("Edit local rule overrides")
@@ -132,56 +155,5 @@ private enum RuleKindTint {
         default:
             return .secondary
         }
-    }
-}
-
-// MARK: - Local rules editor
-
-struct LocalRulesEditorView: View {
-    @Binding var rules: String
-    var onSave: () -> Void
-    @Environment(\.dismiss) var dismiss
-
-    var body: some View {
-        VStack(spacing: DS.Space.lg) {
-            DSCardHeader("Local Rule Overrides", icon: "text.badge.plus") {
-                HStack(spacing: DS.Space.sm) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .controlSize(.small)
-
-                    Button("Save & Apply") {
-                        onSave()
-                        dismiss()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: DS.Space.sm) {
-                TextEditor(text: $rules)
-                    .font(DS.Typography.secondary.monospaced())
-                    .scrollContentBackground(.hidden)
-                    .padding(DS.Space.sm)
-                    .frame(minWidth: 500, minHeight: 400)
-                    .background(
-                        RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)
-                            .fill(Color(nsColor: .textBackgroundColor))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)
-                            .strokeBorder(Color(nsColor: .separatorColor).opacity(0.9), lineWidth: DS.hairline)
-                    )
-
-                Text("One rule per line, injected above the subscription rules: - TYPE,PAYLOAD,PROXY")
-                    .font(DS.Typography.metadata)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .padding(DS.Space.lg)
-        .frame(minWidth: 540)
-        .background(DS.canvas)
     }
 }

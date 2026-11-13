@@ -35,6 +35,11 @@ jobs:
         run: |
           scripts/test-safe-functions.sh
           scripts/test-proxy-controller.sh
+          scripts/test-config-controller.sh
+          scripts/test-lifecycle.sh
+          scripts/test-configuration-coordinator.sh
+          scripts/test-activity-diagnostics.sh
+          scripts/test-listener-verification.sh
           scripts/test-core-process-reaper.sh
           python3 -m unittest discover -s scripts/tests -p 'test_*.py'
       - name: Download Sparkle release tools
@@ -81,6 +86,13 @@ jobs:
           # keeps local bundles internally consistent; it is not Apple notarization.
           codesign --force --deep --sign - "$APP"
           codesign --verify --deep --strict "$APP"
+      - name: Validate bundled core in isolation
+        run: |
+          CORE="$PWD/.build/release/Build/Products/Release/Ares.app/Contents/Resources/clash-meta"
+          scripts/test-effective-config.sh "$CORE"
+          python3 scripts/test-native-core.py "$CORE"
+          python3 scripts/test-native-dns.py "$CORE"
+          scripts/test-listener-verification.sh "$CORE"
       - name: Package and generate signed appcast
         run: |
           mkdir -p artifacts .build/staging

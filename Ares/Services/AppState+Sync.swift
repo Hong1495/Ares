@@ -5,7 +5,7 @@ extension AppState {
     /// Sync status from services (Centralized Heartbeat)
     func syncStatus() {
         // Only sync if we are NOT in the middle of a restart operation
-        if clashViewModel.isRunning && !clashViewModel.isToggling && !isSystemProxyToggling && !isSyncingStatus {
+        if !systemIsSleeping && clashViewModel.isRunning && !clashViewModel.isToggling && !isSystemProxyToggling && !isSyncingStatus {
             isSyncingStatus = true
             Task {
                 defer { isSyncingStatus = false }
@@ -73,6 +73,7 @@ extension AppState {
             }
             currentMode = mode
             UserDefaults.standard.set(mode.rawValue, forKey: DefaultsKeys.clashMode)
+            if (try? await clashViewModel.captureRecoveryCheckpoint()) != nil { await clashViewModel.persistActiveCheckpoint() }
             clashViewModel.addLog("[AppState] ✅ Mode switched to \(mode.rawValue.uppercased())")
         } catch {
             if let actualMode = try? await clashController.getCurrentMode() {

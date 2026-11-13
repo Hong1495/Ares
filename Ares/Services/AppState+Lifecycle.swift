@@ -3,6 +3,47 @@ import Foundation
 extension AppState {
     // MARK: - Service Lifecycle Management
 
+    func systemWillSleep() {
+        systemIsSleeping = true
+        wakeVerificationTask?.cancel()
+        clashController.stopTrafficMonitor()
+    }
+
+    /// Waking does not blindly relaunch a second core or rewrite system proxy preferences.
+    func systemDidWake() {
+        systemIsSleeping = false
+        wakeVerificationTask?.cancel()
+        wakeVerificationTask = Task { @MainActor in
+            for _ in 0..<30 {
+                if Task.isCancelled { return }
+                if !self.clashViewModel.isToggling && self.operationStatus == nil { break }
+                do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
+            }
+            guard !Task.isCancelled, !self.systemIsSleeping, !self.clashViewModel.isToggling,
+                  self.operationStatus == nil, self.clashViewModel.runtimeState.isAPIReady else { return }
+            let generation = self.clashController.runtimeGeneration
+            var ready = false
+            for _ in 0..<3 {
+                do {
+                    let data = try await self.clashController.readRuntimeConfiguration()
+                    try CoreAPIContract.verifyTUN(data, expected: self.tunEnabled)
+                    ready = true
+                    break
+                } catch {
+                    do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
+                }
+            }
+            guard !Task.isCancelled, generation == self.clashController.runtimeGeneration,
+                  !self.systemIsSleeping, !self.clashViewModel.isToggling, self.operationStatus == nil else { return }
+            if ready {
+                if self.isForeground { self.clashController.startTrafficMonitor() }
+                self.syncStatus()
+            } else {
+                self.reportError("The core did not respond after wake. Check its status before reconnecting.")
+            }
+        }
+    }
+
     /// Global "Wake Up" - Called when App enters Foreground
     func wakeUp() {
         if isForeground && didSendInitialWake { return }
@@ -15,7 +56,7 @@ extension AppState {
         NotificationCenter.default.post(name: .appDidWakeUp, object: nil)
 
         // 1. Resume Traffic Monitoring
-        if clashViewModel.isRunning {
+        if !systemIsSleeping && clashViewModel.isRunning {
             clashController.startTrafficMonitor()
         }
 

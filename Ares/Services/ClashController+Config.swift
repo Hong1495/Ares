@@ -1,6 +1,19 @@
 import Foundation
 
 extension ClashController {
+    /// One-shot read; never starts or mutates the core. Reject responses from an old runtime.
+    func readRuntimeConfiguration() async throws -> Data {
+        let generation = runtimeGeneration
+        let endpoint = baseURL
+        guard let url = URL(string: "\(endpoint)/configs") else { throw URLError(.badURL) }
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 5)
+        request.httpMethod = "GET"
+        let (data, response) = try await proxySession.data(for: request)
+        try CoreAPIContract.requireSuccess(response)
+        guard generation == runtimeGeneration, endpoint == baseURL else { throw CancellationError() }
+        return data
+    }
+
     /// Set Clash mode (rule/global/direct)
     func setMode(_ mode: ClashConfig.Mode) async throws {
         guard let url = URL(string: "\(baseURL)/configs") else {
@@ -14,19 +27,17 @@ extension ClashController {
         let body = ["mode": mode.rawValue]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let generation = runtimeGeneration
+        let (_, response) = try await proxySession.data(for: request)
         try validateMutationResponse(response)
+        guard generation == runtimeGeneration else { throw CancellationError() }
 
         ClashViewModel.shared.addLog("[ClashController] Set mode to \(mode.rawValue)", level: .debug)
     }
 
     /// Get current Clash mode
     func getCurrentMode() async throws -> ClashConfig.Mode {
-        guard let url = URL(string: "\(baseURL)/configs") else {
-            throw NSError(domain: "ClashController", code: 1, userInfo: nil)
-        }
-
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let data = try await readRuntimeConfiguration()
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
 
         if let modeString = json?["mode"] as? String,
@@ -50,8 +61,14 @@ extension ClashController {
         let body = ["log-level": level]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let generation = runtimeGeneration
+        let (_, response) = try await proxySession.data(for: request)
         try validateMutationResponse(response)
+        guard generation == runtimeGeneration else { throw CancellationError() }
+        let data = try await readRuntimeConfiguration()
+        guard let values = try JSONSerialization.jsonObject(with: data) as? [String: Any], values["log-level"] as? String == level else {
+            throw URLError(.cannotParseResponse)
+        }
         ClashViewModel.shared.addLog("[ClashController] Set log level to \(level)")
     }
 
@@ -67,34 +84,49 @@ extension ClashController {
         }
     }
 
-    /// Fetch active rules from Clash API
+    /// Preserve core evaluation order, actual counters and runtime identity.
     func fetchRules() async throws {
-        guard let url = URL(string: "\(baseURL)/rules") else { return }
-
-        let (data, response) = try await URLSession.shared.data(from: url)
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            return
+        let generation = runtimeGeneration
+        let endpoint = baseURL
+        do {
+            let data = try await readRuleResource(path: "/rules")
+            rules = try ClashRule.decode(data)
+            rulesError = nil
+        } catch {
+            guard generation == runtimeGeneration, endpoint == baseURL else { throw error }
+            rules = []
+            rulesError = "Rules could not be read from the current core."
+            throw error
         }
+    }
 
-        // Parse rules in background
-        let rules = await Task.detached(priority: .utility) {
-            guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-                  let rulesList = json["rules"] as? [[String: Any]] else {
-                return [] as [ClashRule]
-            }
+    func fetchRuleProviders() async throws -> [RuleProvider] {
+        try RuleProvider.decode(await readRuleResource(path: "/providers/rules"))
+    }
 
-            var fetchedRules: [ClashRule] = []
-            for ruleData in rulesList {
-                if let type = ruleData["type"] as? String,
-                   let payload = ruleData["payload"] as? String,
-                   let proxy = ruleData["proxy"] as? String {
-                    let hit = ruleData["hit"] as? Int ?? 0
-                    fetchedRules.append(ClashRule(id: UUID(), type: type, payload: payload, proxy: proxy, hit: hit))
-                }
-            }
-            return fetchedRules
-        }.value
+    func updateRuleProvider(_ name: String) async throws -> [RuleProvider] {
+        guard let escaped = name.addingPercentEncoding(withAllowedCharacters: .alphanumerics), !name.isEmpty else {
+            throw URLError(.badURL)
+        }
+        let generation = runtimeGeneration
+        _ = try await readRuleResource(path: "/providers/rules/" + escaped, method: "PUT")
+        let providers = try await fetchRuleProviders()
+        guard generation == runtimeGeneration, providers.contains(where: { $0.name == name }) else {
+            throw CancellationError()
+        }
+        try await fetchRules()
+        return providers
+    }
 
-        self.rules = rules
+    private func readRuleResource(path: String, method: String = "GET") async throws -> Data {
+        let generation = runtimeGeneration
+        let endpoint = baseURL
+        guard let url = URL(string: endpoint + path) else { throw URLError(.badURL) }
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: method == "GET" ? 5 : 30)
+        request.httpMethod = method
+        let (data, response) = try await proxySession.data(for: request)
+        try CoreAPIContract.requireSuccess(response)
+        guard generation == runtimeGeneration, endpoint == baseURL else { throw CancellationError() }
+        return data
     }
 }

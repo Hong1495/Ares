@@ -6,7 +6,16 @@ git diff --check
 plutil -lint Ares.xcodeproj/project.pbxproj Configuration/Ares-Info.plist
 scripts/test-safe-functions.sh
 scripts/test-proxy-controller.sh
+scripts/test-config-controller.sh
+scripts/test-lifecycle.sh
+scripts/test-configuration-coordinator.sh
+scripts/test-effective-config.sh
+scripts/test-activity-diagnostics.sh
+scripts/test-listener-verification.sh
+scripts/test-core-process-reaper.sh
 python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+scripts/preview-subscription.sh
+scripts/preview-rules.sh
 scripts/preview-ui.sh
 # Production compilation is allowed; do not launch the resulting app on the host.
 xcodebuild -project Ares.xcodeproj -scheme Ares -configuration Debug \

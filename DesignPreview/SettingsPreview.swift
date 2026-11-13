@@ -2,7 +2,9 @@ import SwiftUI
 
 /// In-memory Settings fixture. Shared tabs, typography, row style and card surfaces.
 struct SettingsPreview: View {
-    @State private var tab = 0
+    @State private var tab = CommandLine.arguments.contains("--settings-sources") ? 2 : 0
+    @State private var showAudit = false
+    @State private var localFields: Set<String> = ["MTU (bytes)"]
     @State private var toggles: Set<String> = ["Open in menu bar only", "Automatically check for updates", "Auto Route", "Auto Detect Interface"]
     @State private var fields: [String: String] = ["HTTP Port": "7892", "SOCKS Port": "7891", "Mixed Port": "7890", "DNS Servers": "223.5.5.5, 119.29.29.29", "MTU (bytes)": "1400", "Keep-Alive Interval (s)": "15", "UDP Timeout (s)": "120", "Intercept Ports": "80, 443, 8080, 8443", "Bypass Domains": "localhost,127.*,10.*,172.16.0.0/12,192.168.*"]
     @State private var choice: [String: String] = [:]
@@ -11,6 +13,9 @@ struct SettingsPreview: View {
             HStack(spacing: DS.Space.md) {
                 SettingsTabs(titles: ["General", "Network", "TUN", "MITM", "Rules"], selection: $tab)
                 Spacer(minLength: DS.Space.sm)
+                Button { showAudit = true } label: { Image(systemName: "checkmark.magnifyingglass").font(.system(size: 14)) }
+                    .buttonStyle(.borderless).help("Verify Running Configuration")
+                    .accessibilityLabel("Verify Running Configuration")
                 if tab != 0 {
                     Button("Discard") {}.buttonStyle(.borderless).disabled(true)
                     Button("Apply Changes") {}.buttonStyle(.bordered).disabled(true)
@@ -76,6 +81,19 @@ struct SettingsPreview: View {
                     .frame(maxWidth: 820, alignment: .leading).frame(maxWidth: .infinity, alignment: .center)
             }.scrollIndicators(.never)
         }.controlSize(.small).font(DS.Typography.body)
+        .sheet(isPresented: $showAudit) {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack { Text("Running Configuration").font(.headline); Spacer(); Button("Check Again") {} }
+                Text("Isolated preview · synthetic values only").font(.caption).foregroundStyle(.secondary)
+                SettingsRuntimeTable(rows: [
+                    .init(id: "mixed-port", saved: "7890", running: "7890", result: "Matches", differs: false),
+                    .init(id: "mode", saved: "rule", running: "global", result: "Different", differs: true),
+                    .init(id: "tun.mtu", saved: "1400", running: "—", result: "TUN inactive", differs: false),
+                    .init(id: "dns", saved: "Configured", running: "—", result: "Not exposed", differs: false)
+                ])
+                HStack { Spacer(); Button("Done") { showAudit = false }.keyboardShortcut(.defaultAction) }
+            }.padding(24).frame(width: 720, height: 480)
+        }
     }
     private func binding(_ name: String) -> Binding<String> { Binding(get: { fields[name] ?? "" }, set: { fields[name] = $0 }) }
     private func toggle(_ name: String) -> some View {
@@ -84,10 +102,31 @@ struct SettingsPreview: View {
         }.labeledContentStyle(SettingsRowStyle())
     }
     private func field(_ name: String, width: CGFloat = 84) -> some View {
-        LabeledContent(name) { TextField("", text: binding(name)).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing).font(DS.Typography.body.monospaced()).frame(width: width) }.labeledContentStyle(SettingsRowStyle())
+        HStack(spacing: 16) {
+            sourceLabel(name).font(.system(size: 13))
+            Spacer(minLength: 16)
+            if inheritedFields.contains(name) && !localFields.contains(name) {
+                Text(fields[name] ?? "Core default").font(DS.Typography.secondary.monospaced())
+            } else {
+                TextField("", text: binding(name)).textFieldStyle(.roundedBorder)
+                    .multilineTextAlignment(.trailing).font(DS.Typography.body.monospaced()).frame(width: width)
+            }
+        }.frame(minHeight: 28).frame(maxWidth: .infinity)
     }
+    private let inheritedFields = ["DNS Servers", "MTU (bytes)", "TUN Device", "Keep-Alive Interval (s)", "UDP Timeout (s)"]
     private func picker(_ name: String, values: [String]) -> some View {
         LabeledContent(name) { Picker(name, selection: Binding(get: { choice[name] ?? values[0] }, set: { choice[name] = $0 })) { ForEach(values, id: \.self) { Text($0) } }.labelsHidden().frame(width: 190) }.labeledContentStyle(SettingsRowStyle())
+    }
+    @ViewBuilder private func sourceLabel(_ name: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(name)
+            if inheritedFields.contains(name) {
+                SettingsSourceControl(source: localFields.contains(name) ? "Local override" : (name == "TUN Device" ? "Core default" : "Subscription"),
+                    isLocal: localFields.contains(name), pending: false) {
+                        if localFields.contains(name) { localFields.remove(name) } else { localFields.insert(name) }
+                    }
+            }
+        }
     }
     private func note(_ text: String) -> some View { Text(text).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
     private func editor(_ name: String, height: CGFloat) -> some View {

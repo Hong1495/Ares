@@ -78,7 +78,7 @@ final class NetworkMITMService: ObservableObject {
     }
 
     func updateUpstream(tunEnabled: Bool) async -> Bool {
-        let port = tunEnabled ? ClashPorts.tunMixed : (Int(UserDefaults.standard.string(forKey: DefaultsKeys.mixedPort) ?? "") ?? ClashPorts.defaultMixed)
+        let port = ClashViewModel.shared.verifiedMixedPort ?? (tunEnabled ? ClashPorts.tunMixed : (Int(UserDefaults.standard.string(forKey: DefaultsKeys.mixedPort) ?? "") ?? ClashPorts.defaultMixed))
         guard let validPort = UInt16(exactly: port), validPort > 0 else { return false }
         await MITMBackend.shared.updateUpstream(port: validPort)
         return true

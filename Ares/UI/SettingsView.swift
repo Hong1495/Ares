@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import SubscriptionKit
 
 // MARK: - Pane model
 
@@ -52,6 +53,7 @@ struct SettingsView: View {
     @State private var needsProxyRetry = false
     @State private var updatingLogLevel = false
     @State private var confirmReset = false
+    @State private var confirmRecovery = false
 
     // Network edits remain local until Apply Changes validates them.
     @State private var socksPort = UserDefaults.standard.string(forKey: DefaultsKeys.socksPort) ?? "\(ClashPorts.defaultSocks)"
@@ -83,6 +85,27 @@ struct SettingsView: View {
     @State private var mitmHosts = UserDefaults.standard.string(forKey: DefaultsKeys.mitmHosts) ?? ""
     @State private var tlsFingerprint = UserDefaults.standard.string(forKey: DefaultsKeys.tlsFingerprint) ?? "none"
 
+    @ObservedObject private var profiles = ProfileService.shared
+    @State private var inherited: [String: EffectiveConfiguration.Field] = [:]
+    @State private var localKeys = Set<String>()
+    @State private var savedLocalKeys = Set<String>()
+    @State private var sourcesReady = false
+    @State private var sourceRevision = ""
+    @State private var sourceError: String?
+    @State private var showChanges = false
+    @State private var showDNS = false
+    @State private var showScenes = false
+    @State private var showEgress = false
+    @State private var showRuntimeAudit = false
+    @State private var showSourceDiff = false
+    @State private var sourceDiffRows: [ConfigurationDiff.Row] = []
+    @State private var sourceDiffError: String?
+    @State private var loadingSourceDiff = false
+    @State private var auditRows: [ConfigurationAudit.Row] = []
+    @State private var auditError: String?
+    @State private var auditing = false
+    @State private var auditDate: Date?
+
     @State private var pane: SettingsPane = .general
 
     private var tunEnabled: Bool { appState.tunEnabled }
@@ -95,13 +118,32 @@ struct SettingsView: View {
                     set: { pane = SettingsPane.allCases[$0] }
                 ))
                 Spacer(minLength: DS.Space.sm)
+                Menu {
+                    Button("Subscription → Saved Configuration") { showSourceDiff = true }
+                    Button("Verify Running Configuration") { showRuntimeAudit = true }
+                    Button("Scenes…") { showScenes = true }.disabled(hasPendingChanges)
+                    Button("Routing & Listeners…") { showEgress = true }.disabled(hasPendingChanges)
+                    Button("DNS Configuration & Query…") { showDNS = true }.disabled(hasPendingChanges)
+                    Divider()
+                    Button("Restore Last Verified Configuration…") { confirmRecovery = true }
+                } label: {
+                    Image(systemName: "checkmark.magnifyingglass").font(.system(size: 14))
+                }
+                .menuStyle(.borderlessButton).fixedSize()
+                .help("Inspect Configuration").accessibilityLabel("Inspect Configuration")
                 if pane != .general {
-                    Button("Discard") { loadNetworkSettings() }
+                    Button("Discard") { discardChanges() }
                         .buttonStyle(.borderless).disabled(!hasPendingChanges)
+                    Button { showChanges = true } label: {
+                        Image(systemName: "doc.text.magnifyingglass").font(.system(size: 14))
+                    }
+                    .buttonStyle(.borderless).help("Review Changes")
+                    .accessibilityLabel("Review Changes")
+                    .disabled(!hasPendingChanges || !sourcesReady || sourceRevision != profiles.activeProfileRevision)
                     Button(applying ? "Applying…" : "Apply Changes") { applyChanges() }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
-                        .disabled(applying || !hasPendingChanges)
+                        .disabled(applying || !hasPendingChanges || !sourcesReady || sourceRevision != profiles.activeProfileRevision)
                 }
             }
             .padding(DS.Space.md)
@@ -111,6 +153,12 @@ struct SettingsView: View {
             .padding(.bottom, DS.Space.md)
             .frame(maxWidth: 820)
             .frame(maxWidth: .infinity)
+            if let sourceError {
+                HStack {
+                    Text(sourceError).font(.caption).foregroundStyle(.secondary)
+                    Button("Reload") { discardChanges() }.buttonStyle(.borderless)
+                }.padding(.horizontal, DS.Space.lg).padding(.bottom, DS.Space.sm)
+            }
             paneDetail
         }
         .navigationTitle("Settings")
@@ -119,9 +167,23 @@ struct SettingsView: View {
         .disabled(appState.isPerformingNetworkOperation || applying)
         .controlSize(.small)
         .onAppear { if savedNetworkValues.isEmpty { savedNetworkValues = networkValues }; autoStart = LaunchService.shared.isEnabled(); certManager.checkRootCA() }
+        .task(id: profiles.activeProfileRevision) { await refreshSources() }
+        .sheet(isPresented: $showEgress) { EgressSettingsView() }
+        .sheet(isPresented: $showScenes, onDismiss: { discardChanges() }) { ScenariosView() }
+        .sheet(isPresented: $showDNS) { DNSSettingsView() }
+        .sheet(isPresented: $showChanges) { changesReview }
+        .sheet(isPresented: $showRuntimeAudit) { runtimeAudit }
+        .sheet(isPresented: $showSourceDiff) { sourceDiffReview }
+        .onChange(of: clashViewModel.runtimeState) { _, _ in invalidateAudit() }
+        .onChange(of: profiles.activeProfileRevision) { _, _ in invalidateAudit() }
         .alert("Settings could not be applied", isPresented: Binding(get: { settingsError != nil }, set: { if !$0 { settingsError = nil } })) {
             Button("OK") { settingsError = nil }
         } message: { Text(settingsError ?? "") }
+        .confirmationDialog("Restore the last verified configuration?", isPresented: $confirmRecovery) {
+            Button("Restore Configuration") { Task { _ = await ConfigurationCoordinator.restoreLastSuccessful() } }
+        } message: {
+            Text("Restarts the core using the last verified configuration for this mode and subscription. The current subscription file and local settings are kept. Apply them again to leave recovery mode.")
+        }
         .confirmationDialog("Reset settings to defaults?", isPresented: $confirmReset) {
             Button("Reset Settings", role: .destructive) { resetSettings() }
         } message: {
@@ -212,12 +274,17 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: DS.Space.md) {
                     settingRow("Log Level") {
                         Picker("Log Level", selection: Binding(get: { logLevel }, set: { value in
+                            guard appState.beginOperation("Updating Log Level") else { return }
                             updatingLogLevel = true
                             Task {
-                                defer { updatingLogLevel = false }
+                                defer { updatingLogLevel = false; appState.finishOperation(error: appState.lastOperationError) }
                                 do {
                                     if clashViewModel.isRunning { try await ClashController.shared.setLogLevel(value) }
                                     logLevel = value
+                                    if clashViewModel.runtimeState.isAPIReady,
+                                       (try? await clashViewModel.captureRecoveryCheckpoint()) != nil {
+                                        await clashViewModel.persistActiveCheckpoint()
+                                    }
                                 } catch { settingsError = "Could not update the log level. Previous setting was kept." }
                             }
                         })) {
@@ -300,6 +367,7 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: DS.Space.md) {
                     settingToggle("Allow LAN", isOn: $allowLan)
                     settingToggle("IPv6 Support", isOn: $ipv6)
+                    Button("Routing & Listeners…") { showEgress = true }.disabled(hasPendingChanges)
                 }
             }
 
@@ -307,7 +375,7 @@ struct SettingsView: View {
                 SettingsSectionTitle("DNS", icon: "server.rack")
 
                 VStack(alignment: .leading, spacing: DS.Space.sm) {
-                    settingRow("DNS Servers") {
+                    settingRow("DNS Servers", preference: DefaultsKeys.dnsServers) {
                         TextField("", text: $dnsServers)
                             .textFieldStyle(.roundedBorder)
                             .multilineTextAlignment(.trailing)
@@ -316,6 +384,12 @@ struct SettingsView: View {
                     }
 
                     settingNote("Separate resolvers with commas.")
+                    HStack {
+                        Button("Configuration & Query…") { showDNS = true }
+                            .disabled(hasPendingChanges)
+                        Spacer()
+                        if hasPendingChanges { Text("Apply or discard pending settings first.").font(DS.Typography.metadata).foregroundStyle(.secondary) }
+                    }
                 }
             }
 
@@ -378,7 +452,7 @@ struct SettingsView: View {
                 SettingsSectionTitle("Interface", icon: "bolt.shield")
 
                 VStack(alignment: .leading, spacing: DS.Space.md) {
-                    settingRow("Network Stack") {
+                    settingRow("Network Stack", preference: DefaultsKeys.tunStack) {
                         Picker("Network Stack", selection: $tunStack) {
                             Text("Mixed (Recommended)").tag("mixed")
                             Text("System").tag("system")
@@ -390,7 +464,7 @@ struct SettingsView: View {
                     }
 
 
-                    settingRow("MTU (bytes)") {
+                    settingRow("MTU (bytes)", preference: DefaultsKeys.tunMTU) {
                         TextField("", value: $tunMTU, format: .number)
                             .textFieldStyle(.roundedBorder)
                             .multilineTextAlignment(.trailing)
@@ -399,7 +473,7 @@ struct SettingsView: View {
                     }
 
 
-                    settingRow("TUN Device") {
+                    settingRow("TUN Device", preference: DefaultsKeys.tunDevice) {
                         TextField("Auto", text: $tunDevice)
                             .textFieldStyle(.roundedBorder)
                             .multilineTextAlignment(.trailing)
@@ -408,18 +482,18 @@ struct SettingsView: View {
                     }
 
 
-                    settingToggle("Auto Route", isOn: $tunAutoRoute, isEnabled: true)
-                    settingToggle("Auto Detect Interface", isOn: $tunAutoDetectInterface, isEnabled: true)
+                    settingToggle("Auto Route", isOn: $tunAutoRoute, preference: DefaultsKeys.tunAutoRoute)
+                    settingToggle("Auto Detect Interface", isOn: $tunAutoDetectInterface, preference: DefaultsKeys.tunAutoDetectInterface)
                 }
 
-                settingNote("Administrator access is required to enable TUN. Apply Changes restarts the active core.")
+                settingNote("Interface settings apply when TUN is enabled. Apply Changes restarts the active core.")
             }
 
             DSCard {
                 SettingsSectionTitle("Connection Tuning", icon: "timer")
 
                 VStack(alignment: .leading, spacing: DS.Space.md) {
-                    settingRow("Keep-Alive Interval (s)") {
+                    settingRow("Keep-Alive Interval (s)", preference: DefaultsKeys.keepAliveInterval) {
                         TextField("", value: $keepAliveInterval, format: .number)
                             .textFieldStyle(.roundedBorder)
                             .multilineTextAlignment(.trailing)
@@ -427,7 +501,7 @@ struct SettingsView: View {
                             .frame(width: 84)
                     }
 
-                    settingRow("UDP Timeout (s)") {
+                    settingRow("UDP Timeout (s)", preference: DefaultsKeys.udpTimeout) {
                         TextField("", value: $udpTimeout, format: .number)
                             .textFieldStyle(.roundedBorder)
                             .multilineTextAlignment(.trailing)
@@ -528,22 +602,238 @@ struct SettingsView: View {
     // MARK: - Building blocks
 
     private func settingRow<Control: View>(
-        _ title: String,
+        _ title: String, preference: String? = nil,
         @ViewBuilder control: () -> Control
     ) -> some View {
-        LabeledContent {
-            control()
-        } label: {
-            Text(title)
+        HStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.system(size: 13))
+                if let key = preference {
+                    SettingsSourceControl(source: localKeys.contains(key) ? "Local override" : inherited[key]?.source ?? "Loading…",
+                        isLocal: localKeys.contains(key), pending: localKeys.contains(key) != savedLocalKeys.contains(key),
+                        action: { toggleOwnership(key) })
+                        .disabled(!sourcesReady || sourceRevision != profiles.activeProfileRevision)
+                }
+            }
+            Spacer(minLength: 16)
+            if let key = preference, !localKeys.contains(key) {
+                Text(inherited[key]?.value ?? "—")
+                    .font(DS.Typography.secondary.monospaced())
+                    .multilineTextAlignment(.trailing)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: 300, alignment: .trailing)
+            } else { control().controlSize(.small) }
         }
-        .labeledContentStyle(SettingsRowStyle())
+        .frame(minHeight: 28).frame(maxWidth: .infinity)
     }
 
-    private func settingToggle(_ title: String, isOn: Binding<Bool>, isEnabled: Bool = true) -> some View {
-        LabeledContent(title) {
+    private func settingToggle(_ title: String, isOn: Binding<Bool>, isEnabled: Bool = true,
+                               preference: String? = nil) -> some View {
+        settingRow(title, preference: preference) {
             Toggle(title, isOn: isOn).labelsHidden().toggleStyle(.switch)
                 .controlSize(.small).disabled(!isEnabled)
-        }.labeledContentStyle(SettingsRowStyle())
+        }
+    }
+
+    private func toggleOwnership(_ key: String) {
+        if localKeys.contains(key) { localKeys.remove(key) }
+        else {
+            // Seed editors from representable inherited values; do not flatten advanced YAML.
+            if !savedLocalKeys.contains(key), let field = inherited[key] {
+                switch key {
+                case DefaultsKeys.dnsServers: if field.value != "Core default" { dnsServers = field.value }
+                case DefaultsKeys.tunStack: if let value = field.scalar, ["mixed", "system", "gvisor"].contains(value) { tunStack = value }
+                case DefaultsKeys.tunMTU: if let value = field.scalar.flatMap(Int.init) { tunMTU = value }
+                case DefaultsKeys.tunDevice: tunDevice = field.scalar ?? ""
+                case DefaultsKeys.tunAutoRoute: tunAutoRoute = field.scalar == "true"
+                case DefaultsKeys.tunAutoDetectInterface: tunAutoDetectInterface = field.scalar == "true"
+                case DefaultsKeys.keepAliveInterval: if let value = field.scalar.flatMap(Int.init) { keepAliveInterval = value }
+                case DefaultsKeys.udpTimeout: if let value = field.scalar.flatMap(Int.init) { udpTimeout = value }
+                default: break
+                }
+            }
+            localKeys.insert(key)
+        }
+    }
+
+    private func refreshSources(force: Bool = false) async {
+        let revision = profiles.activeProfileRevision
+        if !force && sourcesReady && hasPendingChanges && sourceRevision != revision {
+            sourceError = "The subscription changed. Discard edits and reload before applying."
+            return
+        }
+        sourcesReady = false
+        do {
+            if profiles.activeProfile != nil && profiles.activeProfile?.path == nil {
+                throw EffectiveConfiguration.BuildError.invalidDocument
+            }
+            let fields = try await ConfigService.shared.inheritedSettings(profilePath: profiles.activeProfile?.path)
+            guard !Task.isCancelled, revision == profiles.activeProfileRevision else { return }
+            inherited = fields
+            localKeys = Set(ProfileConfigMerge.inheritablePaths.keys.filter { UserDefaults.standard.object(forKey: $0) != nil })
+            savedLocalKeys = localKeys
+            sourceRevision = revision
+            sourceError = nil
+            sourcesReady = true
+        } catch {
+            sourceError = "Could not read subscription settings. Reload before applying changes."
+        }
+    }
+
+    private func discardChanges() {
+        loadNetworkSettings()
+        localKeys = savedLocalKeys
+        Task { await refreshSources(force: true) }
+    }
+
+    private func displayedValue(_ key: String, values: [String: Any], locals: Set<String>) -> String {
+        if ProfileConfigMerge.inheritablePaths[key] != nil && !locals.contains(key) {
+            return inherited[key]?.value ?? "—"
+        }
+        if let value = values[key] as? Bool { return value ? "true" : "false" }
+        let text = values[key].map { String(describing: $0) } ?? ""
+        return text.isEmpty ? "Auto / empty" : text
+    }
+
+    private var changedKeys: [String] {
+        networkValues.keys.filter { key in
+            if localKeys.contains(key) != savedLocalKeys.contains(key) { return true }
+            if ProfileConfigMerge.inheritablePaths[key] != nil && !localKeys.contains(key) { return false }
+            return !NSDictionary(dictionary: [key: networkValues[key]!]).isEqual(to: [key: savedNetworkValues[key] ?? ""])
+        }.sorted()
+    }
+
+    private var changesReview: some View {
+        VStack(alignment: .leading, spacing: DS.Space.md) {
+            Text("Pending Changes").font(.headline)
+            Text("Proposed configuration, not live core values. Validation runs before the core restarts.")
+                .font(.caption).foregroundStyle(.secondary)
+            ScrollView {
+                VStack(alignment: .leading, spacing: DS.Space.md) {
+                    ForEach(changedKeys, id: \.self) { key in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(ProfileConfigMerge.preferencePaths[key]?.joined(separator: ".") ?? key)
+                                .font(DS.Typography.body)
+                            Text(displayedValue(key, values: savedNetworkValues, locals: savedLocalKeys) + " → " +
+                                 displayedValue(key, values: networkValues, locals: localKeys))
+                                .font(DS.Typography.secondary.monospaced()).textSelection(.enabled)
+                            if ProfileConfigMerge.inheritablePaths[key] != nil {
+                                Text(localKeys.contains(key) ? "Local override" : inherited[key]?.source ?? "Inherited")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }.frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+            HStack { Spacer(); Button("Done") { showChanges = false }.keyboardShortcut(.defaultAction) }
+        }.padding(24).frame(width: 520, height: 380)
+    }
+
+    private var sourceDiffReview: some View {
+        VStack(alignment: .leading, spacing: DS.Space.md) {
+            HStack {
+                Text("Subscription → Saved Configuration").font(.headline)
+                Spacer()
+                Button(loadingSourceDiff ? "Loading…" : "Reload") { Task { await loadSourceDiff() } }
+                    .disabled(loadingSourceDiff)
+            }
+            Text("Complete structural changes, including list order. Sensitive values and custom names are hidden. Saved configuration is not proof of the running state.")
+                .font(.caption).foregroundStyle(.secondary)
+            if let sourceDiffError { Text(sourceDiffError).font(.callout).foregroundStyle(.secondary) }
+            Text("\(sourceDiffRows.count) changed fields").font(.caption).foregroundStyle(.secondary)
+            Table(sourceDiffRows) {
+                TableColumn("Field") { Text($0.path).font(.system(size: 12, design: .monospaced)).help($0.path) }
+                    .width(min: 200, ideal: 300)
+                TableColumn("Subscription") { Text($0.before) }
+                TableColumn("Saved") { Text($0.after) }
+                TableColumn("Change") { Text($0.change) }.width(75)
+            }
+            HStack { Spacer(); Button("Done") { showSourceDiff = false }.keyboardShortcut(.defaultAction) }
+        }.padding(24).frame(width: 780, height: 480)
+        .task { await loadSourceDiff() }
+    }
+
+    private func loadSourceDiff() async {
+        guard !loadingSourceDiff else { return }
+        loadingSourceDiff = true
+        sourceDiffRows = []; sourceDiffError = nil
+        defer { loadingSourceDiff = false }
+        let revision = profiles.activeProfileRevision
+        let mode = tunEnabled
+        do {
+            guard !appState.isPerformingNetworkOperation,
+                  profiles.activeProfile == nil || profiles.activeProfile?.path != nil else { throw CancellationError() }
+            let rows = try await ConfigService.shared.sourceDifferences(profilePath: profiles.activeProfile?.path, tunEnabled: mode)
+            guard !Task.isCancelled, revision == profiles.activeProfileRevision, mode == tunEnabled,
+                  !appState.isPerformingNetworkOperation else { throw CancellationError() }
+            sourceDiffRows = rows
+        } catch {
+            sourceDiffError = "Could not compare stable saved files. A validated configuration must exist for this mode."
+        }
+    }
+
+    private func invalidateAudit() {
+        sourceDiffRows = []
+        if showSourceDiff { sourceDiffError = "Runtime or subscription changed. Reload the comparison." }
+        auditRows = []
+        auditDate = nil
+        if showRuntimeAudit { auditError = "Runtime or subscription changed. Check again." }
+    }
+
+    private var runtimeAudit: some View {
+        VStack(alignment: .leading, spacing: DS.Space.md) {
+            HStack {
+                Text("Running Configuration").font(.headline)
+                Spacer()
+                Button(auditing ? "Checking…" : "Check Again") { Task { await checkRuntime() } }
+                    .disabled(auditing || appState.isPerformingNetworkOperation)
+            }
+            Text("Compares the saved configuration file with the core’s current response. Unsaved edits are excluded. Live changes can differ from the file. Not exposed means the API cannot verify that field.")
+                .font(.caption).foregroundStyle(.secondary)
+            if let auditError { Text(auditError).font(.callout).foregroundStyle(.secondary) }
+            if let auditDate {
+                HStack {
+                    Text("Checked \(auditDate.formatted(date: .omitted, time: .standard))")
+                    Spacer()
+                    Text("\(auditRows.filter { $0.status == .different }.count) differences")
+                }.font(.caption).foregroundStyle(.secondary)
+            }
+            SettingsRuntimeTable(rows: auditRows.map {
+                SettingsRuntimeRow(id: $0.id, saved: $0.configured, running: $0.running,
+                                   result: $0.status.rawValue, differs: $0.status == .different)
+            })
+            HStack { Spacer(); Button("Done") { showRuntimeAudit = false }.keyboardShortcut(.defaultAction) }
+        }.padding(24).frame(width: 720, height: 480)
+        .task { await checkRuntime() }
+    }
+
+    private func checkRuntime() async {
+        guard !auditing else { return }
+        auditRows = []; auditDate = nil; auditError = nil
+        guard clashViewModel.runtimeState.isAPIReady, !appState.isPerformingNetworkOperation else {
+            auditError = "The core is stopped or changing configuration. No verification was performed."
+            return
+        }
+        auditing = true
+        defer { auditing = false }
+        let controller = ClashController.shared
+        let generation = controller.runtimeGeneration
+        let mode = tunEnabled
+        let revision = profiles.activeProfileRevision
+        do {
+            let saved = try await ConfigService.shared.savedConfiguration(tunEnabled: mode)
+            let response = try await controller.readRuntimeConfiguration()
+            let unchanged = try await ConfigService.shared.savedConfiguration(tunEnabled: mode)
+            guard !Task.isCancelled, saved == unchanged, mode == tunEnabled,
+                  generation == controller.runtimeGeneration, revision == profiles.activeProfileRevision,
+                  clashViewModel.runtimeState.isAPIReady, !appState.isPerformingNetworkOperation else {
+                throw CancellationError()
+            }
+            auditRows = try ConfigurationAudit.compare(configuration: saved, response: response)
+            auditDate = Date()
+        } catch {
+            auditError = "Could not verify a stable runtime. Check again when the core is running."
+        }
     }
 
     private func settingNote(_ text: String) -> some View {
@@ -615,7 +905,7 @@ struct SettingsView: View {
     }
 
     private var hasPendingChanges: Bool {
-        needsProxyRetry || !NSDictionary(dictionary: networkValues).isEqual(to: savedNetworkValues)
+        needsProxyRetry || !changedKeys.isEmpty
     }
 
     @State private var savedNetworkValues: [String: Any] = [:]
@@ -642,9 +932,17 @@ struct SettingsView: View {
     }
 
     private func applyChanges() {
+        guard sourcesReady, sourceRevision == profiles.activeProfileRevision else {
+            settingsError = "Reload subscription settings before applying changes."
+            return
+        }
         if let error = SettingsValidation.error(http: httpPort, socks: socksPort, mixed: mixedPort,
-                                                mtu: tunMTU, keepAlive: keepAliveInterval, udpTimeout: udpTimeout,
-                                                mitmPorts: mitmPorts, dns: dnsServers, device: tunDevice) {
+                                                mtu: localKeys.contains(DefaultsKeys.tunMTU) ? tunMTU : 1400,
+                                                keepAlive: localKeys.contains(DefaultsKeys.keepAliveInterval) ? keepAliveInterval : 15,
+                                                udpTimeout: localKeys.contains(DefaultsKeys.udpTimeout) ? udpTimeout : 120,
+                                                mitmPorts: mitmPorts,
+                                                dns: localKeys.contains(DefaultsKeys.dnsServers) ? dnsServers : "223.5.5.5",
+                                                device: localKeys.contains(DefaultsKeys.tunDevice) ? tunDevice : "") {
             settingsError = error
             return
         }
@@ -653,53 +951,58 @@ struct SettingsView: View {
         clashViewModel.isToggling = true
         let previous = savedNetworkValues
         let proposed = networkValues
+        let operationMode = tunEnabled
+        let operationRevision = profiles.activeProfileRevision
+        let wasRunning = clashViewModel.isRunning
         Task {
             defer {
                 applying = false
                 clashViewModel.isToggling = false
-                appState.finishOperation()
+                appState.finishOperation(error: appState.lastOperationError)
             }
             let defaults = UserDefaults.standard
-            proposed.forEach { defaults.set($0.value, forKey: $0.key) }
-            do {
-                // Validate before touching the running core or its system proxy routes.
-                try await ConfigService.shared.buildConfig(tunEnabled: tunEnabled)
-            } catch {
-                previous.forEach { defaults.set($0.value, forKey: $0.key) }
-                settingsError = "Configuration validation failed. The running core was kept unchanged. Review Logs for details."
-                return
-            }
-            if clashViewModel.isRunning {
-                guard await clashViewModel.stopCore(intendedRestart: true) else {
-                    previous.forEach { defaults.set($0.value, forKey: $0.key) }
-                    try? await ConfigService.shared.buildConfig(tunEnabled: tunEnabled)
-                    settingsError = "Could not stop the core. Previous settings were restored."
+            let removals = Set(ProfileConfigMerge.inheritablePaths.keys).subtracting(localKeys)
+            let change = NetworkPreferenceChange(proposed: proposed, displayed: previous, defaults: defaults,
+                removals: removals, forced: localKeys.subtracting(savedLocalKeys))
+            if wasRunning {
+                let checkpoint: RuntimeCheckpoint
+                do { checkpoint = try await clashViewModel.captureRecoveryCheckpoint() }
+                catch { settingsError = "No verified configuration is available for recovery. Changes were not applied."; return }
+                let outcome = await ConfigurationCoordinator.replace(previous: checkpoint, targetMode: operationMode,
+                    restoreProxy: appState.systemProxyEnabled,
+                    preparePreferences: { change.apply(to: defaults) },
+                    restorePreferences: { change.restore(in: defaults) })
+                guard outcome == .committed else {
+                    switch outcome {
+                    case .preparationFailed: settingsError = "Configuration preparation failed. Previous settings were restored."
+                    case .unchanged: settingsError = "Core shutdown could not be confirmed. Previous settings were restored."
+                    case .restored: settingsError = "The new configuration failed. The previous core and proxy configuration were recovered."
+                    default: settingsError = "Configuration recovery could not be verified. Check the runtime before retrying."
+                    }
                     return
                 }
-                await clashViewModel.startCore(isRestart: true)
-                guard clashViewModel.runtimeState.isAPIReady else {
-                    guard await clashViewModel.stopCore(intendedRestart: true) else {
-                        settingsError = "The failed core could not be stopped. Review Logs before retrying."
-                        return
-                    }
-                    previous.forEach { defaults.set($0.value, forKey: $0.key) }
-                    await clashViewModel.startCore(isRestart: true)
-                    settingsError = clashViewModel.runtimeState.isAPIReady
-                        ? "The new settings could not start. Previous settings were restored."
-                        : "The core could not restart or recover. Review Logs before enabling the proxy."
+            } else {
+                change.apply(to: defaults)
+                do {
+                    try await ConfigService.shared.buildConfig(tunEnabled: operationMode)
+                    guard operationRevision == profiles.activeProfileRevision, operationMode == tunEnabled else { throw CancellationError() }
+                } catch {
+                    change.restore(in: defaults)
+                    settingsError = "Configuration preparation failed. Settings were restored; the core remains stopped."
                     return
                 }
             }
             needsProxyRetry = false
             savedNetworkValues = proposed
+            savedLocalKeys = localKeys
             loadNetworkSettings()
             await MITMBackend.shared.refreshDisplayWhitelist()
-            if NetworkMITMService.shared.isRunning {
+            if !wasRunning, NetworkMITMService.shared.isRunning {
                 guard await NetworkMITMService.shared.updateUpstream(tunEnabled: tunEnabled) else {
                     settingsError = "Could not update the MITM upstream port."; return
                 }
             }
-            if appState.systemProxyEnabled, !(await appState.enableSystemProxy()) {
+            if !wasRunning, appState.systemProxyEnabled, !(await appState.enableSystemProxy()) {
                 settingsError = "Core settings were applied, but the system proxy could not be updated. Retry Apply Changes."
                 needsProxyRetry = true // Keep retry available.
             }
@@ -721,6 +1024,7 @@ struct SettingsView: View {
             if LaunchService.shared.isEnabled() { try LaunchService.shared.setLaunchAtLogin(enabled: false) }
             autoStart = LaunchService.shared.isEnabled()
         } catch { settingsError = "Could not reset the login item."; return }
+        localKeys = Set(ProfileConfigMerge.inheritablePaths.keys)
         httpPort = "\(ClashPorts.defaultHttp)"
         socksPort = "\(ClashPorts.defaultSocks)"
         mixedPort = "\(ClashPorts.defaultMixed)"

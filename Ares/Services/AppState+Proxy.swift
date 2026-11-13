@@ -77,9 +77,9 @@ extension AppState {
 
     /// Force enable system proxy (for startup restoration)
     @discardableResult
-    func enableSystemProxy() async -> Bool {
+    func enableSystemProxy(expectedRevision: String? = nil) async -> Bool {
         guard clashViewModel.runtimeState.isAPIReady,
-              clashViewModel.appliedProfileRevision == ProfileService.shared.activeProfileRevision else {
+              clashViewModel.appliedProfileRevision == (expectedRevision ?? ProfileService.shared.activeProfileRevision) else {
             reportError("System Proxy was not enabled: the selected subscription and core are not ready.")
             return false
         }
@@ -111,7 +111,7 @@ extension AppState {
             return true
         } else {
             clashViewModel.addLog("[AppState] ❌ Failed to restore system proxy")
-            finishOperation(error: systemProxyManager.lastError ?? "Failed to restore System Proxy")
+            reportError(systemProxyManager.lastError ?? "Failed to restore System Proxy")
             return false
         }
     }
@@ -119,8 +119,8 @@ extension AppState {
     /// Helper to get proxy ports based on TUN mode state
     private func getProxyPorts() -> (Int, Int) {
         let defaults = UserDefaults.standard
-        let clashHttpPort = Int(defaults.string(forKey: DefaultsKeys.mixedPort) ?? "\(ClashPorts.defaultMixed)") ?? ClashPorts.defaultMixed
-        let clashSocksPort = Int(defaults.string(forKey: DefaultsKeys.socksPort) ?? "\(ClashPorts.defaultSocks)") ?? ClashPorts.defaultSocks
+        let clashHttpPort = clashViewModel.verifiedMixedPort ?? Int(defaults.string(forKey: DefaultsKeys.mixedPort) ?? "\(ClashPorts.defaultMixed)") ?? ClashPorts.defaultMixed
+        let clashSocksPort = clashViewModel.verifiedSocksPort ?? Int(defaults.string(forKey: DefaultsKeys.socksPort) ?? "\(ClashPorts.defaultSocks)") ?? ClashPorts.defaultSocks
 
         // In TUN mode: System proxy points to Clash with isolated ports
         // Matching logic in ClashConfig.swift:

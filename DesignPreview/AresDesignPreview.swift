@@ -27,7 +27,7 @@ struct AresDesignPreview: App {
 struct PreviewWorkspace: View {
     @State private var showUpdate = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
-    @State private var page = "Dashboard"
+    @State private var page = CommandLine.arguments.contains("--settings-sources") ? "Settings" : "Dashboard"
     @State private var dark = false
     @State private var enabled = true
     @State private var tun = false
