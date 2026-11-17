@@ -50,21 +50,8 @@ struct ProxyWorkspaceTable: View {
                 }.padding(.horizontal, 12).frame(height: 36)
                 Divider()
                 List(groups, selection: groupSelection) { item in
-                    VStack(alignment: .leading, spacing: 5) {
-                        HStack(spacing: 8) {
-                            Text(item.id).lineLimit(1).truncationMode(.middle)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            Text(String(item.count)).monospacedDigit().foregroundStyle(.secondary)
-                        }.font(DS.Typography.secondary)
-                        HStack(spacing: 6) {
-                            Text(Self.typeLabel(item.type))
-                            if let current = item.current { Text("·"); Text(current).lineLimit(1).truncationMode(.middle) }
-                        }.font(DS.Typography.metadata).foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 5)
-                    .opacity(item.matches || search.isEmpty ? 1 : 0.5)
-                    .tag(item.id)
-                    .help(item.id + " · " + Self.typeLabel(item.type) + " · " + (item.type == "LoadBalance" ? "Per-connection balancing" : item.current ?? "No current node"))
+                    ProxyGroupListRow(group: item, searching: !search.isEmpty)
+                        .tag(item.id)
                 }.listStyle(.inset).scrollContentBackground(.hidden)
             }.frame(minWidth: 160, idealWidth: 190, maxWidth: 220)
 
@@ -183,5 +170,41 @@ struct ProxyWorkspaceTable: View {
         case "—": "—"
         default: type.uppercased()
         }
+    }
+}
+
+private struct ProxyGroupListRow: View {
+    let group: ProxyWorkspaceTable.GroupRow
+    let searching: Bool
+
+    private var helpText: String {
+        let type = ProxyWorkspaceTable.typeLabel(group.type)
+        let current: String
+        if group.type == "LoadBalance" {
+            current = "Per-connection balancing"
+        } else {
+            current = group.current ?? "No current node"
+        }
+        return [group.id, type, current].joined(separator: " · ")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 8) {
+                Text(group.id).lineLimit(1).truncationMode(.middle)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(String(group.count)).monospacedDigit().foregroundStyle(.secondary)
+            }.font(DS.Typography.secondary)
+            HStack(spacing: 6) {
+                Text(ProxyWorkspaceTable.typeLabel(group.type))
+                if let current = group.current {
+                    Text("·")
+                    Text(current).lineLimit(1).truncationMode(.middle)
+                }
+            }.font(DS.Typography.metadata).foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 5)
+        .opacity(group.matches || !searching ? 1 : 0.5)
+        .help(helpText)
     }
 }
