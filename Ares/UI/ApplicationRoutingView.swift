@@ -1,140 +1,291 @@
 import SwiftUI
 import AppKit
+import Combine
 import SubscriptionKit
 
 struct ApplicationRoutingView: View {
     var embedded = false
     var initialPaths: [String] = []
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var controller = ClashController.shared
-    @State private var snapshot: ApplicationRoutingService.Snapshot?
-    @State private var paths: [String] = []
-    @State private var selection = Set<String>()
-    @State private var target = "DIRECT"
-    @State private var live: [Connection] = []
-    @State private var capturedAt: Date?
+    @ObservedObject private var appState = AppState.shared
+    @StateObject private var model = ApplicationRoutingViewModel()
     @State private var search = ""
-    @State private var error: String?
-    @State private var message: String?
-    @State private var busy = false
-    @State private var undo: ApplicationRoutingService.Undo?
-    private var selected: [String] { selection.sorted() }
-    private var matching: [Connection] { live.filter { selection.contains($0.metadata.processPath ?? "") } }
+    @State private var showingDiscovery = false
+    @State private var showingExecutables = false
+    @State private var showingEvidence = false
+
+    private var ruleMode: Bool { appState.currentMode == .rule }
+    private var rows: [ApplicationRoutingPresentation.Application] {
+        model.applications.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) || $0.paths.contains { $0.localizedCaseInsensitiveContains(search) } }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            if !embedded { HStack {
-                Text("Applications").font(DS.Typography.secondary.weight(.semibold))
-                Spacer(); Button("Done") { dismiss() }
-            }.controlSize(.small).padding(DS.Space.lg) }
-            DSCard(padding: DS.Space.md) {
-                HStack(spacing: DS.Space.md) {
-                    Spacer()
-                    TextField("Search applications", text: $search)
-                        .textFieldStyle(.roundedBorder).controlSize(.small).frame(width: 200)
-                    Button { chooseApplication() } label: { Image(systemName: "plus") }.help("Add an application or executable")
-                    Button { Task { await readConnections() } } label: { Image(systemName: "arrow.clockwise") }.help("Read core connections")
-                    if let undo { Button { Task { await revert(undo) } } label: { Image(systemName: "arrow.uturn.backward") }.help("Undo last change") }
-                    Image(systemName: "info.circle").foregroundStyle(.secondary)
-                        .help("Routes match exact executable paths; select helpers separately. Local rules apply across subscriptions to new connections in Rule mode.")
-                }.buttonStyle(.borderless).font(DS.Typography.secondary)
-            }.padding(.horizontal, DS.Space.lg).padding(.top, DS.Space.pageTop).padding(.bottom, DS.Space.md)
-            HSplitView {
-                VStack(spacing: DS.Space.md) {
-                    List(paths.filter { search.isEmpty || $0.localizedCaseInsensitiveContains(search) }, id: \.self, selection: $selection) { path in
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text((path as NSString).lastPathComponent).font(DS.Typography.secondary)
-                            Text(path).font(DS.Typography.metadata).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle).help(path)
-                        }.padding(.vertical, 5)
-                    }
-                }.padding(.horizontal, DS.Space.lg).padding(.bottom, DS.Space.lg)
-                    .frame(minWidth: 200, idealWidth: 240, maxWidth: 300)
-                ScrollView { VStack(alignment: .leading, spacing: DS.Space.md) {
-                    DSCard(padding: DS.Space.md) { VStack(alignment: .leading, spacing: DS.Space.md) {
-                        HStack(spacing: 8) { Text("Route").font(DS.Typography.secondary)
-                        Picker("Route", selection: $target) {
-                            ForEach(snapshot?.targets ?? ["DIRECT", "REJECT"], id: \.self) { name in
-                                Text(name == "DIRECT" ? "Direct" : name == "REJECT" ? "Block" : name).tag(name)
-                            }
-                        }.labelsHidden().frame(maxWidth: 280, alignment: .leading)
-                        Spacer(minLength: 0) }
-                        HStack {
-                        Button("Use subscription") { apply(nil) }.disabled(selected.isEmpty || snapshot == nil)
-                        Button("Apply route") { apply(target) }.buttonStyle(.borderedProminent).disabled(selected.isEmpty || snapshot == nil)
-                        }
-                    }.controlSize(.small) }
-                    if let snapshot, !selected.isEmpty {
-                        let existing = RuleDraftDocument(snapshot.rules).rules.compactMap { $0.rule.flatMap(RuleForm.init) }.filter { $0.type == "PROCESS-PATH" && selection.contains($0.payload) }
-                        let conflicts = Dictionary(grouping: existing, by: \.payload).values.filter { $0.count > 1 }.count
-                        if conflicts > 0 { Text("\(conflicts) executable(s) have duplicate local rules. Apply Route replaces their exact-path entries with one rule each.").font(DS.Typography.metadata).foregroundStyle(Color.statusWarn) }
-                    }
-                    if AppState.shared.currentMode != .rule {
-                        Text("Rule mode is not active. Application rules are saved but bypassed in Global / Direct mode.").font(DS.Typography.metadata).foregroundStyle(Color.statusWarn)
-                    }
-                    Text("Rule precedence").font(DS.Typography.secondary.weight(.medium)).help("Local path rules take precedence. Domain and IP rules may also match; observed connections show the actual core decision.")
-                    Table(ApplicationRouting.evidence(paths: selected, rules: snapshot?.evidence ?? [])) {
-                        TableColumn("Order") { Text(String($0.order)).monospacedDigit() }.width(48)
-                        TableColumn("Rule") { Text($0.expression).lineLimit(1).help($0.expression) }
-                        TableColumn("Match / conflict") { Text($0.explanation).lineLimit(2) }.width(min: 150, ideal: 190)
-                    }.font(DS.Typography.metadata).frame(height: 180)
-                    HStack {
-                        Text("Observed connections").font(DS.Typography.secondary.weight(.medium))
-                        Spacer()
-                        Text(capturedAt.map { $0.formatted(date: .omitted, time: .standard) } ?? "Not read").foregroundStyle(.secondary)
-                        Button { Task { await readConnections() } } label: { Image(systemName: "arrow.clockwise") }.help("Read core connections")
-                    }.font(DS.Typography.metadata).controlSize(.small)
-                    Table(matching) {
-                        TableColumn("Destination") { Text($0.metadata.host.isEmpty ? $0.destinationString : $0.metadata.host).lineLimit(1) }
-                        TableColumn("Matched rule") { Text($0.rule + ": " + $0.rulePayload).lineLimit(1).help($0.rule + ": " + $0.rulePayload) }
-                        TableColumn("Actual route") { Text($0.chainsString).lineLimit(1).help($0.chainsString) }
-                        TableColumn("↓ / ↑") { Text(bytes($0.download) + " / " + bytes($0.upload)).monospacedDigit() }.width(110)
-                    }.font(DS.Typography.metadata).frame(height: 180)
-                    if matching.isEmpty { Text(selected.isEmpty ? "Select an application" : "No matching connections").help("Only core-reported executables are shown. Blocked or closed connections may not appear. Process identification may require privileged or TUN operation.").font(DS.Typography.metadata).foregroundStyle(.secondary) }
-                }.padding(.horizontal, DS.Space.lg).padding(.bottom, DS.Space.lg) }.frame(minWidth: 440)
+            if !embedded {
+                HStack { Text("Applications").font(DS.Typography.secondary.weight(.semibold)); Spacer(); Button("Done") { dismiss() } }
+                    .controlSize(.small).padding(DS.Space.lg)
             }
-            if let message { Text(message).font(DS.Typography.metadata).foregroundStyle(.secondary).padding(.horizontal, DS.Space.lg) }
-            if let error { Text(error).font(DS.Typography.metadata).foregroundStyle(Color.statusBad).padding(DS.Space.md) }
-        }.frame(minWidth: embedded ? 0 : 940, minHeight: embedded ? 0 : 680).background(DS.canvas).scrollIndicators(.never, axes: [.horizontal, .vertical])
-            .disabled(busy).interactiveDismissDisabled(busy)
-            .onChange(of: controller.runtimeGeneration) { _, _ in live = []; capturedAt = nil }
-            .task { paths = initialPaths.filter(ApplicationRouting.validPath).sorted(); selection = Set(paths); await load(); await readConnections() }
+            CollectionTools(placeholder: "Search applications", search: $search) {
+                Button { showingDiscovery = true } label: { Image(systemName: "plus") }
+                    .help("Add application route").accessibilityLabel("Add application route")
+                Button { Task { await model.reload() } } label: { Image(systemName: "arrow.clockwise") }
+                    .help("Reload configuration and connections").accessibilityLabel("Reload application routes")
+                Button { Task { await model.revert() } } label: { Image(systemName: "arrow.uturn.backward") }
+                    .disabled(model.undo == nil).help("Undo last route change").accessibilityLabel("Undo last route change")
+                Image(systemName: "info.circle").foregroundStyle(.secondary)
+                    .help("Local application routes apply across subscriptions in Rule mode. Each selected executable is matched exactly; helpers are never included implicitly. Existing connections keep their original route.")
+            }.disabled(model.busy)
+
+            DSCard(padding: 0, spacing: 0) {
+                if let app = model.selectedApplication {
+                    editor(app).padding(DS.Space.lg)
+                }
+                applicationTable
+            }
+            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
+            .padding(.horizontal, DS.Space.lg)
+            .padding(.bottom, DS.Space.lg)
+            if let error = model.error {
+                Text(error).foregroundStyle(Color.statusBad).font(DS.Typography.metadata)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, DS.Space.lg).padding(.bottom, DS.Space.md)
+            }
+        }
+        .background(DS.canvas).font(DS.Typography.secondary)
+        .frame(minWidth: embedded ? 0 : 680, minHeight: embedded ? 0 : 540)
+        .scrollIndicators(.never, axes: [.horizontal, .vertical])
+        .interactiveDismissDisabled(model.busy)
+        .sheet(isPresented: $showingDiscovery) { discovery }
+        .onChange(of: controller.runtimeGeneration) { _, _ in
+            model.invalidateRuntime()
+            Task { await model.reload() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification).debounce(for: .milliseconds(400), scheduler: RunLoop.main)) { _ in
+            Task { await model.reload() }
+        }
+        .task {
+            await model.start(paths: initialPaths)
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(10)) } catch { break }
+                if scenePhase == .active { await model.readConnections() }
+            }
+        }
     }
-    private func bytes(_ value: Int64) -> String { ByteCountFormatter.string(fromByteCount: value, countStyle: .binary) }
+
+    private var applicationTable: some View {
+        Table(rows, selection: Binding(get: { model.selectedAppID }, set: {
+            model.select($0); showingEvidence = false
+            showingExecutables = (model.selectedApplication?.paths.count ?? 0) > 1
+        })) {
+            TableColumn("Application") { app in
+                HStack(spacing: 8) {
+                    ApplicationRouteIcon(path: app.iconPath)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(app.name).font(DS.Typography.body.weight(.medium)).lineLimit(1)
+                        Text("\(app.paths.count) executable\(app.paths.count == 1 ? "" : "s")")
+                            .font(DS.Typography.metadata).foregroundStyle(.secondary)
+                    }
+                }.padding(.vertical, 4)
+            }.width(min: 160, ideal: 240)
+            TableColumn("Route") { app in
+                Text(ApplicationRoutingPresentation.routeLabel(model.route(paths: app.paths)))
+                    .lineLimit(1).help(routeHelp(app))
+            }.width(min: 110, ideal: 160)
+            TableColumn("Verification") { app in
+                verificationLabel(model.verification(paths: app.paths, ruleMode: ruleMode))
+            }.width(160)
+        }
+        .disabled(model.busy)
+        .overlay {
+            if rows.isEmpty {
+                ContentUnavailableView {
+                    Label(search.isEmpty ? "No application routes" : "No matching applications", systemImage: search.isEmpty ? "app.connected.to.app.below.fill" : "magnifyingglass")
+                } description: {
+                    Text(search.isEmpty ? "Add an application to choose its route. Other applications follow your existing rules." : "Try another name or executable path.")
+                } actions: {
+                    if search.isEmpty { Button("Add Application…") { showingDiscovery = true }.disabled(model.busy) }
+                }
+            }
+        }
+        .accessibilityLabel("Application routing rules")
+        .frame(minHeight: 180)
+    }
+
+    private func editor(_ app: ApplicationRoutingPresentation.Application) -> some View {
+        VStack(alignment: .leading, spacing: DS.Space.md) {
+            HStack(spacing: DS.Space.md) {
+                VStack(alignment: .leading, spacing: DS.Space.xs) {
+                    Text(app.name).font(DS.Typography.body.weight(.medium)).lineLimit(1)
+                    Button { showingExecutables.toggle() } label: {
+                        HStack(spacing: DS.Space.xs) {
+                            Text("\(model.selectedPaths.count) of \(app.paths.count) executables")
+                            Image(systemName: showingExecutables ? "chevron.up" : "chevron.down")
+                        }.font(DS.Typography.metadata).foregroundStyle(.secondary)
+                    }.buttonStyle(.borderless)
+                        .help("Review the exact executables that will change")
+                }.frame(maxWidth: .infinity, alignment: .leading)
+                Picker("Route", selection: $model.target) {
+                    Text("Follow rules").tag(ApplicationRouting.SelectionRoute.inherited)
+                    if model.target == .mixed { Text("Mixed").tag(ApplicationRouting.SelectionRoute.mixed) }
+                    ForEach(routeTargets, id: \.self) { name in
+                        Text(ApplicationRoutingPresentation.routeLabel(.target(name))).tag(ApplicationRouting.SelectionRoute.target(name))
+                    }
+                }.labelsHidden().frame(width: 180)
+                    .disabled(model.selectedPaths.isEmpty || model.snapshot == nil)
+                Button("Apply") { Task { await model.apply() } }
+                    .buttonStyle(.borderedProminent).disabled(!model.canApply)
+                Button { showingEvidence.toggle() } label: {
+                    Image(systemName: showingEvidence ? "list.bullet.rectangle.fill" : "list.bullet.rectangle")
+                }.buttonStyle(.borderless).help("Inspect rule and connection evidence").accessibilityLabel("Inspect routing evidence")
+            }.controlSize(.small).disabled(model.busy)
+
+            if !ruleMode { Text("Rules are bypassed in Global / Direct mode.").foregroundStyle(Color.statusWarn).font(DS.Typography.metadata) }
+            if let message = model.message { Text(message).font(DS.Typography.metadata).foregroundStyle(.secondary) }
+
+            if showingExecutables || showingEvidence {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: DS.Space.md) {
+                        if showingExecutables { executableList(app) }
+                        if showingEvidence { evidence }
+                    }
+                }.frame(height: showingEvidence ? 180 : min(160, CGFloat(app.paths.count) * 38 + 28))
+            }
+        }
+    }
+
+    private var routeTargets: [String] {
+        var targets = model.snapshot?.targets ?? ["DIRECT", "REJECT"]
+        if case .target(let selected) = model.target, !targets.contains(selected) { targets.append(selected) }
+        return targets
+    }
+
+    private func executableList(_ app: ApplicationRoutingPresentation.Application) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(app.paths, id: \.self) { path in
+                HStack(alignment: .top, spacing: 8) {
+                    Toggle(isOn: Binding(get: { model.selectedPaths.contains(path) }, set: { model.setPath(path, included: $0) })) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text((path as NSString).lastPathComponent).lineLimit(1)
+                            Text(path).font(DS.Typography.metadata).foregroundStyle(.secondary)
+                                .lineLimit(1).truncationMode(.middle).help(path).textSelection(.enabled)
+                        }
+                    }.toggleStyle(.checkbox)
+                    Spacer(minLength: 8)
+                    Text(ApplicationRoutingPresentation.routeLabel(model.route(paths: [path]))).foregroundStyle(.secondary)
+                }
+            }
+            Text("Only checked executables will change.")
+                .font(DS.Typography.metadata).foregroundStyle(.secondary)
+                .help("Additional helpers may appear when the application opens new connections. App grouping never silently expands an exact-path rule.")
+        }.disabled(model.busy)
+    }
+
+    private var evidence: some View {
+        VStack(alignment: .leading, spacing: DS.Space.sm) {
+            HStack {
+                Text("Connection evidence").fontWeight(.medium)
+                Spacer()
+                Text(model.capturedAt.map { $0.formatted(date: .omitted, time: .standard) } ?? "Unavailable").foregroundStyle(.secondary)
+            }
+            if model.matching.isEmpty {
+                Text("No matching connection observed. Open a new connection in the application to verify.").foregroundStyle(.secondary)
+            } else {
+                ForEach(model.matching) { connection in
+                    HStack(spacing: 12) {
+                        Text(connection.metadata.host.isEmpty ? connection.destinationString : connection.metadata.host).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+                        Text(connection.rule + ": " + connection.rulePayload).lineLimit(1).help(connection.rulePayload)
+                        Text(connection.chainsString).lineLimit(1).help(connection.chainsString)
+                    }
+                }
+            }
+            DisclosureGroup("Rule details") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(model.snapshot?.evidenceSource ?? "Unavailable").foregroundStyle(.secondary)
+                    ForEach(ApplicationRouting.evidence(paths: model.selectedPaths.sorted(), rules: model.snapshot?.evidence ?? [])) { row in
+                        Text("\(row.order). \(row.expression)").textSelection(.enabled).help(row.explanation)
+                    }
+                }.padding(.top, 6)
+            }
+        }.font(DS.Typography.metadata)
+    }
+
+    private var discovery: some View {
+        ApplicationDiscoverySheet(applications: model.discovered, reload: { await model.readConnections() },
+            add: { model.add(paths: $0); showingExecutables = true }, browse: { chooseApplication() })
+    }
+
+    private func verificationLabel(_ status: ApplicationRouting.Verification) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: status == .verified ? "checkmark.circle" : status == .different || status == .conflict ? "exclamationmark.circle" : "circle.dotted")
+                .foregroundStyle(status == .verified ? Color.statusGood : status == .different || status == .conflict ? Color.statusWarn : Color.secondary)
+                .accessibilityHidden(true)
+            Text(status.rawValue).lineLimit(1)
+        }.help("Verified requires a matching exact-path rule and route reported by the core. A saved rule or missing connection alone does not prove it is effective.")
+    }
+
+    private func routeHelp(_ app: ApplicationRoutingPresentation.Application) -> String {
+        let count = app.paths.filter { ApplicationRouting.localRoutes(in: model.localRules)[$0] != nil }.count
+        return "\(count) of \(app.paths.count) known executables have local overrides. Unconfigured executables follow existing rules."
+    }
+
     private func chooseApplication() {
-        let panel = NSOpenPanel(); panel.canChooseFiles = true; panel.canChooseDirectories = false; panel.allowsMultipleSelection = true
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true; panel.canChooseDirectories = false; panel.allowsMultipleSelection = true
         guard panel.runModal() == .OK else { return }
-        let chosen = panel.urls.compactMap { url -> String? in
-            let path = url.pathExtension == "app" ? Bundle(url: url)?.executableURL?.path : url.path
-            return path.flatMap { ApplicationRouting.validPath($0) ? $0 : nil }
+        let paths = panel.urls.compactMap { url in
+            url.pathExtension == "app" ? Bundle(url: url)?.executableURL?.path : url.path
         }
-        paths = Array(Set(paths + chosen)).sorted(); selection = Set(chosen)
+        model.add(paths: paths); showingExecutables = true
     }
-    private func load() async {
-        do {
-            let result = try await ApplicationRoutingService.load(); snapshot = result
-            paths = Array(Set(paths + ApplicationRouting.paths(in: result.rules))).sorted()
-            if !result.targets.contains(target) { target = "DIRECT" }
-        } catch { self.error = "Configuration could not be read. Reopen after the current operation finishes." }
+}
+
+private struct ApplicationRouteIcon: View {
+    let path: String?
+    var body: some View {
+        Group {
+            if let path { Image(nsImage: NSWorkspace.shared.icon(forFile: path)).resizable() }
+            else { Image(systemName: "app").resizable() }
+        }.frame(width: 20, height: 20).accessibilityHidden(true)
     }
-    private func readConnections() async {
-        do {
-            live = try await ApplicationRoutingService.connections(); capturedAt = Date()
-            paths = Array(Set(paths + live.compactMap { $0.metadata.processPath }.filter(ApplicationRouting.validPath))).sorted()
-        } catch { live = []; capturedAt = nil; message = "Runtime connection evidence unavailable. Saved rules remain editable." }
+}
+
+private struct ApplicationDiscoverySheet: View {
+    let applications: [ApplicationRoutingPresentation.Application]
+    let reload: () async -> Void
+    let add: ([String]) -> Void
+    let browse: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var search = ""
+    @State private var selection = Set<String>()
+    private var rows: [ApplicationRoutingPresentation.Application] {
+        applications.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) }
     }
-    private func apply(_ target: String?) {
-        guard let snapshot else { return }; busy = true; error = nil
-        Task { @MainActor in
-            defer { busy = false }
-            do {
-                undo = try await ApplicationRoutingService.apply(paths: selected, target: target, snapshot: snapshot)
-                message = "Saved and validated. Reconnect the application, then read connections to confirm the actual rule and route."
-                await load(); await readConnections()
-            } catch { self.error = error.localizedDescription }
-        }
-    }
-    private func revert(_ value: ApplicationRoutingService.Undo) async {
-        busy = true; defer { busy = false }
-        if await ApplicationRoutingService.undo(value) { undo = nil; message = "Previous local rules restored."; await load(); await readConnections() }
-        else { error = AppState.shared.lastOperationError ?? "Undo is unavailable after another rule edit." }
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Space.md) {
+            HStack { Text("Add Applications").font(DS.Typography.secondary.weight(.semibold)); Spacer(); Button("Cancel") { dismiss() } }
+            HStack {
+                TextField("Search discovered applications", text: $search).textFieldStyle(.roundedBorder)
+                Button { Task { await reload() } } label: { Image(systemName: "arrow.clockwise") }.help("Read core connections")
+            }
+            List(rows, selection: $selection) { app in
+                HStack(spacing: 8) {
+                    ApplicationRouteIcon(path: app.iconPath)
+                    Text(app.name)
+                    Spacer()
+                    Text("\(app.paths.count) executable\(app.paths.count == 1 ? "" : "s")").foregroundStyle(.secondary).font(DS.Typography.metadata)
+                }.tag(app.id)
+            }.overlay {
+                if rows.isEmpty { ContentUnavailableView("No discovered applications", systemImage: "app.dashed", description: Text("Open a connection in the application, or choose its executable.")) }
+            }
+            HStack {
+                Button("Choose from Mac…") { dismiss(); browse() }
+                Spacer()
+                Button("Add Selected") {
+                    add(applications.filter { selection.contains($0.id) }.flatMap(\.paths)); dismiss()
+                }.buttonStyle(.borderedProminent).disabled(selection.isEmpty)
+            }
+        }.controlSize(.small).font(DS.Typography.secondary).padding(DS.Space.lg)
+            .frame(width: 520, height: 420).scrollIndicators(.never)
     }
 }

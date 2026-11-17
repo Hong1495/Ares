@@ -279,7 +279,7 @@ struct RuleSourcesView: View { var provider: String? = nil; var body: some View 
                 else if CommandLine.arguments.contains("--scenes") { ScenariosView(embedded: true).toolbar { CollectionTitleToolbar(title: "Scenes", count: nil, unit: "") } }
                 else if CommandLine.arguments.contains("--diagnostics") { ActivityDiagnosticsView().frame(width: 800, height: 520) }
                 else if CommandLine.arguments.contains("--quality") { ScrollView { NetworkQualityView(embedded: true) }.toolbar { CollectionTitleToolbar(title: "Quality", count: nil, unit: "") } }
-                else if CommandLine.arguments.contains("--apps") { ApplicationRoutingView(embedded: true, initialPaths: ["/Applications/Preview.app/Contents/MacOS/Preview"]).toolbar { CollectionTitleToolbar(title: "Applications", count: nil, unit: "") } }
+                else if CommandLine.arguments.contains("--apps") { ApplicationRoutingView(embedded: true).toolbar { CollectionTitleToolbar(title: "Applications", count: nil, unit: "") } }
                 else if CommandLine.arguments.contains("--egress") { EgressSettingsView().frame(width: 740, height: 560) }
                 else if CommandLine.arguments.contains("--dns") { DNSSettingsView().frame(width: 740, height: 540) }
                 else if CommandLine.arguments.contains("--resources") { ProxyResourcesView() }
@@ -333,6 +333,8 @@ struct RuleSourcesView: View { var provider: String? = nil; var body: some View 
     func resumeAutomatic(group: String) async {}
 }
 @MainActor enum ApplicationRoutingService {
+    static var verificationSince: [String: Date] = [:]
+    static var rules = CommandLine.arguments.contains("--apps-empty") ? "" : "PROCESS-PATH,/Applications/Safari.app/Contents/MacOS/Safari,Automatic\nPROCESS-PATH,/Applications/Mail.app/Contents/MacOS/Mail,DIRECT\nPROCESS-PATH,/Applications/Terminal.app/Contents/MacOS/Terminal,REJECT"
     struct Snapshot {
         let policy: PolicyGroupService.Snapshot
         let rules: String
@@ -342,11 +344,32 @@ struct RuleSourcesView: View { var provider: String? = nil; var body: some View 
     }
     struct Undo { let previous: String; let applied: String; let revision: String }
     static func load() async throws -> Snapshot {
-        Snapshot(policy: try await PolicyGroupService.load(), rules: "", evidence: ["PROCESS-PATH,/Applications/Preview.app/Contents/MacOS/Preview,DIRECT", "MATCH,Automatic"], evidenceSource: "Synthetic preview", targets: ["DIRECT", "REJECT", "Automatic"])
+        Snapshot(policy: try await PolicyGroupService.load(), rules: rules, evidence: rules.components(separatedBy: "\n") + ["MATCH,Automatic"], evidenceSource: "Synthetic preview", targets: ["DIRECT", "REJECT", "Automatic"])
     }
-    static func apply(paths: [String], target: String?, snapshot: Snapshot) async throws -> Undo? { nil }
-    static func undo(_ undo: Undo) async -> Bool { true }
-    static func connections() async throws -> [Connection] { [] }
+    static func apply(paths: [String], target: String?, snapshot: Snapshot) async throws -> Undo? {
+        let previous = rules
+        rules = try ApplicationRouting.replacing(rules, paths: paths, target: target)
+        for path in paths { verificationSince[path] = Date() }
+        return .init(previous: previous, applied: rules, revision: "preview")
+    }
+    static func undo(_ undo: Undo) async -> Bool {
+        guard rules == undo.applied else { return false }
+        rules = undo.previous
+        let previous = ApplicationRouting.localRoutes(in: undo.previous)
+        let applied = ApplicationRouting.localRoutes(in: undo.applied)
+        for path in Set(previous.keys).union(applied.keys) where previous[path] != applied[path] { verificationSince[path] = Date() }
+        return true
+    }
+    static func connections() async throws -> [Connection] {
+        let fixture: [(String, String, String)] = [
+            ("/Applications/Safari.app/Contents/MacOS/Safari", "ProcessPath", "Automatic"),
+            ("/Applications/Mail.app/Contents/MacOS/Mail", "Match", "Automatic"),
+            ("/Applications/Safari.app/Contents/Frameworks/WebKit Helper.app/Contents/MacOS/WebKit Helper", "Match", "Automatic"),
+            ("/Applications/Notes.app/Contents/MacOS/Notes", "Match", "DIRECT")]
+        return fixture.enumerated().map { index, item in
+            Connection(id: "preview-\(index)", metadata: .init(network: "tcp", type: "HTTP", sourceIP: "127.0.0.1", destinationIP: "192.0.2.10", sourcePort: "5000", destinationPort: "443", host: "example.test", processPath: item.0), upload: 120, download: 240, start: Date().addingTimeInterval(-60), chains: [item.2], rule: item.1, rulePayload: item.0)
+        }
+    }
 }
 
 @MainActor enum ManagedWorkspaceService {

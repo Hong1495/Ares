@@ -14,7 +14,8 @@ xcrun swiftc -parse-as-library -target arm64-apple-macosx14.0 \
   -I "$BIN/Modules" -I "$PACKAGE/.build/checkouts/Yams/Sources/CYaml/include" \
   "$ROOT/Ares/Services/ResourceActivity.swift" \
   "$ROOT/Ares/UI/ManagedResourcesView.swift" "$ROOT/Ares/UI/ResourceNodeForm.swift" "$ROOT/Ares/UI/DevicesView.swift" \
-  "$ROOT/Ares/UI/ApplicationRoutingView.swift" "$ROOT/Ares/UI/NetworkQualityView.swift" \
+  "$ROOT/Ares/UI/ApplicationRoutingView.swift" "$ROOT/Ares/UI/ApplicationRoutingViewModel.swift" \
+  "$ROOT/Ares/Utilities/ApplicationRoutingPresentation.swift" "$ROOT/Ares/UI/NetworkQualityView.swift" \
   "$ROOT/Ares/Models/Connection.swift" "$ROOT/Ares/Utilities/ConnectionIdentity.swift" \
   "$ROOT/Ares/UI/NetworkFormEditors.swift" \
   "$ROOT/Ares/Models/DNSQueryResult.swift" "$ROOT/Ares/UI/DNSSettingsView.swift" "$ROOT/Ares/UI/EgressSettingsView.swift" \

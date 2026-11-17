@@ -70,9 +70,11 @@ struct PreviewWorkspace: View {
 
     private var points: [OverviewTrafficPoint] {
         let start = Date().addingTimeInterval(-60)
-        return (0..<60).map { i in
+        let gap = CommandLine.arguments.contains("--traffic-gap")
+        return (0..<60).filter { !gap || !(20...28).contains($0) }.map { i in
             let wave = max(0, sin(Double(i) * 0.24) * 0.8 + sin(Double(i) * 0.71) * 0.22 + 1.1)
-            return OverviewTrafficPoint(time: start.addingTimeInterval(Double(i)), download: enabled ? wave * 2_800_000 : 0, upload: enabled ? wave * 240_000 : 0)
+            return OverviewTrafficPoint(time: start.addingTimeInterval(Double(i)), download: enabled ? wave * 2_800_000 : 0, upload: enabled ? wave * 240_000 : 0,
+                                        segment: gap && i > 28 ? 1 : 0)
         }
     }
 

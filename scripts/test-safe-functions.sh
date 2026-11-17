@@ -32,6 +32,8 @@ SOURCES=(
   "$ROOT/AresTests/ActivityFunctionsTests.swift"
   "$ROOT/Ares/Utilities/ActivityTrafficLedger.swift"
   "$ROOT/AresTests/ActivityTrafficLedgerTests.swift"
+  "$ROOT/Ares/Utilities/TrafficHistory.swift"
+  "$ROOT/AresTests/TrafficHistoryTests.swift"
   "$ROOT/Ares/Utilities/TopologySnapshot.swift"
   "$ROOT/AresTests/TopologySnapshotTests.swift"
   "$ROOT/Ares/Utilities/ValidatedConfigurationFile.swift"

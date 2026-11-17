@@ -78,32 +78,17 @@ private struct ControlCenterCard: View {
 // MARK: - Traffic
 
 private struct TrafficCard: View {
-    @EnvironmentObject private var appState: AppState
-    @StateObject private var model = TrafficGraphViewModel()
+    @ObservedObject private var history = ClashController.shared.trafficHistory
 
     var body: some View {
         OverviewTrafficCard(
-            points: model.dataPoints.map { point in
-                OverviewTrafficPoint(time: point.time, download: Double(point.download), upload: Double(point.upload))
+            points: history.snapshot.points.map { point in
+                OverviewTrafficPoint(time: point.time, download: Double(point.download), upload: Double(point.upload), segment: point.segment)
             },
-            download: Self.formatSpeed(model.currentDownload),
-            upload: Self.formatSpeed(model.currentUpload)
+            download: Self.formatSpeed(history.snapshot.currentDownload),
+            upload: Self.formatSpeed(history.snapshot.currentUpload)
         )
-        .task {
-            await Task.yield()
-            model.startMonitoring()
-        }
-        .onDisappear { model.stopMonitoring() }
-        .onChange(of: scenePhase) { _, newPhase in
-            if newPhase == .active {
-                model.startMonitoring()
-            } else if newPhase == .background {
-                model.stopMonitoring()
-            }
-        }
     }
-
-    @Environment(\.scenePhase) private var scenePhase
 
     static func formatSpeed(_ bytes: Int64) -> String {
         guard bytes > 0 else { return "0 B/s" }

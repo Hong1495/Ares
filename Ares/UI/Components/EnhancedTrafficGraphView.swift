@@ -1,10 +1,8 @@
 import SwiftUI
-import Charts
-import Combine
 
 /// Enhanced Real-time Traffic Graph using SwiftUI Charts
 struct EnhancedTrafficGraphView: View {
-    @StateObject private var viewModel = TrafficGraphViewModel()
+    @ObservedObject private var history = ClashController.shared.trafficHistory
     @EnvironmentObject private var appState: AppState
     var showHeader: Bool = true
 
@@ -25,7 +23,7 @@ struct EnhancedTrafficGraphView: View {
                             Text("Upload")
                                 .font(.footnote)
                                 .fontWeight(.medium)
-                            Text(formatSpeed(viewModel.currentUpload))
+                            Text(formatSpeed(history.snapshot.currentUpload))
                                 .font(.footnote)
                                 .fontWeight(.semibold)
                                 .monospacedDigit()
@@ -38,7 +36,7 @@ struct EnhancedTrafficGraphView: View {
                             Text("Download")
                                 .font(.footnote)
                                 .fontWeight(.medium)
-                            Text(formatSpeed(viewModel.currentDownload))
+                            Text(formatSpeed(history.snapshot.currentDownload))
                                 .font(.footnote)
                                 .fontWeight(.semibold)
                                 .monospacedDigit()
@@ -50,8 +48,8 @@ struct EnhancedTrafficGraphView: View {
             }
 
             // Speed Chart using SmoothGraphView for 60fps scrolling
-            let uploadData = viewModel.dataPoints.map { ($0.time, Double($0.upload)) }
-            let downloadData = viewModel.dataPoints.map { ($0.time, Double($0.download)) }
+            let uploadData = history.snapshot.points.map { ($0.time, Double($0.upload)) }
+            let downloadData = history.snapshot.points.map { ($0.time, Double($0.download)) }
 
             DualSmoothGraphView(
                 uploadData: uploadData,
@@ -66,25 +64,7 @@ struct EnhancedTrafficGraphView: View {
         .padding(showHeader ? 16 : 4)
         .background(showHeader ? Color(nsColor: .controlBackgroundColor) : Color.clear)
         .cornerRadius(showHeader ? 8 : 0)
-        .task {
-            await Task.yield()
-            viewModel.startMonitoring()
-        }
-        .onDisappear {
-            viewModel.stopMonitoring()
-        }
-        .onChange(of: scenePhase) { _, newPhase in
-            if newPhase == .active {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    viewModel.startMonitoring()
-                }
-            } else if newPhase == .background {
-                viewModel.stopMonitoring()
-            }
-        }
     }
-
-    @Environment(\.scenePhase) private var scenePhase
 
     private func formatSpeed(_ bytes: Int64) -> String {
         let formatter = ByteCountFormatter()
@@ -92,59 +72,5 @@ struct EnhancedTrafficGraphView: View {
         formatter.countStyle = .file
         let formatted = formatter.string(fromByteCount: bytes)
         return formatted == "Zero KB" ? "0 KB/s" : formatted + "/s"
-    }
-}
-
-/// Data point for chart
-struct TrafficDataPoint: Identifiable {
-    let id = UUID()
-    let time: Date
-    let upload: Int64
-    let download: Int64
-}
-
-/// ViewModel for traffic monitoring
-@MainActor
-class TrafficGraphViewModel: ObservableObject {
-    @Published var dataPoints: [TrafficDataPoint] = []
-    @Published var currentUpload: Int64 = 0
-    @Published var currentDownload: Int64 = 0
-
-    private var cancellables = Set<AnyCancellable>()
-
-    func startMonitoring() {
-        guard cancellables.isEmpty else { return }
-
-        // Observe ClashController traffic updates
-        ClashController.shared.$traffic
-            .receive(on: RunLoop.main)
-            .sink { [weak self] traffic in
-                self?.updateTraffic(up: traffic.up, down: traffic.down)
-            }
-            .store(in: &cancellables)
-    }
-
-    func stopMonitoring() {
-        cancellables.removeAll()
-    }
-
-    private func updateTraffic(up: Int64, down: Int64) {
-        // 已在 @MainActor 上，无需再次调度到主线程
-        self.currentUpload = up
-        self.currentDownload = down
-
-        // Update graph data
-        let newPoint = TrafficDataPoint(
-            time: Date(),
-            upload: up,
-            download: down
-        )
-
-        self.dataPoints.append(newPoint)
-        // Keep the full time window and one preceding sample for the left edge.
-        let cutoff = newPoint.time.addingTimeInterval(-60)
-        while dataPoints.count > 2 && dataPoints[1].time < cutoff {
-            dataPoints.removeFirst()
-        }
     }
 }

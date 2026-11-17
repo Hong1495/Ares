@@ -50,6 +50,7 @@ class ClashController: ObservableObject {
     var automaticLatencyTask: Task<Void, Never>?
     var proxySession: URLSession = .shared
     @Published var traffic = TrafficStats()
+    let trafficHistory = TrafficHistory()
     @Published var proxies: [String: Any] = [:]
     @Published var proxyGroups: [ProxyGroup] = []
     @Published var proxyNodes: [String: ProxyNode] = [:]

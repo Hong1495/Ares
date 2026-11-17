@@ -75,11 +75,15 @@ struct ProxiesView: View {
     var body: some View {
         VStack(spacing: 0) {
             toolbar
+                .fixedSize(horizontal: false, vertical: true)
 
             Divider()
 
             content
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(DS.canvas)
         .navigationTitle("")
         .toolbar { ProxiesTitleToolbar(count: nodeCount) }
         .sheet(isPresented: $showingResources) { ProxyResourcesView().environmentObject(clashController) }
@@ -242,7 +246,6 @@ struct ProxiesView: View {
             } description: {
                 Text("All traffic goes directly.")
             }
-            .frame(maxWidth: .infinity, minHeight: 300)
         } else if filteredGroups.isEmpty {
             ContentUnavailableView {
                 Label(isLoading ? "Loading subscription" : "No saved nodes", systemImage: "network.slash")
@@ -251,7 +254,6 @@ struct ProxiesView: View {
                     ? "Add a subscription in Subscriptions."
                     : "This subscription has no embedded nodes. Update it in Subscriptions."))
             }
-            .frame(maxWidth: .infinity, minHeight: 300)
         } else {
             VStack(spacing: 0) {
                 if !showingLive {

@@ -15,6 +15,7 @@ scripts/test-managed-workspace.sh
 scripts/test-effective-config.sh
 scripts/test-resource-activity.sh
 scripts/test-network-quality.sh
+scripts/test-application-routing.sh
 scripts/test-activity-diagnostics.sh
 scripts/test-listener-verification.sh
 scripts/test-core-process-reaper.sh

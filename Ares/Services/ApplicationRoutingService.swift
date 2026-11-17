@@ -2,6 +2,8 @@ import Foundation
 import SubscriptionKit
 
 @MainActor enum ApplicationRoutingService {
+    // Session-only boundary: existing connections do not verify a newly saved rule.
+    private(set) static var verificationSince: [String: Date] = [:]
     struct Snapshot {
         let policy: PolicyGroupService.Snapshot
         let rules: String
@@ -38,10 +40,17 @@ import SubscriptionKit
         guard await LocalRulesService.apply(draft, expectedRevision: policy.revision, expectedRules: snapshot.rules, expectedPolicy: (policy.storageKey, policy.stored)) else {
             throw PolicyConfiguration.Failure.invalid(AppState.shared.lastOperationError ?? "Another operation is in progress.")
         }
+        for path in paths { verificationSince[path] = Date() }
         return Undo(previous: snapshot.rules, applied: draft, revision: policy.revision)
     }
     static func undo(_ undo: Undo) async -> Bool {
-        await LocalRulesService.apply(undo.previous, expectedRevision: undo.revision, expectedRules: undo.applied)
+        guard await LocalRulesService.apply(undo.previous, expectedRevision: undo.revision, expectedRules: undo.applied) else { return false }
+        let previous = ApplicationRouting.localRoutes(in: undo.previous)
+        let applied = ApplicationRouting.localRoutes(in: undo.applied)
+        for path in Set(previous.keys).union(applied.keys) where previous[path] != applied[path] {
+            verificationSince[path] = Date()
+        }
+        return true
     }
     /// Use core-reported process identity for verification; OS display attribution is not proof of a rule match.
     static func connections() async throws -> [Connection] {

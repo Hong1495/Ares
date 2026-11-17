@@ -181,6 +181,7 @@ struct OverviewTrafficPoint: Identifiable {
     let time: Date
     let download: Double
     let upload: Double
+    var segment: UInt64 = 0
 }
 
 struct OverviewTrafficCard: View {
@@ -224,13 +225,14 @@ struct OverviewTrafficCard: View {
                 Spacer()
             }
             TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion || scenePhase != .active)) { timeline in
+            let visiblePoints = pointsInWindow(at: timeline.date)
             Chart {
-                ForEach(points) { point in
+                ForEach(visiblePoints) { point in
                     let value = uploadLane ? point.upload : point.download
-                    AreaMark(x: .value("Time", point.time), y: .value("Bytes/s", value))
+                    AreaMark(x: .value("Time", point.time), y: .value("Bytes/s", value), series: .value("Monitor session", point.segment))
                         .foregroundStyle(LinearGradient(colors: [color.opacity(0.09), color.opacity(0.005)], startPoint: .top, endPoint: .bottom))
                         .interpolationMethod(.monotone)
-                    LineMark(x: .value("Time", point.time), y: .value("Bytes/s", value))
+                    LineMark(x: .value("Time", point.time), y: .value("Bytes/s", value), series: .value("Monitor session", point.segment))
                         .foregroundStyle(color).lineStyle(StrokeStyle(lineWidth: 1.4)).interpolationMethod(.monotone)
                 }
                 if let selectedTime {
@@ -241,7 +243,7 @@ struct OverviewTrafficCard: View {
             .chartLegend(.hidden).chartXSelection(value: $selectedTime).chartXAxis(.hidden)
             .chartPlotStyle { plot in plot.clipped() }
             .chartXScale(domain: timeline.date.addingTimeInterval(-60)...timeline.date)
-            .chartYScale(domain: 0...max(1024, points.map { uploadLane ? $0.upload : $0.download }.max() ?? 1024) * 1.15)
+            .chartYScale(domain: 0...max(1024, visiblePoints.map { uploadLane ? $0.upload : $0.download }.max() ?? 1024) * 1.15)
             .chartYAxis {
                 AxisMarks(position: .trailing, values: .automatic(desiredCount: 2)) { value in
                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 4])).foregroundStyle(DS.line)
@@ -255,6 +257,13 @@ struct OverviewTrafficCard: View {
             .frame(minHeight: 40, maxHeight: .infinity)
             .accessibilityLabel("\(title) bytes per second. Independently scaled, last 60 seconds.")
         }
+    }
+
+    private func pointsInWindow(at time: Date) -> ArraySlice<OverviewTrafficPoint> {
+        let cutoff = time.addingTimeInterval(-60)
+        guard let first = points.firstIndex(where: { $0.time >= cutoff }) else { return [] }
+        let start = first > 0 && points[first - 1].segment == points[first].segment ? first - 1 : first
+        return points[start...]
     }
 
     private func format(_ value: Double) -> String {

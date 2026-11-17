@@ -23,14 +23,14 @@ extension ClashController {
         isMonitoring = false
         trafficWebSocket?.cancel(with: .goingAway, reason: "Monitoring stopped".data(using: .utf8))
         trafficWebSocket = nil
-        // Reset traffic stats to 0 when stopped
-        DispatchQueue.main.async {
-            self.traffic = TrafficStats()
-        }
+        // Clear the live rate without adding a synthetic zero to measured history.
+        traffic = TrafficStats()
+        trafficHistory.pause()
     }
 
     private func restartMonitor() {
         guard isMonitoring else { return }
+        trafficHistory.pause()
         // Don't call stopTrafficMonitor() here as it sets isMonitoring=false
         trafficWebSocket?.cancel(with: .goingAway, reason: nil)
         trafficWebSocket = nil
@@ -77,9 +77,11 @@ extension ClashController {
                     if let stats = self.parseTrafficMessage(message) {
                         // Update UI on MainActor
                         await MainActor.run {
+                            guard self.isMonitoring, self.trafficWebSocket === ws else { return }
                             self.consecutiveFailures = 0
                             self.lastTrafficStats = stats
                             self.traffic = stats
+                            self.trafficHistory.record(upload: stats.up, download: stats.down, at: now)
                             self.lastTrafficUpdate = now
                         }
                     }
@@ -113,7 +115,10 @@ extension ClashController {
                     let isMonitoring = await self.isMonitoring
                     let isRunning = await ClashViewModel.shared.isRunning
                     if isMonitoring && isRunning {
-                        await MainActor.run { self.restartMonitor() }
+                        await MainActor.run {
+                            guard self.isMonitoring, self.trafficWebSocket === ws else { return }
+                            self.restartMonitor()
+                        }
                     }
                     break
                 }
