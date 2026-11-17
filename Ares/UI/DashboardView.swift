@@ -137,7 +137,7 @@ private struct DashboardWorkspaceSummary: View {
     var body: some View {
         OverviewWorkspaceSummary(probes: probes, applications: applications, policies: policies, scenes: sceneSummary, resources: resources, devices: devices, openResources: { appState.selection = .resources }, openDevices: { appState.selection = .devices }, processes: rows, activityStatus: activityStatus,
             connections: connectionCount, processCount: processCount,
-            qualityStatus: quality.enabled ? quality.status : "Monitoring is off · Open Network Quality to start",
+            qualityStatus: quality.enabled ? quality.status : "Monitoring is off · Open Quality to start",
             qualityGroup: quality.group.isEmpty ? "No monitored policy" : quality.group,
             route: quality.enabled ? quality.window.route?.path.joined(separator: " → ") ?? "Waiting for measured results" : "Periodic HTTPS and DNS measurements",
             openActivity: { appState.selection = .connections },

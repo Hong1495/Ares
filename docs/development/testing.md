@@ -38,6 +38,8 @@ The preview has mock data and no production services. Use a disposable VM for li
 
 ## Saved subscription UI regression
 
-Run `scripts/preview-subscription.sh --open` to exercise the production ProxiesView with mock services, a stopped runtime and a synthetic 32-node subscription. Any call to a core operation traps immediately. No production delegate, service implementation or core binary is linked. Verify both Rule and Global lists, search, group expansion and disabled selection/latency actions.
+Run `scripts/preview-subscription.sh --open` to exercise the production ProxiesView with mock services, a stopped runtime and a synthetic 32-node subscription. Any call to a core operation traps immediately. No production delegate, service implementation or core binary is linked. Verify both Rule and Global tables, group selection, search, saved offline choices and disabled latency actions.
+
+For table interaction checks, reopen that preview with `--args --proxy-table-live --compact`. This uses synthetic in-memory groups and latency values without contacting a core. Verify nested-group selection, URL Test/Fallback pinning and Resume Auto, load-balancing restrictions, single-node and batch testing, and search results. Add `--table-compact-check` for a fixed 680-point content width and `--dark` for a dark appearance. Mock latency results are not network measurements.
 
 `swift test --package-path Packages/SubscriptionKit` tests YAML block/flow/JSON forms, anchors, Unicode, duplicates, provider-only profiles and malformed input. The optional `ARES_READONLY_PROFILE` environment variable enables a local 32-node/2-group acceptance fixture; it is never copied into the repository or logged.

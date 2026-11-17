@@ -14,7 +14,7 @@ struct NetworkQualityView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.lg) {
             if !embedded { HStack {
-                Text("Network Quality").font(DS.Typography.secondary.weight(.semibold))
+                Text("Quality").font(DS.Typography.secondary.weight(.semibold))
                 Spacer(); Button("Done") { dismiss() }.controlSize(.small)
             } }
             DSCard(padding: DS.Space.md) {

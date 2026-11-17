@@ -36,6 +36,8 @@ struct PreviewWorkspace: View {
     @State private var tab = 0
     @State private var activityGrouping = "Application"
     @State private var selectedNode = "Tokyo · 01"
+    @State private var previewGroup: String? = "Select"
+    @State private var previewFocus: String?
     @State private var search = ""
     @State private var measured = false
     @State private var empty = false
@@ -46,7 +48,7 @@ struct PreviewWorkspace: View {
     private let destinations = [
         WorkspaceDestination(id: "Dashboard", title: "Dashboard", icon: "gauge.with.dots.needle.50percent", section: "Overview"),
         WorkspaceDestination(id: "Activity", title: "Activity", icon: "arrow.up.arrow.down", section: "Overview"),
-        WorkspaceDestination(id: "Network Quality", title: "Network Quality", icon: "waveform.path.ecg", section: "Overview"),
+        WorkspaceDestination(id: "Quality", title: "Quality", icon: "waveform.path.ecg", section: "Overview"),
         WorkspaceDestination(id: "Proxies", title: "Proxies", icon: "network", section: "Routing"),
         WorkspaceDestination(id: "Applications", title: "Applications", icon: "app.connected.to.app.below.fill", section: "Routing"),
         WorkspaceDestination(id: "Policies", title: "Policies", icon: "slider.horizontal.3", section: "Routing"),
@@ -139,7 +141,7 @@ struct PreviewWorkspace: View {
                 connections: empty ? 0 : 28, processCount: empty ? 0 : 6,
                 qualityStatus: "Preview · 6 samples", qualityGroup: "Ares Auto",
                 route: "Ares Route → Ares Auto → Japan",
-                openActivity: { page = "Activity" }, openApplications: { page = "Applications" }, openQuality: { page = "Network Quality" }, openPolicies: { page = "Policies" }, openScenes: { page = "Scenes" })
+                openActivity: { page = "Activity" }, openApplications: { page = "Applications" }, openQuality: { page = "Quality" }, openPolicies: { page = "Policies" }, openScenes: { page = "Scenes" })
 
         }
     }
@@ -204,17 +206,13 @@ struct PreviewWorkspace: View {
             if empty {
                 ContentUnavailableView("No proxy groups", systemImage: "network.slash", description: Text("Add a subscription to get started."))
             } else {
-                DSCard(padding: 22, spacing: 22) {
-                    DSCardHeader("Automatic selection", icon: "hand.tap", subtitle: "Select a preferred route")
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 195), spacing: 12)], spacing: 12) {
-                        ForEach(ProxyNodeOrder.sorted(["Tokyo · 01", "Tokyo · 02", "Singapore · 01", "Hong Kong · 01", "Los Angeles · 01", "London · 01"].filter { search.isEmpty || $0.localizedCaseInsensitiveContains(search) }, delay: previewDelay), id: \.self) { name in
-                            SimpleProxyButton(name: name, isSelected: name == selectedNode, delay: previewDelay(name), isTesting: false, onSelect: { selectedNode = name }, onTest: { measured.toggle() })
-                        }
-                    }
-                    if !search.isEmpty && !["Tokyo", "Singapore", "Hong Kong", "Los Angeles", "London"].contains(where: { $0.localizedCaseInsensitiveContains(search) }) {
-                        Text("No nodes matching your search").font(DS.Typography.secondary).foregroundStyle(.secondary)
-                    }
-                }
+                ProxyWorkspaceTable(
+                    groups: [.init(id: "Select", type: "Selector", current: selectedNode, count: 6)],
+                    selectedGroup: $previewGroup, focusedNode: $previewFocus,
+                    rows: ProxyNodeOrder.sorted(["Tokyo · 01", "Tokyo · 02", "Singapore · 01", "Hong Kong · 01", "Los Angeles · 01", "London · 01"].filter { search.isEmpty || $0.localizedCaseInsensitiveContains(search) }, delay: previewDelay).map {
+                        .init(id: $0, type: "VLESS", delay: previewDelay($0), selected: $0 == selectedNode, active: $0 == selectedNode)
+                    }, search: search, onSelect: { selectedNode = $0 }, onTest: { _ in measured.toggle() }, onResume: {}
+                ).frame(minHeight: 360)
             }
         } else if page == "Rules" {
             DSCard {

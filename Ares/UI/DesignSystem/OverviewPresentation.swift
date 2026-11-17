@@ -399,27 +399,14 @@ struct OverviewWorkspaceSummary: View {
                 Text(activityStatus).font(DS.Typography.metadata).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 12) {
-                        ForEach(processes) { row in
-                            HStack(spacing: 12) {
-                                Text(row.name).font(DS.Typography.secondary).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
-                                GeometryReader { proxy in
-                                    Capsule().fill(DS.accent.opacity(0.35))
-                                        .frame(width: proxy.size.width * CGFloat(row.connections) / CGFloat(max(connections ?? 0, 1)))
-                                }.frame(width: 64, height: 3)
-                                Text(String(row.connections)).font(DS.Typography.secondary.monospacedDigit()).frame(width: 30, alignment: .trailing)
-                            }.help("\(row.name): \(row.connections) active connections")
-                        }
-                    }
-                }.frame(height: min(210, CGFloat(processes.count) * 28 - 12)).scrollIndicators(.never)
+                OverviewSourceChart(rows: processes)
             }
 
         }.padding(.top, 16).overlay(alignment: .top) { Rectangle().fill(DS.line).frame(height: 0.5) }
     }
     private var quality: some View {
         VStack(alignment: .leading, spacing: 14) {
-            heading("Network Quality", action: openQuality)
+            heading("Quality", action: openQuality)
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(qualityGroup).font(DS.Typography.secondary.weight(.medium)).lineLimit(1)
                 Spacer()
@@ -483,5 +470,76 @@ struct OverviewWorkspaceSummary: View {
     private func configurationStatus(_ summary: ConfigurationSummary) -> some View {
         Text(summary.status).font(DS.Typography.metadata).foregroundStyle(.secondary)
             .lineLimit(2).help(summary.status).frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+}
+
+
+/// Names, plot and counts occupy separate columns so labels cannot cover marks.
+private struct OverviewSourceChart: View {
+    let rows: [OverviewWorkspaceSummary.ProcessRow]
+    private let rowHeight: CGFloat = 28
+    private var step: Int {
+        let target = Double(max(rows.map(\.connections).max() ?? 1, 1)) / 3
+        let magnitude = pow(10, floor(log10(max(target, 1))))
+        let interval = [1.0, 2, 5, 10].first { $0 * magnitude >= target } ?? 10
+        return max(1, Int(interval * magnitude))
+    }
+    private var upperBound: Int {
+        let maximum = max(rows.map(\.connections).max() ?? 1, 1)
+        return ((maximum - 1) / step + 1) * step
+    }
+    private var ticks: [Int] { Array(stride(from: 0, through: upperBound, by: step)) }
+
+    var body: some View {
+        GeometryReader { geometry in
+            let labelWidth = min(132, max(88, geometry.size.width * 0.28))
+            let countWidth = max(28, CGFloat(String(upperBound).count) * 8)
+            let plotWidth = max(1, geometry.size.width - labelWidth - countWidth - 24)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 12) {
+                        Color.clear.frame(width: labelWidth, height: 14)
+                        ZStack(alignment: .leading) {
+                            ForEach(ticks, id: \.self) { tick in
+                                Text(String(tick)).font(DS.Typography.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: plotWidth, alignment: tick == 0 ? .leading : tick == upperBound ? .trailing : .center)
+                                    .offset(x: tick == 0 || tick == upperBound ? 0 : plotWidth * (CGFloat(tick) / CGFloat(upperBound) - 0.5))
+                            }
+                        }.frame(width: plotWidth, height: 14)
+                        Color.clear.frame(width: countWidth, height: 14)
+                    }.accessibilityHidden(true)
+                    LazyVStack(spacing: 0) {
+                        ForEach(rows) { row in
+                            HStack(spacing: 12) {
+                                Text(row.name).font(DS.Typography.secondary)
+                                    .lineLimit(1).truncationMode(.middle)
+                                    .frame(width: labelWidth, alignment: .leading)
+                                ZStack(alignment: .leading) {
+                                    ForEach(ticks, id: \.self) { tick in
+                                        Rectangle().fill(DS.line)
+                                            .frame(width: 0.5, height: rowHeight)
+                                            .offset(x: plotWidth * CGFloat(tick) / CGFloat(upperBound))
+                                    }
+                                    RoundedRectangle(cornerRadius: 3)
+                                        .fill(DS.accent.opacity(0.75))
+                                        .frame(width: plotWidth * CGFloat(row.connections) / CGFloat(upperBound), height: 10)
+                                }.frame(width: plotWidth, height: rowHeight, alignment: .leading).clipped()
+                                Text(String(row.connections)).font(DS.Typography.secondary.monospacedDigit())
+                                    .frame(width: countWidth, alignment: .trailing)
+                            }
+                            .frame(height: rowHeight)
+                            .help("\(row.name): \(row.connections) active connections")
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel(row.name)
+                            .accessibilityValue("\(row.connections) active connections")
+                        }
+                    }
+                }
+            }.scrollIndicators(.never)
+        }
+        .frame(height: min(220, CGFloat(rows.count) * rowHeight + 22))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Active connections by source")
     }
 }

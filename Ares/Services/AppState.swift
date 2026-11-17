@@ -35,7 +35,7 @@ class AppState: ObservableObject {
             switch self {
             case .dashboard: return "Dashboard"
             case .applications: return "Applications"
-            case .quality: return "Network Quality"
+            case .quality: return "Quality"
             case .policies: return "Policies"
             case .scenes: return "Scenes"
             case .proxies: return "Proxies"

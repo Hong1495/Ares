@@ -29,6 +29,7 @@ xcrun swiftc -parse-as-library -target arm64-apple-macosx14.0 \
   "$ROOT/Ares/UI/DesignSystem/DesignSystem.swift" \
   "$ROOT/Ares/UI/DesignSystem/WorkspaceChrome.swift" \
   "$ROOT/Ares/UI/DesignSystem/ProxyNodeTile.swift" \
+  "$ROOT/Ares/UI/DesignSystem/ProxyWorkspaceTable.swift" \
   "$ROOT/Ares/UI/DesignSystem/WorkspaceCommands.swift" \
   "$ROOT/Ares/UI/DesignSystem/CollectionPresentation.swift" \
   "$ROOT/Ares/Models/RuleModels.swift" "$ROOT/Ares/UI/RuleProvidersView.swift" "$ROOT/Ares/UI/ResourceActivityView.swift" \

@@ -25,6 +25,7 @@ SOURCES=(
   "$ROOT/Ares/UI/DesignSystem/WindowUpdateIndicator.swift"
   "$ROOT/Ares/UI/DesignSystem/OverviewPresentation.swift"
   "$ROOT/Ares/UI/DesignSystem/ProxyNodeTile.swift"
+  "$ROOT/Ares/UI/DesignSystem/ProxyWorkspaceTable.swift"
   "$ROOT/DesignPreview/AresDesignPreview.swift"
 )
 if /usr/bin/grep -nE 'AppState|ClashController|ClashViewModel|AppDelegate|URLSession|NWListener|Process\(|UserDefaults|AppStorage|CertificateManager|SystemProxyManager|NetworkMITMService' "${SOURCES[@]}"; then

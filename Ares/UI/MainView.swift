@@ -67,7 +67,7 @@ struct MainView: View {
         case .quality:
             ScrollView { NetworkQualityView(embedded: true).frame(maxWidth: .infinity) }
                 .scrollIndicators(.never, axes: [.horizontal, .vertical])
-                .toolbar { CollectionTitleToolbar(title: "Network Quality", count: nil, unit: "") }
+                .toolbar { CollectionTitleToolbar(title: "Quality", count: nil, unit: "") }
         case .policies:
             PolicyGroupsView(embedded: true)
         case .scenes:

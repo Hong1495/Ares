@@ -24,7 +24,8 @@ struct ProxiesView: View {
     @State private var isLoading = false
     @State private var loadRevision = UUID()
     @State private var selectedTab: ProxyTab = .rule
-    @State private var expandedGroups = Set<String>()
+    @State private var selectedGroup: String?
+    @State private var focusedNode: String?
     @State private var searchText = ""
     @State private var showingResources = false
     private var profileKey: String { profileService.activeProfileRevision }
@@ -77,9 +78,7 @@ struct ProxiesView: View {
 
             Divider()
 
-            ScrollView(showsIndicators: false) {
-                content
-            }
+            content
         }
         .navigationTitle("")
         .toolbar { ProxiesTitleToolbar(count: nodeCount) }
@@ -91,9 +90,10 @@ struct ProxiesView: View {
         .task(id: "\(profileKey)|\(clashViewModel.isRunning)|\(clashViewModel.isToggling)") {
             await refreshProxies()
         }
-        .onChange(of: displayGroups.map(\.name)) { _, names in
-            expandedGroups.formUnion(names)
+        .onChange(of: filteredGroups.map(\.name), initial: true) { _, names in
+            if !names.contains(selectedGroup ?? "") { selectedGroup = names.first; focusedNode = nil }
         }
+        .onChange(of: selectedGroup) { _, _ in focusedNode = nil }
     }
 
     private func refreshProxies() async {
@@ -125,7 +125,6 @@ struct ProxiesView: View {
             }
             providerCount = snapshot?.providerCount ?? 0
             savedProfileKey = key
-            expandedGroups = Set(savedGroups.map(\.name)).union(["GLOBAL"])
         } catch is CancellationError { return }
         catch {
             guard key == profileKey, loadRevision == revision else { return }
@@ -146,7 +145,6 @@ struct ProxiesView: View {
                 return
             }
             liveProfileKey = key
-            expandedGroups.formUnion(clashController.proxyGroups.map(\.name))
         } catch is CancellationError { }
         catch {
             guard key == profileKey, loadRevision == revision else { return }
@@ -183,7 +181,7 @@ struct ProxiesView: View {
 
             HStack(spacing: 8) {
                 HStack(spacing: 6) {
-                    Button { appState.selection = .policies } label: { Label("Policies", systemImage: "slider.horizontal.3") }
+                    Button { appState.selection = .policies } label: { Image(systemName: "slider.horizontal.3") }
                         .help("Open policy groups").accessibilityLabel("Policies")
                     Button { showingResources = true } label: { Image(systemName: "square.stack") }
                         .disabled(!showingLive).help("Node resources").accessibilityLabel("Node resources")
@@ -255,192 +253,65 @@ struct ProxiesView: View {
             }
             .frame(maxWidth: .infinity, minHeight: 300)
         } else {
-            LazyVStack(spacing: DS.Space.md) {
+            VStack(spacing: 0) {
                 if !showingLive {
                     Text(loadError ?? (providerCount > 0
                         ? "Saved subscription · Provider nodes load when the core runs."
-                        : "Saved subscription · Select a node now; it will be applied when you connect."))
-                        .font(DS.Typography.metadata)
-                        .foregroundStyle(.secondary)
+                        : "Saved subscription · Choices apply when you connect."))
+                        .font(DS.Typography.metadata).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, DS.Space.lg).padding(.vertical, DS.Space.sm)
                 }
-                ForEach(filteredGroups) { group in
-                    SimpleProxyGroupCard(
-                        group: group,
-                        nodes: displayNodes,
-                        allowsRuntimeActions: showingLive,
-                        isExpanded: expandedGroups.contains(group.name) || !searchText.isEmpty, // Auto expand on search
-                        searchText: searchText,
-                        onToggle: {
-                            if expandedGroups.contains(group.name) {
-                                expandedGroups.remove(group.name)
-                            } else {
-                                expandedGroups.insert(group.name)
-                            }
-                        }
-                    )
-                }
-            }
-            .padding(DS.Space.lg)
-        }
-    }
-}
-
-// MARK: - Group card
-
-struct SimpleProxyGroupCard: View {
-    let group: ProxyGroup
-    let nodes: [String: ProxyNode]
-    let allowsRuntimeActions: Bool
-    let isExpanded: Bool
-    let searchText: String
-    let onToggle: () -> Void
-
-    @EnvironmentObject var clashController: ClashController
-    @EnvironmentObject var profileService: ProfileService
-    @EnvironmentObject var clashViewModel: ClashViewModel
-    @EnvironmentObject var appState: AppState
-
-    var body: some View {
-        DSCard(padding: 0, spacing: 0, radius: DS.Radius.card) {
-            HStack(spacing: 0) {
-                Button {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        onToggle()
-                    }
-                } label: {
-                    headerRow
-                }
-                .buttonStyle(.plain)
-
-                if group.supportsAutomaticSelection {
-                    Button {
-                        Task {
-                            do { try await profileService.clearNodeSelection(group: group) }
-                            catch { AppState.shared.reportError(error.localizedDescription) }
-                        }
-                    } label: {
-                        Label("Auto", systemImage: group.manualSelection == nil ? "checkmark" : "arrow.triangle.2.circlepath")
-                            .font(DS.Typography.metadata)
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(group.manualSelection == nil || clashViewModel.isToggling || appState.isPerformingNetworkOperation)
-                    .help("Let this group choose nodes automatically")
-                    .padding(.trailing, DS.Space.md)
-                }
-            }
-
-            if isExpanded {
-                Rectangle()
-                    .fill(Color(nsColor: .separatorColor).opacity(0.8))
-                    .frame(height: DS.hairline)
-
-                nodeGrid
-            }
-        }
-    }
-
-    // MARK: Header
-
-    private var headerRow: some View {
-        HStack(spacing: DS.Space.sm + 2) {
-            Image(systemName: groupIcon)
-                .font(DS.Typography.metadata.weight(.semibold))
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 22, height: 22)
-                .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Color.accentColor.opacity(0.12))
+                ProxyWorkspaceTable(
+                    groups: filteredGroups.map { group in
+                        .init(id: group.name, type: group.type, current: group.type == "LoadBalance" ? nil : group.now,
+                              count: group.all.count, matches: !matchingNodes(group).isEmpty)
+                    },
+                    selectedGroup: $selectedGroup, focusedNode: $focusedNode,
+                    rows: tableRows, search: searchText,
+                    canSelect: currentGroup?.supportsManualSelection == true && !selectionBusy,
+                    canTest: showingLive,
+                    automatic: currentGroup?.supportsAutomaticSelection == true,
+                    pinned: currentGroup?.manualSelection != nil,
+                    busy: selectionBusy,
+                    onSelect: selectNode, onTest: testNode, onResume: resumeAutomatic
                 )
-
-            Text(group.name)
-                .font(DS.Typography.body.weight(.semibold))
-                .lineLimit(1)
-                .truncationMode(.middle)
-
-            DSTag(text: group.type)
-
-            Spacer(minLength: DS.Space.sm)
-
-            if let now = group.now, group.type != "LoadBalance" {
-                HStack(spacing: 5) {
-                    Circle()
-                        .fill(Color.accentColor)
-                        .frame(width: 5, height: 5)
-                    Text(now)
-                        .font(DS.Typography.metadata)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
             }
-
-            Image(systemName: "chevron.right")
-                .font(DS.Typography.caption.weight(.semibold))
-                .foregroundStyle(.tertiary)
-                .rotationEffect(.degrees(isExpanded ? 90 : 0))
-        }
-        .padding(.horizontal, DS.Space.md)
-        .padding(.vertical, DS.Space.sm + 2)
-        .contentShape(Rectangle())
-    }
-
-    // MARK: Nodes
-
-    @ViewBuilder
-    private var nodeGrid: some View {
-        let filteredItems = group.all.filter { itemName in
-            searchText.isEmpty || itemName.localizedCaseInsensitiveContains(searchText)
-        }
-
-        let sortedItems = ProxyNodeOrder.sorted(filteredItems) { nodes[$0]?.delay }
-
-        if !sortedItems.isEmpty {
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 168), spacing: DS.Space.sm)],
-                spacing: DS.Space.sm
-            ) {
-                ForEach(sortedItems, id: \.self) { itemName in
-                    SimpleProxyButton(
-                        name: itemName,
-                        isSelected: group.manualSelection == itemName,
-                        delay: nodes[itemName]?.delay,
-                        isTesting: clashController.testingProxyNames.contains(itemName),
-                        canSelect: group.supportsManualSelection && !clashViewModel.isToggling && !appState.isPerformingNetworkOperation,
-                        canTest: allowsRuntimeActions,
-                        onSelect: {
-                            Task {
-                                do { try await profileService.selectNode(group: group, node: itemName) }
-                                catch { AppState.shared.reportError(error.localizedDescription) }
-                            }
-                        },
-                        onTest: {
-                            guard allowsRuntimeActions else { return }
-                            Task {
-                                _ = try? await clashController.testProxyDelay(name: itemName)
-                            }
-                        }
-                    )
-
-                }
-            }
-            .padding(DS.Space.md)
-        } else if !searchText.isEmpty {
-            Text("No nodes matching \"\(searchText)\"")
-                .font(DS.Typography.metadata)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(DS.Space.md)
         }
     }
 
-    private var groupIcon: String {
-        switch group.type {
-        case "Selector": return "hand.tap"
-        case "URLTest": return "speedometer"
-        case "Fallback": return "arrow.triangle.2.circlepath"
-        case "LoadBalance": return "scale.3d"
-        default: return "network"
+    private var selectionBusy: Bool { clashViewModel.isToggling || appState.isPerformingNetworkOperation }
+    private var currentGroup: ProxyGroup? { filteredGroups.first { $0.name == selectedGroup } ?? filteredGroups.first }
+    private func matchingNodes(_ group: ProxyGroup) -> [String] {
+        group.all.filter { searchText.isEmpty || $0.localizedCaseInsensitiveContains(searchText) }
+    }
+    private var tableRows: [ProxyTableRow] {
+        guard let group = currentGroup else { return [] }
+        let groupTypes = Dictionary(displayGroups.map { ($0.name, $0.type) }, uniquingKeysWith: { first, _ in first })
+        return ProxyNodeOrder.sorted(matchingNodes(group)) { displayNodes[$0]?.delay }.map { name in
+            .init(id: name, type: groupTypes[name] ?? displayNodes[name]?.type ?? (name == "DIRECT" ? "Direct" : "—"),
+                  delay: displayNodes[name]?.delay,
+                  selected: group.manualSelection == name,
+                  active: group.type != "LoadBalance" && group.now == name,
+                  testing: clashController.testingProxyNames.contains(name))
+        }
+    }
+    private func selectNode(_ name: String) {
+        guard let group = currentGroup, !selectionBusy, group.supportsManualSelection, group.all.contains(name) else { return }
+        Task {
+            do { try await profileService.selectNode(group: group, node: name) }
+            catch { appState.reportError(error.localizedDescription) }
+        }
+    }
+    private func testNode(_ name: String) {
+        guard showingLive, !clashController.testingProxyNames.contains(name) else { return }
+        Task { _ = try? await clashController.testProxyDelay(name: name) }
+    }
+    private func resumeAutomatic() {
+        guard let group = currentGroup, group.supportsAutomaticSelection, group.manualSelection != nil, !selectionBusy else { return }
+        Task {
+            do { try await profileService.clearNodeSelection(group: group) }
+            catch { appState.reportError(error.localizedDescription) }
         }
     }
 }

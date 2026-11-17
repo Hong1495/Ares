@@ -2,6 +2,35 @@ import SwiftUI
 import Combine
 import SubscriptionKit
 
+// Synthetic runtime used only by the proxy table's interaction preview.
+private enum ProxyTableFixture {
+    static var enabled: Bool { CommandLine.arguments.contains("--proxy-table-live") }
+    static let nodes: [ProxyNode] = {
+        var result: [ProxyNode] = []
+        for (region, name) in ["Hong Kong", "Japan", "Singapore", "Germany", "United States", "Taiwan", "Netherlands", "Malaysia"].enumerated() {
+            for index in 1...4 {
+                let title = name + " 0\(index)"
+                let type = region % 2 == 0 ? "VLESS" : "Trojan"
+                var delay: Int? = 55 + region * 48 + index * 14
+                if region == 0 && index == 4 { delay = nil }
+                if region == 6 && index == 4 { delay = 0 }
+                result.append(ProxyNode(id: title, name: title, type: type, delay: delay))
+            }
+        }
+        let title = "Unlabelled node with a much longer subscription name"
+        result.append(.init(id: title, name: title, type: "SS", delay: 714))
+        return result
+    }()
+    static var groups: [ProxyGroup] {
+        let names = nodes.map(\.name)
+        return [.init(name: "Select", type: "Selector", now: "Japan 02", all: names + ["Auto", "DIRECT"]),
+                .init(name: "Auto", type: "URLTest", now: "Japan 01", all: names),
+                .init(name: "Fallback", type: "Fallback", now: "Singapore 01", all: names),
+                .init(name: "Balance", type: "LoadBalance", all: names),
+                .init(name: "GLOBAL", type: "Selector", now: "Select", all: ["Select", "Auto", "Fallback", "Balance", "DIRECT"] + names)]
+    }
+}
+
 // Only this mock file supplies service types. No production service or app delegate
 // is linked. The actual ProxiesView reads a synthetic subscription from a temp file.
 @MainActor final class ClashController: ObservableObject {
@@ -35,17 +64,35 @@ import SubscriptionKit
     func performProxyResourceAction(name: String, healthCheck: Bool) async throws -> [ProxyResource] { try await fetchProxyResources() }
     @Published var testingProxyNames: Set<String> = []
     @Published var isTestingAllProxies = false
-    func testAllProxyDelays() async { fatalError("Offline testing must be disabled") }
+    func testAllProxyDelays() async {
+        guard ProxyTableFixture.enabled else { fatalError("Offline testing must be disabled") }
+        isTestingAllProxies = true
+        for name in proxyNodes.keys.sorted() { _ = try? await testProxyDelay(name: name) }
+        isTestingAllProxies = false
+    }
     @Published var proxyGroups: [ProxyGroup] = []
     @Published var proxyNodes: [String: ProxyNode] = [:]
-    func fetchProxiesData() async throws { fatalError("Offline preview must never call the core") }
+    func fetchProxiesData() async throws {
+        guard ProxyTableFixture.enabled else { fatalError("Offline preview must never call the core") }
+        if proxyGroups.isEmpty {
+            proxyGroups = ProxyTableFixture.groups
+            proxyNodes = Dictionary(uniqueKeysWithValues: ProxyTableFixture.nodes.map { ($0.name, $0) })
+        }
+    }
     func selectProxy(group: String, proxy: String) async throws { fatalError("Offline selection must be disabled") }
-    func testProxyDelay(name: String) async throws -> Int { fatalError("Offline latency testing must be disabled") }
+    func testProxyDelay(name: String) async throws -> Int {
+        guard ProxyTableFixture.enabled else { fatalError("Offline latency testing must be disabled") }
+        testingProxyNames.insert(name)
+        defer { testingProxyNames.remove(name) }
+        try await Task.sleep(for: .milliseconds(200))
+        proxyNodes[name]?.delay = 86
+        return 86
+    }
 }
 @MainActor final class ClashViewModel: ObservableObject {
     @Published var appliedProfileRevision = ""
     @Published var runtimeState = "stopped"
-    @Published var isRunning = false
+    @Published var isRunning = ProxyTableFixture.enabled
     @Published var isToggling = false
     func start() async { fatalError("Preview must not start a core") }
 }
@@ -62,13 +109,31 @@ struct PreviewProfile {
     @Published private var choices: [String: String] = [:]
     var activeProfileRevision: String { activeProfile?.id.uuidString ?? "" }
     func savedNode(group: String) -> String? { choices[group] }
-    func clearNodeSelection(group: ProxyGroup) async throws { choices.removeValue(forKey: group.name) }
-    func selectNode(group: ProxyGroup, node: String) async throws { choices[group.name] = node }
+    func clearNodeSelection(group: ProxyGroup) async throws {
+        choices.removeValue(forKey: group.name)
+        if ProxyTableFixture.enabled, let index = ClashController.shared.proxyGroups.firstIndex(where: { $0.name == group.name }) {
+            ClashController.shared.proxyGroups[index].fixed = nil
+        }
+    }
+    func selectNode(group: ProxyGroup, node: String) async throws {
+        choices[group.name] = node
+        if ProxyTableFixture.enabled, let index = ClashController.shared.proxyGroups.firstIndex(where: { $0.name == group.name }) {
+            ClashController.shared.proxyGroups[index].now = node
+            if group.supportsAutomaticSelection { ClashController.shared.proxyGroups[index].fixed = node }
+        }
+    }
     init() {
         let path = FileManager.default.temporaryDirectory.appendingPathComponent("ares-offline-preview-\(UUID()).yaml")
         let nodes = (1...32).map { "  - {name: Sample \($0), type: vless, server: example.invalid, port: 443}" }.joined(separator: "\n")
         let members = (1...32).map { "Sample \($0)" }.joined(separator: ", ")
         try! "proxies:\n\(nodes)\nproxy-groups:\n  - {name: Select, type: select, proxies: [\(members)]}\n  - {name: Auto, type: url-test, proxies: [\(members)]}".write(to: path, atomically: true, encoding: .utf8)
+        if ProxyTableFixture.enabled {
+            let document: [String: Any] = [
+                "proxies": ProxyTableFixture.nodes.map { ["name": $0.name, "type": $0.type.lowercased(), "server": "example.invalid", "port": 443] as [String: Any] },
+                "proxy-groups": ProxyTableFixture.groups.filter { $0.name != "GLOBAL" }.map { ["name": $0.name, "type": ["Selector": "select", "URLTest": "url-test", "Fallback": "fallback", "LoadBalance": "load-balance"][$0.type]!, "proxies": $0.all] as [String: Any] }
+            ]
+            try! JSONSerialization.data(withJSONObject: document).write(to: path)
+        }
         activeProfile = PreviewProfile(path: path)
     }
     isolated deinit { if let path = activeProfile?.path { try? FileManager.default.removeItem(at: path) } }
@@ -202,18 +267,18 @@ struct RuleSourcesView: View { var provider: String? = nil; var body: some View 
 @main struct SubscriptionPreview: App {
     @State private var showingSettings = false
     @Environment(\.openWindow) private var openWindow
-    @StateObject private var controller = ClashController()
+    @StateObject private var controller = ClashController.shared
     @StateObject private var profiles = ProfileService()
     @StateObject private var runtime = ClashViewModel()
     var body: some Scene {
-        WindowGroup("Ares · Offline subscription preview", id: CommandLine.arguments.contains("--compact") ? "compact-" + (CommandLine.arguments.dropFirst().first ?? "main") : "main") {
+        WindowGroup("Ares · Offline subscription preview", id: CommandLine.arguments.contains("--table-compact-check") ? "table-compact-check" : CommandLine.arguments.contains("--compact") ? "compact-" + (CommandLine.arguments.dropFirst().first ?? "main") : "main") {
             Group {
                 if CommandLine.arguments.contains("--managed") { ManagedResourcesView() }
                 else if CommandLine.arguments.contains("--devices") { DevicesView() }
                 else if CommandLine.arguments.contains("--topology") { TopologyPageView() }
                 else if CommandLine.arguments.contains("--scenes") { ScenariosView(embedded: true).toolbar { CollectionTitleToolbar(title: "Scenes", count: nil, unit: "") } }
                 else if CommandLine.arguments.contains("--diagnostics") { ActivityDiagnosticsView().frame(width: 800, height: 520) }
-                else if CommandLine.arguments.contains("--quality") { ScrollView { NetworkQualityView(embedded: true) }.toolbar { CollectionTitleToolbar(title: "Network Quality", count: nil, unit: "") } }
+                else if CommandLine.arguments.contains("--quality") { ScrollView { NetworkQualityView(embedded: true) }.toolbar { CollectionTitleToolbar(title: "Quality", count: nil, unit: "") } }
                 else if CommandLine.arguments.contains("--apps") { ApplicationRoutingView(embedded: true, initialPaths: ["/Applications/Preview.app/Contents/MacOS/Preview"]).toolbar { CollectionTitleToolbar(title: "Applications", count: nil, unit: "") } }
                 else if CommandLine.arguments.contains("--egress") { EgressSettingsView().frame(width: 740, height: 560) }
                 else if CommandLine.arguments.contains("--dns") { DNSSettingsView().frame(width: 740, height: 540) }
@@ -225,12 +290,17 @@ struct RuleSourcesView: View { var provider: String? = nil; var body: some View 
                 .environmentObject(controller)
                 .environmentObject(profiles)
                 .environmentObject(runtime)
+                .onAppear { if ProxyTableFixture.enabled { runtime.appliedProfileRevision = profiles.activeProfileRevision } }
                 .environmentObject(AppState.shared)
                 .frame(minWidth: CommandLine.arguments.contains("--compact") ? 680 : CommandLine.arguments.contains("--dns") ? 740 : 1000, minHeight: CommandLine.arguments.contains("--compact") || CommandLine.arguments.contains("--dns") ? 540 : 700)
+                .preferredColorScheme(CommandLine.arguments.contains("--dark") ? .dark : nil)
+                .frame(width: CommandLine.arguments.contains("--table-compact-check") ? 680 : nil,
+                       height: CommandLine.arguments.contains("--table-compact-check") ? 540 : nil)
                 .alert("Settings preview", isPresented: $showingSettings) {
                     Button("Done", role: .cancel) { }
                 } message: { Text("Native Settings menu action received. No production service is running.") }
         }.defaultSize(width: CommandLine.arguments.contains("--compact") ? 680 : CommandLine.arguments.contains("--dns") ? 740 : 1100, height: CommandLine.arguments.contains("--compact") || CommandLine.arguments.contains("--dns") ? 540 : 760)
+        .windowResizability(.contentSize)
         .commands {
             WorkspaceCommands(showSettings: { showingSettings = true }, showMainWindow: { openWindow(id: "main") })
         }
