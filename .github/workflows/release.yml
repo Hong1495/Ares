@@ -67,6 +67,8 @@ jobs:
             ARES_UPDATE_PUBLIC_KEY="$ARES_UPDATE_PUBLIC_KEY" \
             ARES_UPDATE_FEED_URL="https://github.com/$REPOSITORY/releases/latest/download/appcast.xml" \
             CODE_SIGNING_ALLOWED=NO build
+      - name: Validate automatic update recovery in isolation
+        run: SPARKLE_FRAMEWORK="$PWD/.build/release/SourcePackages/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework" scripts/test-app-updates.sh
       - name: Embed matching core and sign app bundle
         env:
           GH_TOKEN: ${{ github.token }}

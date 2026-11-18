@@ -5,6 +5,7 @@ import SubscriptionKit
 struct PolicyCompositionView: View {
     let snapshot: PolicyGroupService.Snapshot
     var startWithRecommended = false
+    var onApplied: () -> Void = {}
     @Environment(\.dismiss) private var dismiss
     @State private var edits: [String: [String: String]] = [:]
     @State private var groups: [PolicyConfiguration.Group] = []
@@ -73,8 +74,9 @@ struct PolicyCompositionView: View {
             PolicyStructureEditor(name: target.id, isNew: target.isNew,
                 group: groups.first { $0.name == target.id }, inherited: snapshot.inherited.first { $0.name == target.id }, override: edits[target.id] ?? [:],
                 targets: Array(Set((catalog?.nodes ?? []) + groups.map(\.name) + ["DIRECT", "REJECT", "REJECT-DROP", "PASS"])).filter { $0 != target.id }.sorted(),
-                providers: catalog?.providers ?? []) { fields in
+                providers: catalog?.providers ?? []) { _, fields in
                     if fields.isEmpty { edits.removeValue(forKey: target.id) } else { edits[target.id] = fields }; selection = target.id; refresh()
+                    return nil
                 }
         }
     }
@@ -204,7 +206,7 @@ struct PolicyCompositionView: View {
             _ = try PolicyConfiguration.apply(source: snapshot.source, overrides: text)
             applying = true; error = nil
             Task { @MainActor in
-                if await PolicyGroupService.apply(text, snapshot: snapshot, localRules: rules == snapshot.localRules ? nil : rules) { dismiss() }
+                if await PolicyGroupService.apply(text, snapshot: snapshot, localRules: rules == snapshot.localRules ? nil : rules) { onApplied(); dismiss() }
                 else { error = AppState.shared.lastOperationError ?? "Policy changes could not be applied." }
                 applying = false
             }
@@ -212,7 +214,7 @@ struct PolicyCompositionView: View {
     }
 }
 
-private struct PolicyStructureEditor: View {
+struct PolicyStructureEditor: View {
     let name: String
     let isNew: Bool
     let group: PolicyConfiguration.Group?
@@ -220,7 +222,9 @@ private struct PolicyStructureEditor: View {
     let override: [String: String]
     let targets: [String]
     let providers: [String]
-    let save: ([String: String]) -> Void
+    var allowsNaming = false
+    var saveTitle = "Save Draft"
+    let save: (String, [String: String]) async -> String?
     @Environment(\.dismiss) private var dismiss
     @State private var type = "select"
     @State private var members: [String] = []
@@ -234,6 +238,9 @@ private struct PolicyStructureEditor: View {
     @State private var ownFields = Set<String>()
     @State private var tab = 0
     @State private var recommendation: String?
+    @State private var draftName = ""
+    @State private var saving = false
+    @State private var error: String?
     private var explanation: String {
         switch type {
         case "url-test": return "Selects using configured latency tests. Manual pinning remains available."
@@ -245,14 +252,17 @@ private struct PolicyStructureEditor: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text(name).font(DS.Typography.secondary.weight(.semibold)).lineLimit(1)
+                if allowsNaming {
+                    TextField("New group name", text: $draftName).textFieldStyle(.roundedBorder).frame(width: 270)
+                } else { Text(name).font(DS.Typography.secondary.weight(.semibold)).lineLimit(1) }
                 Spacer()
                 Button("Cancel") { dismiss() }
-                Button("Save Draft") { store(); dismiss() }.buttonStyle(.borderedProminent)
-            }.controlSize(.small).padding(DS.Space.lg)
+                Button(saveTitle) { store() }.buttonStyle(.borderedProminent)
+                    .disabled(allowsNaming && draftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }.controlSize(.small).padding(DS.Space.lg).disabled(saving)
             SettingsTabs(titles: ["Behavior", "Members", "Resources"], selection: $tab).padding(.horizontal, DS.Space.lg).padding(.bottom, DS.Space.md)
             Divider()
-            if tab == 0 {
+            Group { if tab == 0 {
                 Form {
                     Toggle("Override group type", isOn: $ownType).disabled(isNew)
                     Picker("Type", selection: $type) { ForEach(PolicyConfiguration.types, id: \.self) { Text($0).tag($0) } }.disabled(!ownType)
@@ -294,9 +304,12 @@ private struct PolicyStructureEditor: View {
                     }.disabled(!ownProviders)
                     Text("Resource members follow core filters").help("Resources supply their own members. Filters apply in the core; explicit members preserve the order shown in Members.").font(DS.Typography.metadata).foregroundStyle(.secondary)
                 }.padding(DS.Space.lg)
-            }
+            } }.disabled(saving)
+            if let error { Text(error).font(DS.Typography.metadata).foregroundStyle(Color.statusBad).textSelection(.enabled).padding(DS.Space.md) }
         }.frame(width: 720, height: 540).background(DS.canvas).scrollIndicators(.never, axes: [.horizontal, .vertical])
+        .interactiveDismissDisabled(saving)
         .onAppear {
+            draftName = name
             type = override["type"] ?? group?.type ?? "select"
             members = group?.members ?? ["DIRECT"]; uses = group?.providers ?? []
             fields = group?.fields ?? [:]
@@ -305,11 +318,15 @@ private struct PolicyStructureEditor: View {
             ownFields = Set(override.keys.filter { PolicyConfiguration.fields.contains($0) || $0 == "url" })
         }
         .onChange(of: ownType) { _, enabled in if !enabled { type = inherited?.type ?? "select" } }
+        .onChange(of: ownMembers) { _, enabled in if !enabled { members = inherited?.members ?? []; member = nil } }
+        .onChange(of: ownProviders) { _, enabled in if !enabled { uses = inherited?.providers ?? [] } }
     }
     private func label(_ key: String) -> String {
         ["interval": "Interval · s", "timeout": "Timeout · ms", "tolerance": "Tolerance · ms", "url": "Probe URL"][key] ?? key.capitalized
     }
-    private func field(_ key: String) -> Binding<String> { Binding(get: { fields[key] ?? "" }, set: { fields[key] = $0 }) }
+    private func field(_ key: String) -> Binding<String> {
+        Binding(get: { ownFields.contains(key) ? fields[key] ?? "" : inherited?.fields[key] ?? "" }, set: { fields[key] = $0 })
+    }
     private func move(_ offset: Int) { if let member, let i = members.firstIndex(of: member), members.indices.contains(i + offset) { members.swapAt(i, i + offset) } }
     private func store() {
         var result: [String: String] = [:]
@@ -318,6 +335,11 @@ private struct PolicyStructureEditor: View {
         if ownMembers { result["proxies"] = try? PolicyConfiguration.list(members) }
         if ownProviders { result["use"] = try? PolicyConfiguration.list(uses) }
         for key in ownFields where PolicyConfiguration.editableFields(type: type).contains(key) || key == "url" { result[key] = fields[key] ?? "" }
-        save(result)
+        saving = true; error = nil
+        Task { @MainActor in
+            error = await save(allowsNaming ? draftName.trimmingCharacters(in: .whitespacesAndNewlines) : name, result)
+            saving = false
+            if error == nil { dismiss() }
+        }
     }
 }

@@ -92,6 +92,11 @@ actor ConfigService {
         return (inherited, effective, resourceSource)
     }
 
+    func policyUsage(source: String, overrides: String, localRules: String, egress: String, devices: [DeviceAccess.Device]) throws -> PolicyUsage.Document {
+        return try PolicyUsage.read(source: PolicyConfiguration.preview(source: source, overrides: overrides), localRules: localRules,
+                                    egress: EgressConfiguration.decode(egress), devices: devices)
+    }
+
     func egressSettings(profilePath: URL, overrides: String, policyOverrides: String = "{}") async throws -> (EgressConfiguration.Document, EgressConfiguration.Document) {
         let source = try await fileManager.readText(from: profilePath)
         let inherited = try EgressConfiguration.read(PolicyConfiguration.preview(source: try await resourceSource(source), overrides: policyOverrides))

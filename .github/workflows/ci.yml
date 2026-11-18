@@ -18,6 +18,7 @@ jobs:
       - name: Isolated tests
         run: |
           scripts/test-safe-functions.sh
+          SPARKLE_FRAMEWORK="$(find "$HOME/Library/Developer/Xcode/DerivedData" -path '*/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework' -type d -print -quit)" scripts/test-app-updates.sh
           scripts/test-effective-config.sh
           scripts/test-config-controller.sh
           scripts/test-lifecycle.sh

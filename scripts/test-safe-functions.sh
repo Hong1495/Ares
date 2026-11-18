@@ -70,6 +70,8 @@ SOURCES=(
   "$ROOT/AresTests/FunctionalContractTests.swift"
   "$ROOT/AresTests/ProcessOwnershipSourceTests.swift"
   "$ROOT/AresTests/AppUpdateSourceTests.swift"
+  "$ROOT/Ares/Utilities/AppUpdateRecovery.swift"
+  "$ROOT/AresTests/AppUpdateRecoveryTests.swift"
   "$ROOT/Ares/Utilities/CoreReleaseSelector.swift"
   "$ROOT/Ares/Services/MITMDomainMatcher.swift"
   "$ROOT/AresTests/AppleScriptEscaperTests.swift"

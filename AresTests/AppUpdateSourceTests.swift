@@ -28,7 +28,7 @@ final class AppUpdateSourceTests: XCTestCase {
 
     func testStartupCheckRespectsPreferenceAndScheduledSessionsRemainOpenable() throws {
         let text = try source("Ares/Services/AppUpdateService.swift")
-        XCTAssertTrue(text.contains("if automaticallyChecks {\n                controller.updater.checkForUpdatesInBackground()"))
+        XCTAssertTrue(text.contains("if automaticallyChecks {\n                startAutomaticRecovery()\n                controller.updater.checkForUpdatesInBackground()"))
         let method = try XCTUnwrap(text.range(of: "    func checkForUpdates()"))
         let session = try XCTUnwrap(text.range(of: "if controller.updater.sessionInProgress", range: method.lowerBound..<text.endIndex))
         let availability = try XCTUnwrap(text.range(of: "guard controller.updater.canCheckForUpdates", range: method.lowerBound..<text.endIndex))

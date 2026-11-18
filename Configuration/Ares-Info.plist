@@ -6,5 +6,5 @@
     <key>SUEnableAutomaticChecks</key><true/>
     <key>SUAutomaticallyUpdate</key><false/>
     <key>SUAllowsAutomaticUpdates</key><false/>
-    <key>SUScheduledCheckInterval</key><integer>1800</integer>
+    <key>SUScheduledCheckInterval</key><integer>3600</integer>
 </dict></plist>

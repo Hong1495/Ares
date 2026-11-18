@@ -73,6 +73,13 @@ private enum ProxyTableFixture {
     @Published var proxyGroups: [ProxyGroup] = []
     @Published var proxyNodes: [String: ProxyNode] = [:]
     func fetchProxiesData() async throws {
+        if CommandLine.arguments.contains("--policies") {
+            proxyGroups = try PolicyConfiguration.read(PolicyConfiguration.preview(source: PolicyGroupService.fixture, overrides: PolicyGroupService.stored)).map {
+                ProxyGroup(name: $0.name, type: ["select": "Selector", "url-test": "URLTest", "fallback": "Fallback", "load-balance": "LoadBalance"][$0.type]!, now: $0.type == "load-balance" ? nil : $0.members.first, all: $0.members)
+            }
+            proxyNodes = ["US 01": .init(name: "US 01", type: "VLESS", delay: 168), "US 02": .init(name: "US 02", type: "Trojan", delay: 191)]
+            return
+        }
         guard ProxyTableFixture.enabled else { fatalError("Offline preview must never call the core") }
         if proxyGroups.isEmpty {
             proxyGroups = ProxyTableFixture.groups
@@ -159,15 +166,37 @@ struct PreviewProfile {
         let stored: String
         let inherited: [PolicyConfiguration.Group]
         let effective: [PolicyConfiguration.Group]
-        var source = "proxies: [{name: Sample 1, type: vless, server: example.invalid, port: 443}]\nproxy-groups: [{name: Automatic, type: url-test, proxies: [Sample 1]}]"
+        var source = "{}"
         var localRules = ""
+        var usage: PolicyUsage.Document? = nil
     }
-    static var canReadRuntime: Bool { false }
+    static let fixture = """
+    proxies:
+      - {name: US 01, type: vless, server: example.invalid, port: 443}
+      - {name: US 02, type: trojan, server: example.invalid, port: 443}
+    proxy-groups:
+      - {name: Route, type: select, proxies: [Automatic, Fallback, Balance, DIRECT]}
+      - {name: Automatic, type: url-test, proxies: [US 01, US 02], interval: 300, timeout: 5000, tolerance: 50}
+      - {name: Fallback, type: fallback, proxies: [US 02, US 01], interval: 300}
+      - {name: Balance, type: load-balance, proxies: [US 01, US 02]}
+    rules:
+      - DOMAIN-SUFFIX,example.test,Route
+    """
+    static var stored = "{}"
+    static var localRules = "PROCESS-PATH,/Applications/Browser.app/Contents/MacOS/Browser,Automatic"
+    static var canReadRuntime: Bool { CommandLine.arguments.contains("--policies") }
     static func load() async throws -> Snapshot {
-        let groups = try PolicyConfiguration.read("proxy-groups: [{name: Automatic, type: url-test, proxies: [Sample 1], interval: 600, tolerance: 50, use: [Sample Resource]}]")
-        return Snapshot(revision: "preview", storageKey: "unused", stored: "{}", inherited: groups, effective: groups)
+        let source = try PolicyConfiguration.preview(source: fixture, overrides: stored)
+        return Snapshot(revision: ProfileService.shared.activeProfileRevision, storageKey: "unused", stored: stored,
+                        inherited: try PolicyConfiguration.read(fixture), effective: try PolicyConfiguration.read(source),
+                        source: fixture, localRules: localRules, usage: try PolicyUsage.read(source: source, localRules: localRules))
     }
-    static func apply(_ text: String, snapshot: Snapshot, localRules: String? = nil) async -> Bool { false }
+    static func apply(_ text: String, snapshot: Snapshot, localRules: String? = nil) async -> Bool {
+        guard snapshot.stored == stored, (try? PolicyConfiguration.apply(source: fixture, overrides: text)) != nil else { return false }
+        stored = text
+        if let localRules { Self.localRules = localRules }
+        return true
+    }
 }
 @MainActor enum DNSSettingsService {
     struct Snapshot {

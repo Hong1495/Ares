@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import Network
 import Sparkle
 
 /// App updates only. Core binary updates remain a separate operation.
@@ -14,6 +15,11 @@ final class AppUpdateService: NSObject, ObservableObject, SPUUpdaterDelegate, SP
         didSet {
             UserDefaults.standard.set(automaticallyChecks, forKey: "SUEnableAutomaticChecks")
             controller?.updater.automaticallyChecksForUpdates = automaticallyChecks
+            if automaticallyChecks {
+                startAutomaticRecovery()
+            } else {
+                stopAutomaticRecovery()
+            }
         }
     }
     let currentVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
@@ -22,7 +28,19 @@ final class AppUpdateService: NSObject, ObservableObject, SPUUpdaterDelegate, SP
     private var preparingInstall = false
     private var installGeneration = UUID()
     private var canCheckObservation: NSKeyValueObservation?
+    private var recovery: AppUpdateRecovery
+    private var retryTask: Task<Void, Never>?
+    private var pathMonitor: NWPathMonitor?
+    private var pathWasAvailable: Bool?
+    private var activeObserver: NSObjectProtocol?
+    private var wakeObserver: NSObjectProtocol?
+    private var loadedFeedForCurrentCheck = false
     @Published private(set) var canCheck = false
+
+    init(recovery: AppUpdateRecovery? = nil) {
+        self.recovery = recovery ?? AppUpdateRecovery()
+        super.init()
+    }
 
     func start() {
         guard controller == nil else { return }
@@ -48,6 +66,7 @@ final class AppUpdateService: NSObject, ObservableObject, SPUUpdaterDelegate, SP
             record("Started Ares \(currentVersion) (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") ?? "—")), PID \(ProcessInfo.processInfo.processIdentifier), path \(Bundle.main.bundlePath)")
             // Sparkle explicitly supports a launch-time background check immediately after start.
             if automaticallyChecks {
+                startAutomaticRecovery()
                 controller.updater.checkForUpdatesInBackground()
             }
         } catch {
@@ -95,6 +114,21 @@ final class AppUpdateService: NSObject, ObservableObject, SPUUpdaterDelegate, SP
         availableVersion = item.displayVersionString
         status = "Ares \(item.displayVersionString) is available."
         isChecking = false
+        record("Found Ares \(item.displayVersionString); update indicator is available")
+    }
+
+    func updater(_ updater: SPUUpdater, mayPerform updateCheck: SPUUpdateCheck) throws {
+        cancelRetry()
+        loadedFeedForCurrentCheck = false
+        recovery.checkStarted(at: Date())
+        record("Checking for updates (\(updateCheck.rawValue))")
+    }
+
+    func updater(_ updater: SPUUpdater, didFinishLoading appcast: SUAppcast) {
+        loadedFeedForCurrentCheck = true
+        recovery.reset()
+        cancelRetry()
+        record("Update feed loaded successfully")
     }
 
     func updaterDidNotFindUpdate(_ updater: SPUUpdater) {
@@ -117,6 +151,11 @@ final class AppUpdateService: NSObject, ObservableObject, SPUUpdaterDelegate, SP
 
     func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: Error?) {
         isChecking = false
+        record("Update check finished (\(updateCheck.rawValue)), error: \(error.map { String(($0 as NSError).code) } ?? "none")")
+        guard automaticallyChecks, !loadedFeedForCurrentCheck,
+              let error, Self.isFeedRequestFailure(error) else { return }
+        recovery.feedFailed(at: Date())
+        scheduleRetry()
     }
 
     func updater(_ updater: SPUUpdater, shouldPostponeRelaunchForUpdate item: SUAppcastItem, untilInvokingBlock installHandler: @escaping () -> Void) -> Bool {
@@ -136,6 +175,83 @@ final class AppUpdateService: NSObject, ObservableObject, SPUUpdaterDelegate, SP
 
     private func record(_ message: String) {
         NSLog("[Ares Update] %@", message)
+    }
+
+    private static func isFeedRequestFailure(_ error: Error) -> Bool {
+        let error = error as NSError
+        if error.domain == SUSparkleErrorDomain {
+            return [SUError.appcastError, .resumeAppcastError, .downloadError].contains { error.code == Int($0.rawValue) }
+        }
+        return error.domain == NSURLErrorDomain && error.code != NSURLErrorCancelled
+    }
+
+    private func startAutomaticRecovery() {
+        guard controller != nil, pathMonitor == nil else { return }
+        let monitor = NWPathMonitor()
+        pathMonitor = monitor
+        monitor.pathUpdateHandler = { [weak self] path in
+            let available = path.status == .satisfied
+            Task { @MainActor [weak self] in self?.networkPathChanged(available: available) }
+        }
+        monitor.start(queue: DispatchQueue(label: "Ares.UpdatePath"))
+        activeObserver = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.resumeAutomaticSchedule() }
+        }
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.resumeAutomaticSchedule() }
+        }
+    }
+
+    private func stopAutomaticRecovery() {
+        cancelRetry()
+        recovery.reset()
+        pathMonitor?.cancel()
+        pathMonitor = nil
+        pathWasAvailable = nil
+        if let activeObserver { NotificationCenter.default.removeObserver(activeObserver) }
+        if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }
+        activeObserver = nil
+        wakeObserver = nil
+    }
+
+    private func networkPathChanged(available: Bool) {
+        guard automaticallyChecks, pathMonitor != nil else { return }
+        let restored = available && pathWasAvailable != true
+        pathWasAvailable = available
+        guard restored else { return }
+        recovery.networkRestored(at: Date())
+        resumeAutomaticSchedule()
+    }
+
+    private func resumeAutomaticSchedule() {
+        guard automaticallyChecks, let updater = controller?.updater,
+              !updater.sessionInProgress, !preparingInstall, pendingInstall == nil else { return }
+        if recovery.retryAt != nil {
+            scheduleRetry()
+        } else if recovery.regularCheckIsOverdue(lastCheck: updater.lastUpdateCheckDate, now: Date()) {
+            // Use Sparkle's scheduler for ordinary checks, including after wake.
+            updater.resetUpdateCycle()
+        }
+    }
+
+    private func cancelRetry() {
+        retryTask?.cancel()
+        retryTask = nil
+    }
+
+    private func scheduleRetry() {
+        cancelRetry()
+        guard automaticallyChecks, let deadline = recovery.retryAt else { return }
+        let delay = max(0, deadline.timeIntervalSinceNow)
+        record("Retrying failed update check in \(Int(delay.rounded(.up))) seconds")
+        retryTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+            guard let self, self.automaticallyChecks, let updater = self.controller?.updater,
+                  !updater.sessionInProgress, updater.canCheckForUpdates,
+                  !self.preparingInstall, self.pendingInstall == nil else { return }
+            // One bounded recovery attempt, never a second periodic scheduler.
+            updater.checkForUpdatesInBackground()
+        }
     }
 
     private func resumeInstallation() {

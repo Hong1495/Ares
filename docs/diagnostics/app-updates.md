@@ -4,7 +4,8 @@ Ares uses Sparkle 2.9.6 for signed application updates. This is separate from mi
 
 ## Behaviour
 
-- Automatic checks default to enabled, with a requested 30-minute interval (Sparkle may enforce its own minimum). They show only the update dot, without stealing focus.
+- Automatic checks default to enabled: once at launch, then hourly (Sparkle 2.9.6 enforces a one-hour minimum). They show only the update dot, without stealing focus.
+- Failed feed requests retry after 1, 5 and 15 minutes, then return to Sparkle's regular schedule. A restored network can bring a pending retry forward, with at least one minute between recovery attempts. Returning to the app or waking the Mac resumes overdue scheduled checks. Turning off automatic checks cancels these recovery triggers as well.
 - Settings → General → Software Update and the Ares menu provide manual checks. The dot opens Sparkle's update dialog, release details, download progress and installation controls.
 - Downloads/installations require user interaction. Switching off automatic checks does not disable manual checks.
 - A signed application archive is verified by Sparkle before installation.
@@ -39,6 +40,8 @@ The repository can remain private during development, but the updater feed and r
 
 ## Validation
 
-Only the isolated presentation preview is launched on the development host. It uses a fake `1.1` availability flag and a mock alert, with no Sparkle import, network transport, production app delegate or core. Real download, signature rejection, replacement and restart tests belong in a disposable VM, including failed network restoration on Apple Silicon.
+The isolated presentation preview uses a fake `1.1` availability flag and a mock alert. Update detection can also be checked in a separate diagnostic executable that links the real updater and window indicator with inert lifecycle stubs and independent preferences. It must not link the production app delegate, proxy/core services or installation cleanup; the installation stub traps. This allows read-only feed checks and opening the update dialog without touching proxy/TUN settings. Real download, signature rejection, replacement and restart tests belong in a disposable VM, including failed network restoration on Apple Silicon.
+
+`scripts/test-app-updates.sh` compiles the real update service against pinned Sparkle with inert lifecycle stubs. Its feed points only to a closed loopback port. It verifies bounded retries after real Sparkle transport failures, cancellation when automatic checks are disabled, and no requests when starting with automatic checks off. Retry delays are shortened only in the harness. Pure recovery tests cover reconnect throttling, reset after success, and overdue checks after focus/wake. This is separate from in-place update acceptance.
 
 Implementation verification on 2026-11-11: production Debug build passed without launching it; Sparkle.framework is embedded and SU* keys are present with correct Boolean/integer types in the built Info.plist. 53 isolated XCTest cases and 6 Python appcast cases passed. The preview dot was visible and its click opened the mock update alert. Production update services and archive replacement were not executed. Release setup is documented separately from those implementation-only checks.

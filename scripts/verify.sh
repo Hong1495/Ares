@@ -26,3 +26,4 @@ scripts/preview-ui.sh
 # Production compilation is allowed; do not launch the resulting app on the host.
 xcodebuild -project Ares.xcodeproj -scheme Ares -configuration Debug \
   -derivedDataPath .build/verification CODE_SIGNING_ALLOWED=NO build
+scripts/test-app-updates.sh

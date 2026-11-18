@@ -10,6 +10,7 @@ import SubscriptionKit
         let effective: [PolicyConfiguration.Group]
         var source = "{}"
         var localRules = ""
+        var usage: PolicyUsage.Document? = nil
     }
     static var canReadRuntime: Bool {
         let vm = ClashViewModel.shared
@@ -23,9 +24,17 @@ import SubscriptionKit
         let key = key(id)
         let stored = UserDefaults.standard.string(forKey: key) ?? "{}"
         let localRules = UserDefaults.standard.string(forKey: DefaultsKeys.localRules) ?? ""
+        let egress = UserDefaults.standard.string(forKey: EgressSettingsService.key(id)) ?? EgressConfiguration.empty
+        let managed = try ManagedWorkspaceService.read(id)
         let groups = try await ConfigService.shared.policyGroups(profilePath: path, overrides: stored)
         guard revision == profiles.activeProfileRevision, stored == (UserDefaults.standard.string(forKey: key) ?? "{}"), localRules == (UserDefaults.standard.string(forKey: DefaultsKeys.localRules) ?? "") else { throw CancellationError() }
-        return Snapshot(revision: revision, storageKey: key, stored: stored, inherited: groups.0, effective: groups.1, source: groups.2, localRules: localRules)
+        // An unreadable reference section must not hide otherwise editable groups.
+        let usage = try? await ConfigService.shared.policyUsage(source: groups.2, overrides: stored, localRules: localRules, egress: egress, devices: managed.devices)
+        guard revision == profiles.activeProfileRevision, stored == (UserDefaults.standard.string(forKey: key) ?? "{}"),
+              localRules == (UserDefaults.standard.string(forKey: DefaultsKeys.localRules) ?? ""),
+              egress == (UserDefaults.standard.string(forKey: EgressSettingsService.key(id)) ?? EgressConfiguration.empty),
+              managed == (try ManagedWorkspaceService.read(id)) else { throw CancellationError() }
+        return Snapshot(revision: revision, storageKey: key, stored: stored, inherited: groups.0, effective: groups.1, source: groups.2, localRules: localRules, usage: usage)
     }
     static func apply(_ overrides: String, snapshot: Snapshot, localRules: String? = nil, defaults: UserDefaults = .standard) async -> Bool {
         let app = AppState.shared, vm = ClashViewModel.shared

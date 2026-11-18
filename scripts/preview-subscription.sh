@@ -34,7 +34,7 @@ xcrun swiftc -parse-as-library -target arm64-apple-macosx14.0 \
   "$ROOT/Ares/UI/DesignSystem/WorkspaceCommands.swift" \
   "$ROOT/Ares/UI/DesignSystem/CollectionPresentation.swift" \
   "$ROOT/Ares/Models/RuleModels.swift" "$ROOT/Ares/UI/RuleProvidersView.swift" "$ROOT/Ares/UI/ResourceActivityView.swift" \
-  "$ROOT/Ares/UI/PolicyCompositionView.swift" "$ROOT/Ares/UI/PolicyGroupsView.swift" "$ROOT/Ares/UI/ProxyResourcesView.swift" \
+  "$ROOT/Ares/UI/PolicyCompositionView.swift" "$ROOT/Ares/UI/PolicyGroupsView.swift" "$ROOT/Ares/UI/PolicyGroupsViewModel.swift" "$ROOT/Ares/Utilities/PolicyWorkspacePresentation.swift" "$ROOT/Ares/UI/ProxyResourcesView.swift" \
   "$ROOT/Ares/UI/ProxiesView.swift" \
   "$ROOT/DesignPreview/SubscriptionPreview.swift" \
   "${OBJECTS[@]}" -o "$APP/Contents/MacOS/SubscriptionPreview"

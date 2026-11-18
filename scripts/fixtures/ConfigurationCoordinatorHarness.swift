@@ -56,6 +56,9 @@ import SubscriptionKit
 @MainActor final class ConfigService {
     static let shared = ConfigService()
     func policyGroups(profilePath: URL, overrides: String) async throws -> ([PolicyConfiguration.Group], [PolicyConfiguration.Group], String) { ([], [], "{}") }
+    func policyUsage(source: String, overrides: String, localRules: String, egress: String, devices: [DeviceAccess.Device]) async throws -> PolicyUsage.Document {
+        try PolicyUsage.read(source: source, localRules: localRules, egress: EgressConfiguration.decode(egress), devices: devices)
+    }
     func dnsSettings(profilePath: URL, overrides: String) async throws -> ([String: String], [String: String], [String: String]) { ([:], [:], [:]) }
     func egressSettings(profilePath: URL, overrides: String, policyOverrides: String = "{}") async throws -> (EgressConfiguration.Document, EgressConfiguration.Document) {
         let document = try EgressConfiguration.read("{}"); return (document, document)
@@ -77,6 +80,10 @@ import SubscriptionKit
         if Trace.shared.checkpointMissing { throw URLError(.fileDoesNotExist) }
         return checkpoint
     }
+}
+@MainActor enum ManagedWorkspaceService {
+    struct Document: Equatable { var devices: [DeviceAccess.Device] = [] }
+    static func read(_ id: UUID?) throws -> Document { Document() }
 }
 @MainActor final class ClashViewModel {
     static let shared = ClashViewModel()
