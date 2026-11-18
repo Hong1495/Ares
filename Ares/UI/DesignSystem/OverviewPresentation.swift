@@ -333,10 +333,16 @@ struct OverviewWorkspaceSummary: View {
                 }
                 VStack(spacing: 24) { activity; quality }
             }
-            ViewThatFits(in: .horizontal) {
-                configurationGrid(columns: 3)
-                configurationGrid(columns: 2)
-                configurationGrid(columns: 1)
+            VStack(spacing: 10) {
+                ViewThatFits(in: .horizontal) {
+                    configurationGrid(columns: 3)
+                    configurationGrid(columns: 2)
+                    configurationGrid(columns: 1)
+                }
+                HStack(alignment: .top, spacing: 24) {
+                    configurationPanel(.policies)
+                    configurationPanel(.scenes)
+                }
             }
         }
     }
@@ -352,23 +358,20 @@ struct OverviewWorkspaceSummary: View {
     }
 
     private func configurationGrid(columns: Int) -> some View {
-        let sections = OverviewConfiguration.Section.allCases
+        let sections: [OverviewConfiguration.Section] = [.resources, .devices, .applications]
         return Grid(alignment: .topLeading, horizontalSpacing: 24, verticalSpacing: 10) {
             ForEach(0..<((sections.count + columns - 1) / columns), id: \.self) { row in
                 let start = row * columns
                 let end = min(start + columns, sections.count)
                 GridRow {
                     ForEach(sections[start..<end], id: \.self) { section in
-                        heading(section.rawValue) { open(section) }
+                        configurationHeading(section)
                             .frame(minWidth: 170, maxWidth: .infinity)
-                            .padding(.top, 14)
-                            .overlay(alignment: .top) { Rectangle().fill(DS.line).frame(height: DS.hairline) }
                     }
                 }
                 GridRow {
                     ForEach(sections[start..<end], id: \.self) { section in
-                        metric(configuration.count(for: section)?.formatted() ?? "—", section.unit)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        configurationMetric(section)
                     }
                 }
                 GridRow {
@@ -378,6 +381,25 @@ struct OverviewWorkspaceSummary: View {
                 }
             }
         }
+    }
+
+    private func configurationPanel(_ section: OverviewConfiguration.Section) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            configurationHeading(section)
+            configurationMetric(section)
+            OverviewConfigurationGraphic(section: section, configuration: configuration)
+        }.frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    private func configurationHeading(_ section: OverviewConfiguration.Section) -> some View {
+        heading(section.rawValue) { open(section) }
+            .padding(.top, 14)
+            .overlay(alignment: .top) { Rectangle().fill(DS.line).frame(height: DS.hairline) }
+    }
+
+    private func configurationMetric(_ section: OverviewConfiguration.Section) -> some View {
+        metric(configuration.count(for: section)?.formatted() ?? "—", section.unit)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var activity: some View {
