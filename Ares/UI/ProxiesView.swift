@@ -27,7 +27,6 @@ struct ProxiesView: View {
     @State private var selectedGroup: String?
     @State private var focusedNode: String?
     @State private var searchText = ""
-    @State private var showingResources = false
     private var profileKey: String { profileService.activeProfileRevision }
 
     private var showingLive: Bool {
@@ -86,7 +85,6 @@ struct ProxiesView: View {
         .background(DS.canvas)
         .navigationTitle("")
         .toolbar { ProxiesTitleToolbar(count: nodeCount) }
-        .sheet(isPresented: $showingResources) { ProxyResourcesView().environmentObject(clashController) }
         .onAppear { selectedTab = ProxyTab(rawValue: appState.currentMode.rawValue.capitalized) ?? .rule }
         .onChange(of: appState.currentMode) { _, mode in
             selectedTab = ProxyTab(rawValue: mode.rawValue.capitalized) ?? .rule
@@ -187,8 +185,11 @@ struct ProxiesView: View {
                 HStack(spacing: 6) {
                     Button { appState.selection = .policies } label: { Image(systemName: "slider.horizontal.3") }
                         .help("Open policy groups").accessibilityLabel("Policies")
-                    Button { showingResources = true } label: { Image(systemName: "square.stack") }
-                        .disabled(!showingLive).help("Node resources").accessibilityLabel("Node resources")
+                    Button {
+                        appState.showNodeProvidersOnEntry = true
+                        appState.selection = .resources
+                    } label: { Image(systemName: "square.stack") }
+                        .help("Open Node Providers").accessibilityLabel("Open Node Providers")
                 }
 
                 Divider().frame(height: 14).padding(.horizontal, 4)

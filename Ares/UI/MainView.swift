@@ -72,8 +72,6 @@ struct MainView: View {
             PolicyGroupsView(embedded: true)
         case .scenes:
             ScenariosView(embedded: true)
-                .scrollIndicators(.never, axes: [.horizontal, .vertical])
-                .toolbar { CollectionTitleToolbar(title: "Scenes", count: nil, unit: "") }
         case .dashboard:
             DashboardView()
         case .proxies:

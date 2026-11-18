@@ -59,7 +59,8 @@ private enum ProxyTableFixture {
         try JSONDecoder().decode(DNSQueryResult.self, from: Data(#"{"Status":0,"TC":false,"Answer":[{"name":"fixture.test.","type":1,"TTL":90,"data":"192.0.2.10"}]}"#.utf8))
     }
     func fetchProxyResources() async throws -> [ProxyResource] {
-        try ProxyResource.decode(Data(#"{"providers":{"Sample Resource":{"name":"Sample Resource","vehicleType":"HTTP","updatedAt":"2026-11-13T01:00:00Z","proxies":[{"name":"Sample 1","type":"VLESS","alive":true,"history":[{"time":"2026-11-13T01:00:00Z","delay":35}]}]}}}"#.utf8))
+        let name = CommandLine.arguments.contains("--managed") ? "Work" : "Sample Resource"
+        return try ProxyResource.decode(Data(#"{"providers":{"\#(name)":{"name":"\#(name)","vehicleType":"HTTP","updatedAt":"2026-11-13T01:00:00Z","proxies":[{"name":"Sample 1","type":"VLESS","alive":true,"history":[{"time":"2026-11-13T01:00:00Z","delay":35}]},{"name":"Sample 2","type":"Trojan","history":[]}]}}}"#.utf8))
     }
     func performProxyResourceAction(name: String, healthCheck: Bool) async throws -> [ProxyResource] { try await fetchProxyResources() }
     @Published var testingProxyNames: Set<String> = []
@@ -146,8 +147,9 @@ struct PreviewProfile {
     isolated deinit { if let path = activeProfile?.path { try? FileManager.default.removeItem(at: path) } }
 }
 @MainActor final class AppState: ObservableObject {
-    enum NavigationItem { case policies, scenes }
+    enum NavigationItem { case policies, scenes, applications, resources }
     var selection = NavigationItem.policies
+    var showNodeProvidersOnEntry = false
     @Published var currentMode: ClashConfig.Mode = .rule
     var animationsEnabled = false
     var isForeground = true
@@ -184,15 +186,16 @@ struct PreviewProfile {
     """
     static var stored = "{}"
     static var localRules = "PROCESS-PATH,/Applications/Browser.app/Contents/MacOS/Browser,Automatic"
-    static var canReadRuntime: Bool { CommandLine.arguments.contains("--policies") }
+    static var canReadRuntime: Bool { CommandLine.arguments.contains("--policies") || CommandLine.arguments.contains("--managed") }
     static func load() async throws -> Snapshot {
-        let source = try PolicyConfiguration.preview(source: fixture, overrides: stored)
+        let base = CommandLine.arguments.contains("--managed") ? try ManagedResources.apply(source: ManagedWorkspaceService.source, draft: ManagedWorkspaceService.saved.resources) : fixture
+        let source = try PolicyConfiguration.preview(source: base, overrides: stored)
         return Snapshot(revision: ProfileService.shared.activeProfileRevision, storageKey: "unused", stored: stored,
-                        inherited: try PolicyConfiguration.read(fixture), effective: try PolicyConfiguration.read(source),
-                        source: fixture, localRules: localRules, usage: try PolicyUsage.read(source: source, localRules: localRules))
+                        inherited: try PolicyConfiguration.read(base), effective: try PolicyConfiguration.read(source),
+                        source: base, localRules: localRules, usage: try PolicyUsage.read(source: source, localRules: localRules))
     }
     static func apply(_ text: String, snapshot: Snapshot, localRules: String? = nil) async -> Bool {
-        guard snapshot.stored == stored, (try? PolicyConfiguration.apply(source: fixture, overrides: text)) != nil else { return false }
+        guard snapshot.stored == stored, (try? PolicyConfiguration.apply(source: snapshot.source, overrides: text)) != nil else { return false }
         stored = text
         if let localRules { Self.localRules = localRules }
         return true
@@ -243,27 +246,57 @@ struct PreviewProfile {
         let target: ScenarioSettings
         let sourceChanged: Bool
         let isUndo: Bool
+        var sceneID: UUID? = nil
         var changes: [ScenarioSettings.Difference] { target.differences(from: context.settings) }
     }
     static let id = UUID()
-    static let settings = ScenarioSettings(localRules: nil, dns: nil, policy: nil, egress: nil)
-    static func history() throws -> [SceneExecution] { [.init(sceneID: nil, name: "Office", automatic: false, result: "Applied and verified", sections: ["DNS", "Proxy Mode"])] }
-    static func context() throws -> Context { Context(profileID: id, revision: "preview", settings: settings) }
-    static func list() throws -> [ManualScenario] {
-        let scrolling = CommandLine.arguments.contains("--scroll-preview")
-        let rules = scrolling ? (1...80).map { "DOMAIN,fixture-\($0).test,DIRECT" }.joined(separator: "\n") : "MATCH,DIRECT"
-        return try (1...(scrolling ? 40 : 1)).map {
-            try ManualScenario(name: scrolling ? "Office \($0)" : "Office", profileID: id, sourceRevision: "preview", settings: ScenarioSettings(localRules: rules, dns: "{}", policy: nil, egress: nil))
+    static let browserRule = "PROCESS-PATH,/Applications/Browser.app/Contents/MacOS/Browser,United States"
+    static var settings = ScenarioSettings(localRules: nil, dns: nil, policy: ##"{"United States":{"_create":"true","type":"select","proxies":"[\"US 01\"]"}}"##, egress: nil, mode: "rule", selections: [:])
+    static let hasVerifiedRuntime = true
+    static var previous: ScenarioSettings?
+    static var entries: [SceneExecution] = []
+    static var scenarios: [ManualScenario] = {
+        let baseline = ScenarioSettings(localRules: nil, dns: nil, policy: nil, egress: nil)
+        if CommandLine.arguments.contains("--scenes-empty") { return [] }
+        if CommandLine.arguments.contains("--scroll-preview") {
+            let rules = (1...80).map { "DOMAIN,fixture-\($0).test,DIRECT" }.joined(separator: "\n")
+            return try! (1...40).map { try ManualScenario(name: "Office \($0)", profileID: id, sourceRevision: "preview", settings: .init(localRules: rules, dns: "{}", policy: nil, egress: nil)) }
         }
+        var us = baseline
+        us.localRules = browserRule
+        return try! [ManualScenario(name: "Daily", profileID: id, sourceRevision: "preview", settings: baseline.scoped(to: [.rules])),
+                     ManualScenario(name: "US Browser", profileID: id, sourceRevision: "preview", settings: us.scoped(to: [.rules])),
+                     ManualScenario(name: "Old Snapshot", profileID: id, sourceRevision: "old", settings: baseline)]
+    }()
+    static func history() throws -> [SceneExecution] { entries }
+    static func context() throws -> Context { Context(profileID: id, revision: "preview", settings: settings) }
+    static func list() throws -> [ManualScenario] { scenarios }
+    static func save(name: String, sections: Set<ScenarioSettings.Section>, expected: Context) throws -> ManualScenario {
+        let scene = try ManualScenario(name: name, profileID: id, sourceRevision: expected.revision, settings: expected.settings.scoped(to: sections))
+        scenarios.append(scene)
+        return scene
     }
-    static func save(name: String, expected: Context) throws {}
-    static func remove(_ scenario: ManualScenario) throws {}
-    static func update(_ original: ManualScenario, name: String, settings: ScenarioSettings, expected: Context, trigger: SceneTrigger? = nil) throws {}
+    static func remove(_ scenario: ManualScenario) throws { scenarios.removeAll { $0.id == scenario.id } }
+    static func update(_ original: ManualScenario, name: String, settings: ScenarioSettings, expected: Context, trigger: SceneTrigger? = nil) throws {
+        guard let index = scenarios.firstIndex(of: original) else { throw CancellationError() }
+        var item = try original.edited(name: name, settings: settings)
+        item.trigger = trigger
+        scenarios[index] = item
+    }
     static func review(_ scenario: ManualScenario) throws -> Review {
-        Review(name: scenario.name, context: try context(), target: scenario.settings, sourceChanged: false, isUndo: false)
+        Review(name: scenario.name, context: try context(), target: scenario.settings.resolved(from: settings),
+               sourceChanged: (scenario.validatedRevision ?? scenario.sourceRevision) != "preview", isUndo: false, sceneID: scenario.id)
     }
-    static func undoReview() -> Review? { nil }
-    static func apply(_ review: Review) async -> Bool { false }
+    static func undoReview() -> Review? {
+        guard let previous, let context = try? context() else { return nil }
+        return .init(name: "Undo Last Switch", context: context, target: previous, sourceChanged: false, isUndo: true)
+    }
+    static func apply(_ review: Review) async -> Bool {
+        previous = review.isUndo ? nil : settings
+        settings = review.target
+        entries.insert(.init(sceneID: review.sceneID, name: review.name, automatic: false, result: "Applied and verified", sections: review.changes.map(\.id)), at: 0)
+        return true
+    }
 }
 @MainActor final class SceneAutomationService: ObservableObject {
     static let shared = SceneAutomationService()
@@ -305,7 +338,7 @@ struct RuleSourcesView: View { var provider: String? = nil; var body: some View 
                 if CommandLine.arguments.contains("--managed") { ManagedResourcesView() }
                 else if CommandLine.arguments.contains("--devices") { DevicesView() }
                 else if CommandLine.arguments.contains("--topology") { TopologyPageView() }
-                else if CommandLine.arguments.contains("--scenes") { ScenariosView(embedded: true).toolbar { CollectionTitleToolbar(title: "Scenes", count: nil, unit: "") } }
+                else if CommandLine.arguments.contains("--scenes") { ScenariosView(embedded: true) }
                 else if CommandLine.arguments.contains("--diagnostics") { ActivityDiagnosticsView().frame(width: 800, height: 520) }
                 else if CommandLine.arguments.contains("--quality") { ScrollView { NetworkQualityView(embedded: true) }.toolbar { CollectionTitleToolbar(title: "Quality", count: nil, unit: "") } }
                 else if CommandLine.arguments.contains("--apps") { ApplicationRoutingView(embedded: true).toolbar { CollectionTitleToolbar(title: "Applications", count: nil, unit: "") } }
@@ -404,14 +437,20 @@ struct RuleSourcesView: View { var provider: String? = nil; var body: some View 
 @MainActor enum ManagedWorkspaceService {
     struct Document: Equatable { var resources = ManagedResources.Draft(); var devices: [DeviceAccess.Device] = [] }
     struct Snapshot {
+        let revision: String
         let document: Document
         let source: String
         var targets: [String] { ["DIRECT", "Automatic", "Work"] }
     }
     static var saved = Document(devices: [.init(name: "Phone", enabled: true, address: "192.0.2.10", port: 10810, username: "phone", password: "preview-only-credential", target: "Automatic"), .init(name: "Tablet", username: "tablet", password: "preview-only-credential")])
     static func read(_ id: UUID?) throws -> Document { saved }
+    static let source = """
+    proxies: [{name: Personal, type: vless, server: example.invalid, port: 443, uuid: 11111111-1111-1111-1111-111111111111, tls: true}]
+    proxy-providers: {Work: {type: http, url: 'https://example.invalid/nodes', interval: 3600}}
+    proxy-groups: [{name: Outbound, type: select, proxies: [Personal, DIRECT]}]
+    """
     static func load() async throws -> Snapshot {
-        Snapshot(document: saved, source: "proxies: [{name: Personal, type: vless, server: example.invalid, port: 443, uuid: 11111111-1111-1111-1111-111111111111, tls: true}]\nproxy-providers: {Work: {type: http, url: 'https://example.invalid/nodes', interval: 3600}}")
+        Snapshot(revision: ProfileService.shared.activeProfileRevision, document: saved, source: source)
     }
     static func apply(_ document: Document, snapshot: Snapshot) async throws { saved = document }
 }

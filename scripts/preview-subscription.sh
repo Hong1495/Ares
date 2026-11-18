@@ -13,14 +13,14 @@ while IFS= read -r file; do OBJECTS+=("$file"); done < <(find "$BIN/Yams.build" 
 xcrun swiftc -parse-as-library -target arm64-apple-macosx14.0 \
   -I "$BIN/Modules" -I "$PACKAGE/.build/checkouts/Yams/Sources/CYaml/include" \
   "$ROOT/Ares/Services/ResourceActivity.swift" \
-  "$ROOT/Ares/UI/ManagedResourcesView.swift" "$ROOT/Ares/UI/ResourceNodeForm.swift" "$ROOT/Ares/UI/DevicesView.swift" \
+  "$ROOT/Ares/UI/ManagedResourcesView.swift" "$ROOT/Ares/UI/ResourceNodeForm.swift" "$ROOT/Ares/UI/ResourceManagementSheets.swift" "$ROOT/Ares/UI/NodeProviderDetails.swift" "$ROOT/Ares/UI/DevicesView.swift" \
   "$ROOT/Ares/UI/ApplicationRoutingView.swift" "$ROOT/Ares/UI/ApplicationRoutingViewModel.swift" \
   "$ROOT/Ares/Utilities/ApplicationRoutingPresentation.swift" "$ROOT/Ares/UI/NetworkQualityView.swift" \
   "$ROOT/Ares/Models/Connection.swift" "$ROOT/Ares/Utilities/ConnectionIdentity.swift" \
   "$ROOT/Ares/UI/NetworkFormEditors.swift" \
   "$ROOT/Ares/Models/DNSQueryResult.swift" "$ROOT/Ares/UI/DNSSettingsView.swift" "$ROOT/Ares/UI/EgressSettingsView.swift" \
   "$ROOT/Ares/Utilities/TopologySnapshot.swift" "$ROOT/Ares/UI/Components/TopologyView.swift" "$ROOT/Ares/UI/TopologyPageView.swift" "$ROOT/Ares/UI/DesignSystem/ActivityTitleToolbar.swift" \
-  "$ROOT/Ares/Utilities/SceneEnvironment.swift" "$ROOT/Ares/Utilities/SceneExecutionHistory.swift" "$ROOT/Ares/Utilities/ManualScenario.swift" "$ROOT/Ares/UI/ScenariosView.swift" "$ROOT/Ares/UI/ActivityDiagnosticsView.swift" \
+  "$ROOT/Ares/Utilities/SceneEnvironment.swift" "$ROOT/Ares/Utilities/SceneExecutionHistory.swift" "$ROOT/Ares/Utilities/ManualScenario.swift" "$ROOT/Ares/Utilities/SceneChangePreview.swift" "$ROOT/Ares/UI/ScenariosView.swift" "$ROOT/Ares/UI/ActivityDiagnosticsView.swift" \
   "$ROOT/Ares/UI/DesignSystem/SettingsPresentation.swift" \
   "$ROOT/Ares/Models/ProxyResourceModels.swift" \
   "$ROOT/Ares/Models/ProxyModels.swift" \

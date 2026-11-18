@@ -4,11 +4,11 @@ These two workflows extend the existing subscription and policy features. They d
 
 ## Resources
 
-Library → Resources shows the current subscription's static nodes and provider definitions. Add a node, import VLESS/Trojan/SIP002 Shadowsocks links, or edit an existing resource. Common node fields and HTTP provider URL/interval have forms; Source retains access to advanced protocol, transport, TLS, authentication and health-check settings. Unknown URI parameters are rejected instead of silently discarded. Unknown YAML fields survive edits.
+Library → Resources shows the current subscription's static **Nodes** and **Node Providers**. Choose **Import Links** to paste one VLESS, Trojan or SIP002 Shadowsocks link per line, or use **Add Node** or **Add Provider**. Common node fields and HTTP provider URL/interval have forms; **Source** retains access to advanced settings. Unknown URI parameters are rejected instead of silently discarded. Unknown YAML fields survive edits.
 
-Save to Draft changes only the editor. Apply validates the complete merged configuration, including policies, rules, listeners and device routes. A running core is replaced using the existing coordinator; a stopped core stays stopped. Source subscription files are never rewritten. Name collisions are rejected on import; changing a resource name does not rewrite references automatically. Repair those references before applying. Restore Inheritance removes the local replacement, and Restore Removed Resources removes deletion markers.
+Import and **Save to Draft** leave the running configuration alone. **Review & Apply** lists edits, additions, removals and restored definitions, then validates the complete merged configuration. A running core restarts; a stopped core stays stopped. Source subscription files are never rewritten. Changing a resource name does not rewrite references automatically. **Restore Inheritance** removes a local replacement; **Restore Removed Resource** removes an individual deletion marker.
 
-Imported resources are available to Proxies, policy composition, application routes, egress targets and offline scene selection. Existing subscription rules are preserved: adding a node does not automatically route traffic to it. Assign it through Policies. For use without a subscription, Create Local Workspace is available when the core is stopped; it creates an offline local profile with an Outbound selector that includes managed resources.
+After applying, select the saved resource and use **Add to Policy** to append it to an existing group. This leaves routing rules intact. Select a saved provider to see loaded members, update time, and measurements from the current profile's running core, or to request an update or health check. **Proxies** links to the same provider workspace. For use without a subscription, **Create Local Workspace** is available when the core is stopped; it creates a local profile with an Outbound selector.
 
 ## Devices
 

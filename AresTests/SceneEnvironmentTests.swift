@@ -47,9 +47,9 @@ final class SceneEnvironmentTests: XCTestCase {
     func testLegacySceneKeepsModeAndChoicesAndExplicitEmptyResets() {
         let legacy = ScenarioSettings(localRules: nil, dns: nil, policy: nil, egress: nil)
         var current = legacy; current.mode = "global"; current.selections = ["Select": "A"]
-        XCTAssertEqual(legacy.resolvingRouting(from: current), current)
+        XCTAssertEqual(legacy.resolved(from: current), current)
         var target = legacy; target.mode = "direct"; target.selections = [:]
-        XCTAssertEqual(target.resolvingRouting(from: current).selections, [:])
+        XCTAssertEqual(target.resolved(from: current).selections, [:])
         XCTAssertEqual(target.differences(from: current).count, 2)
     }
     func testStrictNodeChoicesRejectRemovedAndNonSelectableGroups() throws {

@@ -2,12 +2,50 @@ import Foundation
 
 /// A snapshot of explicit overrides, never a frozen subscription or a claim about runtime health.
 nonisolated struct ScenarioSettings: Codable, Equatable, Sendable {
+    enum Section: String, CaseIterable, Codable, Sendable {
+        case rules, dns, policy, egress, mode, selections
+
+        var title: String {
+            switch self {
+            case .rules: "Local Rules"
+            case .dns: "DNS"
+            case .policy: "Policy Groups"
+            case .egress: "Routing & Listeners"
+            case .mode: "Proxy Mode"
+            case .selections: "Node Selections"
+            }
+        }
+    }
+
     var localRules: String?
     var dns: String?
     var policy: String?
     var egress: String?
     var mode: String? = nil
     var selections: [String: String]? = nil
+    var keepCurrent: Set<Section>? = nil
+
+    func manages(_ section: Section) -> Bool {
+        guard keepCurrent?.contains(section) != true else { return false }
+        switch section {
+        case .mode: return mode != nil
+        case .selections: return selections != nil
+        default: return true
+        }
+    }
+
+    func scoped(to sections: Set<Section>) -> Self {
+        var result = self
+        let excluded = Set([Section.rules, .dns, .policy, .egress]).subtracting(sections)
+        result.keepCurrent = excluded.isEmpty ? nil : excluded
+        if !sections.contains(.rules) { result.localRules = nil }
+        if !sections.contains(.dns) { result.dns = nil }
+        if !sections.contains(.policy) { result.policy = nil }
+        if !sections.contains(.egress) { result.egress = nil }
+        if !sections.contains(.mode) { result.mode = nil }
+        if !sections.contains(.selections) { result.selections = nil }
+        return result
+    }
 
     static func capture(profile: UUID, defaults: UserDefaults) -> Self {
         Self(localRules: defaults.string(forKey: "localRules"),
@@ -16,9 +54,9 @@ nonisolated struct ScenarioSettings: Codable, Equatable, Sendable {
              egress: defaults.string(forKey: "egressOverrides." + profile.uuidString))
     }
     func install(profile: UUID, defaults: UserDefaults) {
-        let values: [(String, String?)] = [("localRules", localRules), ("dnsOverrides." + profile.uuidString, dns),
-            ("policyGroupOverrides." + profile.uuidString, policy), ("egressOverrides." + profile.uuidString, egress)]
-        for (key, value) in values {
+        let values: [(Section, String, String?)] = [(.rules, "localRules", localRules), (.dns, "dnsOverrides." + profile.uuidString, dns),
+            (.policy, "policyGroupOverrides." + profile.uuidString, policy), (.egress, "egressOverrides." + profile.uuidString, egress)]
+        for (section, key, value) in values where manages(section) {
             if let value { defaults.set(value, forKey: key) }
             else { defaults.removeObject(forKey: key) }
         }
@@ -45,10 +83,15 @@ nonisolated struct ScenarioSettings: Codable, Equatable, Sendable {
         return rows
     }
 
-    func resolvingRouting(from current: Self) -> Self {
+    func resolved(from current: Self) -> Self {
         var result = self
-        result.mode = mode ?? current.mode
-        result.selections = selections ?? current.selections
+        if !manages(.rules) { result.localRules = current.localRules }
+        if !manages(.dns) { result.dns = current.dns }
+        if !manages(.policy) { result.policy = current.policy }
+        if !manages(.egress) { result.egress = current.egress }
+        if !manages(.mode) { result.mode = current.mode }
+        if !manages(.selections) { result.selections = current.selections }
+        result.keepCurrent = nil
         return result
     }
 }
@@ -99,7 +142,7 @@ nonisolated enum ScenarioLibrary {
         guard FileManager.default.fileExists(atPath: file.path) else { return [] }
         do {
             let document = try JSONDecoder().decode(Document.self, from: Data(contentsOf: file))
-            guard document.schema == 1 else { throw Failure.incompatible }
+            guard [1, 2].contains(document.schema) else { throw Failure.incompatible }
             try validate(document.scenarios)
             return document.scenarios
         } catch let error as Failure { throw error }
@@ -110,7 +153,8 @@ nonisolated enum ScenarioLibrary {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
         let file = directory.appendingPathComponent("scenarios.json")
-        try JSONEncoder().encode(Document(schema: 1, scenarios: scenarios)).write(to: file, options: .atomic)
+        let schema = scenarios.contains { !($0.settings.keepCurrent ?? []).isDisjoint(with: [.rules, .dns, .policy, .egress]) } ? 2 : 1
+        try JSONEncoder().encode(Document(schema: schema, scenarios: scenarios)).write(to: file, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
     }
     static func replace(_ original: ManualScenario, with edited: ManualScenario, directory: URL) throws {

@@ -52,6 +52,7 @@ class AppState: ObservableObject {
         }
     }
     @Published var selection: NavigationItem = .dashboard
+    var showNodeProvidersOnEntry = false
     @Published var animationsEnabled: Bool = true
     var isForeground = true
     var didSendInitialWake = false

@@ -1,6 +1,11 @@
 import Foundation
 import SubscriptionKit
 
+@MainActor enum ApplicationRoutingService {
+    static var sceneRules: String?
+    static func sceneDidApply(rules: String) { sceneRules = rules }
+}
+
 @MainActor final class ClashController {
     static let shared = ClashController()
     var proxyGroups = [ProxyGroup(name: "Auto", type: "URLTest", all: ["DIRECT"])]
@@ -350,6 +355,52 @@ import SubscriptionKit
 
         let sceneDir = FileManager.default.temporaryDirectory.appendingPathComponent("ares-editor-" + UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: sceneDir) }
+        let scopeDir = FileManager.default.temporaryDirectory.appendingPathComponent("ares-scoped-scenes-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: scopeDir) }
+        do {
+            resetRecovery()
+            ProfileService.shared.activeProfileID = sceneProfile
+            ProfileService.shared.activeProfileRevision = "new"
+            let browser = "/Applications/Browser.app/Contents/MacOS/Browser"
+            let browserRule = "PROCESS-PATH,\(browser),United States"
+            let unitedStates = try PolicyConfiguration.encodeOverrides(["United States": ["_create": "true", "type": "select", "proxies": try PolicyConfiguration.list(["DIRECT"])]])
+            var dailySettings = ScenarioSettings(localRules: nil, dns: "{}", policy: nil, egress: EgressConfiguration.empty)
+            dailySettings.install(profile: sceneProfile, defaults: defaults)
+            let daily = try ScenarioService.save(name: "Daily", sections: [.rules], expected: ScenarioService.context(defaults: defaults), defaults: defaults, storage: scopeDir)
+            dailySettings.localRules = browserRule
+            dailySettings.policy = unitedStates
+            dailySettings.install(profile: sceneProfile, defaults: defaults)
+            let us = try ScenarioService.save(name: "US Browser", sections: [.rules], expected: ScenarioService.context(defaults: defaults), defaults: defaults, storage: scopeDir)
+            precondition(trace.events.isEmpty && !us.settings.manages(.policy) && us.settings.policy == nil)
+            let savedScenes = try ScenarioLibrary.load(directory: scopeDir)
+            precondition(savedScenes == [daily, us])
+
+            for target in [daily, us, daily] {
+                let review = try ScenarioService.review(target, defaults: defaults)
+                precondition(review.target.policy == unitedStates && review.changes.map(\.id) == ["Local Rules"])
+                let rows = SceneChangePreview.rows(from: review.context.settings, to: review.target)
+                precondition(rows.count == 1 && rows[0].subject == browser && rows[0].after == (target == us ? "United States" : "No local app rule"))
+                let success = await ScenarioService.apply(review, defaults: defaults, storage: scopeDir)
+                precondition(success && ScenarioService.hasVerifiedRuntime)
+                let saved = ScenarioSettings.capture(profile: sceneProfile, defaults: defaults)
+                precondition(saved.localRules == target.settings.localRules && saved.policy == unitedStates && saved.dns == dailySettings.dns && saved.egress == dailySettings.egress)
+                precondition(ApplicationRoutingService.sceneRules == (target.settings.localRules ?? ""))
+            }
+            let reverted = await ScenarioService.apply(ScenarioService.undoReview(defaults: defaults)!, defaults: defaults, storage: scopeDir)
+            precondition(reverted && ScenarioSettings.capture(profile: sceneProfile, defaults: defaults) == dailySettings)
+            let legacy = ScenarioSettings(localRules: nil, dns: nil, policy: nil, egress: nil)
+            let legacyRows = SceneChangePreview.rows(from: dailySettings, to: legacy)
+            precondition(legacyRows.contains { $0.subject == "United States" && $0.after == "Remove local group definition" })
+            let review = try ScenarioService.review(daily, defaults: defaults)
+            trace.starts = [false, true]
+            let failed = await ScenarioService.apply(review, defaults: defaults, storage: scopeDir)
+            precondition(!failed && ScenarioSettings.capture(profile: sceneProfile, defaults: defaults) == dailySettings)
+            print("PASS: Daily ↔ US Browser scope, concrete route preview, preservation of later policy, undo and failed activation")
+        } catch { preconditionFailure("Scoped scene workflow: \(error)") }
+        resetRecovery()
+        ProfileService.shared.activeProfileID = sceneProfile
+        ProfileService.shared.activeProfileRevision = "updated subscription"
+        nextScene.install(profile: sceneProfile, defaults: defaults)
         try! ScenarioLibrary.save([scene], directory: sceneDir)
         let editorContext = try! ScenarioService.context(defaults: defaults)
         trace.reset()

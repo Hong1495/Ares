@@ -24,6 +24,22 @@ final class ManualScenarioTests: XCTestCase {
         XCTAssertFalse(rows.map { $0.before + $0.after }.joined().contains("secret"))
         XCTAssertEqual(before.differences(from: after).first?.after, "Restore inheritance")
     }
+    func testLegacyNilRestoresInheritanceAndScopedNilCanKeepCurrent() throws {
+        let legacyJSON = Data(#"{"localRules":"MATCH,DIRECT"}"#.utf8)
+        let legacy = try JSONDecoder().decode(ScenarioSettings.self, from: legacyJSON)
+        let current = ScenarioSettings(localRules: "", dns: "{}", policy: "{\"new\":{}}", egress: nil, mode: "rule", selections: ["Select": "JP"])
+        XCTAssertNil(legacy.resolved(from: current).policy)
+        XCTAssertEqual(legacy.resolved(from: current).selections, current.selections)
+        let scoped = legacy.scoped(to: [.rules])
+        XCTAssertFalse(scoped.manages(.policy))
+        XCTAssertEqual(scoped.resolved(from: current).policy, current.policy)
+        XCTAssertEqual(scoped.resolved(from: current).dns, current.dns)
+        XCTAssertEqual(scoped.resolved(from: current).localRules, "MATCH,DIRECT")
+        let inherit = ScenarioSettings(localRules: nil, dns: nil, policy: nil, egress: nil).scoped(to: [.rules])
+        XCTAssertTrue(inherit.manages(.rules))
+        XCTAssertNil(inherit.resolved(from: current).localRules)
+        XCTAssertEqual(inherit.resolved(from: current).policy, current.policy)
+    }
     func testPrivateAtomicLibraryAndDuplicateNames() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ares-scenes-" + UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

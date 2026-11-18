@@ -24,6 +24,10 @@ import SubscriptionKit
         let applied: ScenarioSettings
     }
     private static var undo: Undo?
+    static var hasVerifiedRuntime: Bool {
+        ClashViewModel.shared.runtimeState.isAPIReady &&
+            ClashViewModel.shared.appliedProfileRevision == ProfileService.shared.activeProfileRevision
+    }
     static var directory: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Ares/scenarios")
@@ -43,13 +47,18 @@ import SubscriptionKit
         let id = try context().profileID
         return try ScenarioLibrary.load(directory: directory).filter { $0.profileID == id }
     }
-    static func save(name: String, expected: Context, defaults: UserDefaults = .standard) throws {
+    @discardableResult
+    static func save(name: String, sections: Set<ScenarioSettings.Section>, expected: Context,
+                     defaults: UserDefaults = .standard, storage: URL? = nil) throws -> ManualScenario {
         guard matches(expected, defaults: defaults) else { throw CancellationError() }
-        try validate(expected.settings)
-        let scenario = try ManualScenario(name: name, profileID: expected.profileID, sourceRevision: expected.revision, settings: expected.settings)
-        var library = try ScenarioLibrary.load(directory: directory)
+        let settings = expected.settings.scoped(to: sections)
+        try validateDraft(settings)
+        let scenario = try ManualScenario(name: name, profileID: expected.profileID, sourceRevision: expected.revision, settings: settings)
+        let location = storage ?? directory
+        var library = try ScenarioLibrary.load(directory: location)
         library.append(scenario)
-        try ScenarioLibrary.save(library, directory: directory)
+        try ScenarioLibrary.save(library, directory: location)
+        return scenario
     }
     static func remove(_ scenario: ManualScenario) throws {
         var library = try ScenarioLibrary.load(directory: directory)
@@ -60,7 +69,7 @@ import SubscriptionKit
     static func update(_ original: ManualScenario, name: String, settings: ScenarioSettings,
                        expected: Context, trigger: SceneTrigger? = nil, defaults: UserDefaults = .standard, storage: URL? = nil) throws {
         guard original.profileID == expected.profileID, matches(expected, defaults: defaults) else { throw CancellationError() }
-        try validate(settings)
+        try validateDraft(settings)
         var edited = try original.edited(name: name, settings: settings)
         if edited.settings != original.settings { edited.validatedRevision = nil }
         edited.trigger = trigger
@@ -70,7 +79,7 @@ import SubscriptionKit
     static func review(_ scenario: ManualScenario, defaults: UserDefaults = .standard) throws -> Review {
         let current = try context(defaults: defaults)
         guard scenario.profileID == current.profileID else { throw CancellationError() }
-        return Review(name: scenario.name, context: current, target: scenario.settings.resolvingRouting(from: current.settings),
+        return Review(name: scenario.name, context: current, target: scenario.settings.resolved(from: current.settings),
             sourceChanged: (scenario.validatedRevision ?? scenario.sourceRevision) != current.revision, isUndo: false, scene: scenario)
     }
     static func undoReview(defaults: UserDefaults = .standard) -> Review? {
@@ -107,11 +116,12 @@ import SubscriptionKit
         guard !vm.isToggling, app.beginOperation("Applying Scene") else { result = "Busy · Not applied"; return false }
         vm.isToggling = true
         defer { vm.isToggling = false; app.finishOperation(error: app.lastOperationError) }
-        let target = review.target.resolvingRouting(from: review.context.settings)
-        let includesSelections = review.scene.map { $0.settings.selections != nil } ?? (review.target.selections != nil)
-        let includesMode = review.scene.map { $0.settings.mode != nil } ?? (review.target.mode != nil)
+        let draft = review.scene?.settings ?? review.target
+        let target = draft.resolved(from: review.context.settings)
+        let includesSelections = draft.manages(.selections)
+        let includesMode = draft.manages(.mode)
         func install() {
-            target.install(profile: review.context.profileID, defaults: defaults)
+            draft.install(profile: review.context.profileID, defaults: defaults)
             if review.isUndo, let original = undo?.context {
                 if let mode = original.storedMode { defaults.set(mode, forKey: DefaultsKeys.clashMode) }
                 else { defaults.removeObject(forKey: DefaultsKeys.clashMode) }
@@ -154,6 +164,7 @@ import SubscriptionKit
                 guard ProfileService.shared.activeProfileRevision == review.context.revision else { throw CancellationError() }
             } catch { restore(); app.reportError("Scene validation failed. Previous settings were retained."); return false }
         }
+        ApplicationRoutingService.sceneDidApply(rules: target.localRules ?? "")
         result = vm.runtimeState.isAPIReady ? "Applied and verified" : "Saved · Awaiting runtime verification"
         // Only a successful running-core transaction can migrate a scene to a new subscription revision.
         if vm.runtimeState.isAPIReady, let scene = review.scene, review.sourceChanged {
@@ -166,6 +177,12 @@ import SubscriptionKit
         undo = review.isUndo ? nil : Undo(context: review.context, applied: target)
         if !automatic { NotificationCenter.default.post(name: .sceneManuallyApplied, object: nil) }
         return true
+    }
+    private static func validateDraft(_ settings: ScenarioSettings) throws {
+        guard ScenarioSettings.Section.allCases.contains(where: settings.manages) else {
+            throw PolicyConfiguration.Failure.invalid("Choose at least one setting for this scene.")
+        }
+        try validate(settings)
     }
     private static func validate(_ settings: ScenarioSettings) throws {
         if let mode = settings.mode, !["rule", "global", "direct"].contains(mode) { throw ScenarioLibrary.Failure.invalid }

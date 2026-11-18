@@ -4,6 +4,11 @@ import SubscriptionKit
 @MainActor enum ApplicationRoutingService {
     // Session-only boundary: existing connections do not verify a newly saved rule.
     private(set) static var verificationSince: [String: Date] = [:]
+
+    static func sceneDidApply(rules: String) {
+        let now = Date()
+        for path in ApplicationRouting.localRoutes(in: rules).keys { verificationSince[path] = now }
+    }
     struct Snapshot {
         let policy: PolicyGroupService.Snapshot
         let rules: String
