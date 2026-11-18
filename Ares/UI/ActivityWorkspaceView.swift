@@ -18,8 +18,7 @@ struct ActivityWorkspaceView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: DS.Space.md) {
-                    Button { showDiagnostics = true } label: { Image(systemName: "checkmark.magnifyingglass").font(.system(size: 13)) }
-                        .buttonStyle(.borderless).help("Runtime Diagnostics").accessibilityLabel("Runtime Diagnostics")
+                    WorkspaceAction(title: "Diagnostics", symbol: "checkmark.magnifyingglass") { showDiagnostics = true }
                     ActivityViewPicker(selection: $selection)
                 }
             }.aresUnframed()

@@ -20,7 +20,6 @@ struct MenuBarView: View {
             download: Self.formatSpeed(clashViewModel.isRunning ? clashController.traffic.down : 0),
             upload: Self.formatSpeed(clashViewModel.isRunning ? clashController.traffic.up : 0),
             openDashboard: { WindowAccessor.showMainWindow(selection: .dashboard, openWindow: openWindow) },
-            openActivity: { WindowAccessor.showMainWindow(selection: .connections, openWindow: openWindow) },
             openSettings: { WindowAccessor.showMainWindow(selection: .settings, openWindow: openWindow) },
             quit: { AppTerminationCoordinator.shared.requestQuit() },
             availableVersion: updates.availableVersion,

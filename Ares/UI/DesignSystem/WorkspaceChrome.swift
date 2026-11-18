@@ -1,6 +1,10 @@
 import SwiftUI
 import AppKit
 
+enum WorkspaceSymbols {
+    static let dashboard = "gauge.with.dots.needle.50percent"
+}
+
 /// Presentation only: safe to compile into the isolated preview executable.
 struct WorkspaceDestination: Identifiable {
     let id: String

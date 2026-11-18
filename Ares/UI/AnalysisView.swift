@@ -2,361 +2,112 @@ import SwiftUI
 
 struct AnalysisView: View {
     @ObservedObject private var service = BrowserAnalysisService.shared
-    @State private var selectedTabId: String? = "all_requests"
-    @State private var searchText: String = ""
-    @State private var selectedMethods: Set<String> = Set(["CONNECT", "GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"])
-    @State private var selectedTypes: Set<String> = Set(["Fetch", "XHR", "Image", "Script", "Stylesheet", "Document", "Font", "Media", "WebSocket", "Other"])
+    @Environment(\.openWindow) private var openWindow
+    @State private var searchText = ""
+    @State private var selectedRequestID: String?
+    @State private var showingFilters = false
+    @State private var confirmingClear = false
+    @State private var selectedMethods = Set(Self.httpMethods)
+    @State private var selectedTypes = Set(Self.resourceTypes)
     @State private var sortOrder = [KeyPathComparator(\BrowserRequest.timestamp, order: .reverse)]
-    
-    // Sheet State
-    @State private var selectedRequest: BrowserRequest? = nil
-    @State private var showingDetails = false
-    @State private var showingDiagnostics = false
-    @State private var showingMethodFilter = false
-    @State private var showingTypeFilter = false
-    
-    let httpMethods = ["CONNECT", "GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"]
-    let resourceTypes = ["Fetch", "XHR", "Image", "Script", "Stylesheet", "Document", "Font", "Media", "WebSocket", "Other"]
-    
-    // Computed statistics
-    private var allRequests: [BrowserRequest] {
-        service.activeTabs.flatMap { $0.requests }
-    }
-    
-    private var totalSize: Int {
-        allRequests.reduce(0) { $0 + ($1.displaySize) }
-    }
-    
-    private var successCount: Int {
-        allRequests.filter { $0.status == .success }.count
-    }
-    
-    private var errorCount: Int {
-        allRequests.filter { $0.status == .error }.count
-    }
-    
+
+    private static let httpMethods = ["CONNECT", "GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"]
+    private static let resourceTypes = ["Fetch", "XHR", "Image", "Script", "Stylesheet", "Document", "Font", "Media", "WebSocket", "Other"]
+
     var body: some View {
-        // Main Detail Content (Full Width)
-        VStack(spacing: 0) {
-            // Statistics Bar
-            HStack(spacing: 16) {
-                HStack(spacing: 4) {
-                    Image(systemName: "arrow.up.arrow.down")
-                        .foregroundStyle(.secondary)
-                    Text("\(allRequests.count)")
-                        .fontWeight(.semibold)
-                    Text("requests")
-                        .foregroundStyle(.secondary)
-                }
-                
-                Divider()
-                    .frame(height: 14)
-                
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(.green)
-                        .frame(width: 8, height: 8)
-                    Text("\(successCount)")
-                        .foregroundStyle(.green)
-                    Text("ok")
-                        .foregroundStyle(.secondary)
-                }
-                
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(.red)
-                        .frame(width: 8, height: 8)
-                    Text("\(errorCount)")
-                        .foregroundStyle(.red)
-                    Text("error")
-                        .foregroundStyle(.secondary)
-                }
-                
-                Divider()
-                    .frame(height: 14)
-                
-                HStack(spacing: 4) {
-                    Image(systemName: "arrow.down.doc")
-                        .foregroundStyle(.secondary)
-                    Text(formatTotalSize(totalSize))
-                        .fontWeight(.medium)
-                    Text("transferred")
-                        .foregroundStyle(.secondary)
-                }
-                
+        let captured = service.activeTabs.flatMap(\.requests)
+        let visible = captured.filter { request in
+            selectedMethods.contains(request.method) && selectedTypes.contains(request.type) &&
+                (searchText.isEmpty || request.url.localizedCaseInsensitiveContains(searchText) ||
+                 request.method.localizedCaseInsensitiveContains(searchText) || request.type.localizedCaseInsensitiveContains(searchText))
+        }
+        let inspected = visible.first { $0.id == selectedRequestID }
+        return VStack(spacing: 0) {
+            WorkspaceControls(placeholder: "Search requests", search: $searchText) {
+                Toggle("Listen", isOn: Binding(get: { service.isListening }, set: { _ in service.toggleListening() }))
+                    .toggleStyle(.switch).help("Listen for browser requests")
+            } actions: {
+                WorkspaceAction(title: filterCount == 0 ? "Filters" : "Filters (\(filterCount))", symbol: "line.3.horizontal.decrease.circle") {
+                    showingFilters.toggle()
+                }.popover(isPresented: $showingFilters, arrowEdge: .bottom) { filters }
+                WorkspaceAction(title: "Inspect", symbol: "macwindow", primary: true) {
+                    if let inspected { openWindow(id: "network-inspector", value: inspected.id) }
+                }.disabled(inspected == nil).help("Select a request to inspect its details")
+                Menu {
+                    Button("Clear Requests…", role: .destructive) { confirmingClear = true }
+                        .disabled(captured.isEmpty)
+                } label: { Image(systemName: "ellipsis.circle") }
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().accessibilityLabel("Analysis actions")
+            }.padding(.horizontal, DS.Space.lg).padding(.top, DS.Space.pageTop).padding(.bottom, DS.Space.md)
+
+            Divider()
+            DetailContent(requests: visible, hasCapturedRequests: !captured.isEmpty, isListening: service.isListening,
+                          sortOrder: $sortOrder, selectedRequestId: $selectedRequestID)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .background(DS.canvas)
+        .navigationTitle("")
+        .toolbar { CollectionTitleToolbar(title: "Analysis", count: captured.count, unit: "Requests") }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            HStack(spacing: 12) {
+                if visible.count != captured.count { Text("\(visible.count) shown") }
+                Label("\(captured.filter { $0.status == .success }.count) successful", systemImage: "checkmark.circle")
+                Label("\(captured.filter { $0.status == .error }.count) errors", systemImage: "exclamationmark.circle")
+                Spacer(minLength: 4)
+                let bytes = captured.reduce(Int64(0)) { $0 + Int64($1.displaySize) }
+                Text(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) + " transferred")
+            }.font(DS.Typography.metadata.monospacedDigit()).foregroundStyle(.secondary)
+                .padding(.horizontal, DS.Space.lg).padding(.vertical, DS.Space.sm).background(DS.canvas)
+        }
+        .confirmationDialog("Clear all captured requests?", isPresented: $confirmingClear) {
+            Button("Clear Requests", role: .destructive) { service.activeTabs.removeAll(); selectedRequestID = nil }
+        }
+    }
+
+    private var filterCount: Int {
+        (selectedMethods.count == Self.httpMethods.count ? 0 : 1) + (selectedTypes.count == Self.resourceTypes.count ? 0 : 1)
+    }
+
+    private var filters: some View {
+        VStack(alignment: .leading, spacing: DS.Space.md) {
+            HStack {
+                Text("Request Filters").font(DS.Typography.body.weight(.medium))
                 Spacer()
-                
-                if service.isListening {
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(.green)
-                            .frame(width: 6, height: 6)
-                        Text("Listening")
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                Button("Reset") { selectedMethods = Set(Self.httpMethods); selectedTypes = Set(Self.resourceTypes) }
+                    .disabled(filterCount == 0)
             }
-            .font(DS.Typography.metadata)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(DS.canvas)
-            
-            Divider()
-            
-            DetailContent(
-                tabId: "all_requests", // Always show all requests
-                service: service,
-                searchText: searchText,
-                selectedMethods: selectedMethods,
-                selectedTypes: selectedTypes,
-                sortOrder: $sortOrder,
-                selectedRequest: $selectedRequest,
-                showingDetails: $showingDetails,
-                showingDiagnostics: $showingDiagnostics
-            )
-        }
-        .padding(.top, DS.Space.pageTop)
-        .toolbar { toolbarContent }
-        .navigationTitle("Analysis")
+            HStack(alignment: .top, spacing: DS.Space.xl) {
+                filterColumn("HTTP Method", values: Self.httpMethods, selection: $selectedMethods)
+                filterColumn("Resource Type", values: Self.resourceTypes, selection: $selectedTypes)
+            }
+        }.controlSize(.small).font(DS.Typography.secondary).padding(DS.Space.lg).frame(minWidth: 280)
     }
-    
-    private func formatTotalSize(_ size: Int) -> String {
-        if size > 1024 * 1024 {
-            return String(format: "%.1f MB", Double(size) / 1024.0 / 1024.0)
-        } else if size > 1024 {
-            return String(format: "%.1f KB", Double(size) / 1024.0)
-        } else {
-            return "\(size) B"
-        }
-    }
-    
-    @ToolbarContentBuilder
-    var toolbarContent: some ToolbarContent {
-        ToolbarItemGroup {
-            // Start/Stop Listening Toggle
-            Toggle(isOn: Binding(
-                get: { service.isListening },
-                set: { _ in service.toggleListening() }
-            )) {
-                EmptyView()
+
+    private func filterColumn(_ title: String, values: [String], selection: Binding<Set<String>>) -> some View {
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
+            Text(title).foregroundStyle(.secondary)
+            Button(selection.wrappedValue.count == values.count ? "Deselect All" : "Select All") {
+                selection.wrappedValue = selection.wrappedValue.count == values.count ? [] : Set(values)
+            }.buttonStyle(.borderless)
+            ForEach(values, id: \.self) { value in
+                Toggle(value, isOn: Binding(get: { selection.wrappedValue.contains(value) }, set: { enabled in
+                    if enabled { selection.wrappedValue.insert(value) } else { selection.wrappedValue.remove(value) }
+                })).toggleStyle(.checkbox)
             }
-            .toggleStyle(.switch)
-            .controlSize(.mini)
-            .help(service.isListening ? "Stop Listening" : "Start Listening")
-            
-            Divider()
-            
-            // HTTP Method Filter
-            Button {
-                showingMethodFilter.toggle()
-            } label: {
-                Label {
-                    if selectedMethods.isEmpty {
-                        Text("No Methods")
-                    } else if selectedMethods.count == httpMethods.count {
-                        Text("All Methods")
-                    } else if selectedMethods.count == 1, let method = selectedMethods.first {
-                        Text(method)
-                    } else {
-                        Text("\(selectedMethods.count) Methods")
-                    }
-                } icon: {
-                    Image(systemName: "arrow.left.arrow.right")
-                }
-            }
-            .popover(isPresented: $showingMethodFilter, arrowEdge: .bottom) {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("HTTP Methods")
-                        .font(.headline)
-                        .padding(.horizontal, 12)
-                        .padding(.top, 8)
-                        .padding(.bottom, 4)
-                    
-                    Button(selectedMethods.count == httpMethods.count ? "Deselect All" : "Select All") {
-                        if selectedMethods.count == httpMethods.count {
-                            selectedMethods.removeAll()
-                        } else {
-                            selectedMethods = Set(httpMethods)
-                        }
-                    }
-                    .buttonStyle(.borderless)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
-                    
-                    Divider()
-                    
-                    ScrollView(showsIndicators: false) {
-                        VStack(alignment: .leading, spacing: 0) {
-                            ForEach(httpMethods, id: \.self) { method in
-                                Button {
-                                    if selectedMethods.contains(method) {
-                                        selectedMethods.remove(method)
-                                    } else {
-                                        selectedMethods.insert(method)
-                                    }
-                                } label: {
-                                    HStack {
-                                        Image(systemName: selectedMethods.contains(method) ? "checkmark.square.fill" : "square")
-                                            .foregroundColor(selectedMethods.contains(method) ? .accentColor : .secondary)
-                                        Text(method)
-                                        Spacer()
-                                    }
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                            }
-                        }
-                    }
-                    .frame(maxHeight: 300)
-                }
-                .frame(width: 200)
-            }
-            .controlSize(.small)
-            
-            // Resource Type Filter
-            Button {
-                showingTypeFilter.toggle()
-            } label: {
-                Label {
-                    if selectedTypes.isEmpty {
-                        Text("No Types")
-                    } else if selectedTypes.count == resourceTypes.count {
-                        Text("All Types")
-                    } else if selectedTypes.count == 1, let type = selectedTypes.first {
-                        Text(type)
-                    } else {
-                        Text("\(selectedTypes.count) Types")
-                    }
-                } icon: {
-                    Image(systemName: "doc.text")
-                }
-            }
-            .popover(isPresented: $showingTypeFilter, arrowEdge: .bottom) {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("Resource Types")
-                        .font(.headline)
-                        .padding(.horizontal, 12)
-                        .padding(.top, 8)
-                        .padding(.bottom, 4)
-                    
-                    Button(selectedTypes.count == resourceTypes.count ? "Deselect All" : "Select All") {
-                        if selectedTypes.count == resourceTypes.count {
-                            selectedTypes.removeAll()
-                        } else {
-                            selectedTypes = Set(resourceTypes)
-                        }
-                    }
-                    .buttonStyle(.borderless)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
-                    
-                    Divider()
-                    
-                    ScrollView(showsIndicators: false) {
-                        VStack(alignment: .leading, spacing: 0) {
-                            ForEach(resourceTypes, id: \.self) { type in
-                                Button {
-                                    if selectedTypes.contains(type) {
-                                        selectedTypes.remove(type)
-                                    } else {
-                                        selectedTypes.insert(type)
-                                    }
-                                } label: {
-                                    HStack {
-                                        Image(systemName: selectedTypes.contains(type) ? "checkmark.square.fill" : "square")
-                                            .foregroundColor(selectedTypes.contains(type) ? .accentColor : .secondary)
-                                        Text(type)
-                                        Spacer()
-                                    }
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                            }
-                        }
-                    }
-                    .frame(maxHeight: 300)
-                }
-                .frame(width: 200)
-            }
-            .controlSize(.small)
-            
-            SearchField(text: $searchText)
-                .frame(width: 200)
-            
-            Button(action: { service.activeTabs.removeAll() }) {
-                Label("Clear", systemImage: "trash")
-            }
-            .buttonStyle(.borderless)
-            .help("Clear All Data")
-        }
+        }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
-struct DetailContent: View {
-    let tabId: String
-    @ObservedObject var service: BrowserAnalysisService
-    let searchText: String
-    let selectedMethods: Set<String>
-    let selectedTypes: Set<String>
+private struct DetailContent: View {
+    let requests: [BrowserRequest]
+    let hasCapturedRequests: Bool
+    let isListening: Bool
     @Binding var sortOrder: [KeyPathComparator<BrowserRequest>]
-    
-    @Binding var selectedRequest: BrowserRequest?
-    @Binding var showingDetails: Bool
-    @Binding var showingDiagnostics: Bool
-    
-    var requests: [BrowserRequest] {
-        if tabId == "all_requests" {
-            // Use a slightly more efficient approach for large flattened arrays
-            // only if tabId actually changed or service updated
-            return service.activeTabs.flatMap { $0.requests }
-        } else {
-            // Optimize lookup for single tab
-            return service.activeTabs.first(where: { $0.id == tabId })?.requests ?? []
-        }
-    }
-    
-    private var tabTitle: String {
-        if tabId == "all_requests" { return "All Requests" }
-        if let tab = service.activeTabs.first(where: { $0.id == tabId }) {
-            return tab.title.isEmpty ? "Untitled Tab" : tab.title
-        }
-        return "Unknown Tab"
-    }
-    
-    @State private var selectedRequestId: String? = nil
-    
+    @Binding var selectedRequestId: String?
     @Environment(\.openWindow) private var openWindow
-    
-    var filteredRequests: [BrowserRequest] {
-        var result = requests
-        
-        // Filter by search text (supports URL, method, and domain search)
-        if !searchText.isEmpty {
-            result = result.filter { req in
-                req.url.localizedCaseInsensitiveContains(searchText) ||
-                req.method.localizedCaseInsensitiveContains(searchText) ||
-                req.type.localizedCaseInsensitiveContains(searchText)
-            }
-        }
-        
-        // Filter by HTTP method - always apply (empty selection = show nothing)
-        result = result.filter { req in
-            selectedMethods.contains(req.method)
-        }
-        
-        // Filter by resource type - always apply (empty selection = show nothing)
-        result = result.filter { req in
-            selectedTypes.contains(req.type)
-        }
-        
-        // Sort
-        return result.sorted(using: sortOrder)
-    }
-    
+
+    private var filteredRequests: [BrowserRequest] { requests.sorted(using: sortOrder) }
+
     var body: some View {
         if filteredRequests.isEmpty {
             ContentUnavailableView {
@@ -366,137 +117,133 @@ struct DetailContent: View {
             }
         } else {
             Table(filteredRequests, selection: $selectedRequestId, sortOrder: $sortOrder) {
-            TableColumn("Status", value: \.sortStatus) { req in
-                StatusIcon(req: req)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                    .contextMenu { tableRowContextMenu(req) }
-            }
-            .width(min: 45, ideal: 50, max: 60)
-            
-            TableColumn("Sec", value: \.url) { req in
-                if req.url.lowercased().hasPrefix("https") {
-                    Image(systemName: "lock.fill") // Secure
-                        .font(DS.Typography.caption)
-                        .foregroundStyle(.green)
-                } else {
-                    Image(systemName: "lock.open.fill") // Insecure
-                        .font(DS.Typography.caption)
-                        .foregroundStyle(.orange)
+                TableColumn("Status", value: \.sortStatus) { req in
+                    StatusIcon(req: req)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                 }
-            }
-            .width(30)
-            
-            TableColumn("Method", value: \.method) { req in
-                HStack(spacing: 4) {
-                    Text(req.method)
-                        .font(DS.Typography.metadata.monospaced().weight(.semibold))
-                        .foregroundStyle(methodColor(req.method))
-                    
-                    if req.hitCount > 1 {
-                        Text("\(req.hitCount)")
-                            .font(DS.Typography.caption.monospaced().weight(.semibold))
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(Color.orange.opacity(0.8))
-                            .foregroundStyle(.white)
-                            .clipShape(Capsule())
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-                .contextMenu { tableRowContextMenu(req) }
-            }
-            .width(min: 75, ideal: 80, max: 100)
-            
-            TableColumn("Started", value: \.timestamp) { req in
-                Text(formatTableTime(req.timestamp))
-                    .font(DS.Typography.metadata.monospaced())
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                    .contextMenu { tableRowContextMenu(req) }
-            }
-            .width(min: 100, ideal: 110, max: 130)
-            
-            TableColumn("URL", value: \.url) { req in
-                HStack(spacing: 4) {
-                    if req.responseBody != nil || req.requestBody != nil {
-                        Text("📦")
+                .width(min: 45, ideal: 50, max: 60)
+
+                TableColumn("Sec", value: \.url) { req in
+                    if req.url.lowercased().hasPrefix("https") {
+                        Image(systemName: "lock.fill") // Secure
                             .font(DS.Typography.caption)
-                            .help("Payload Captured")
-                    } else if req.url.lowercased().hasPrefix("http://") {
-                         // Removed confusing lock icon for HTTP plaintext
+                            .foregroundStyle(.green)
+                    } else {
+                        Image(systemName: "lock.open.fill") // Insecure
+                            .font(DS.Typography.caption)
+                            .foregroundStyle(.orange)
                     }
-                    
-                    Text(req.url)
-                        .font(DS.Typography.metadata)
-                        .lineLimit(1)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-                .contextMenu { tableRowContextMenu(req) }
-            }
-            
-            TableColumn("Type", value: \.type) { req in
-                TypeBadge(type: req.type)
+                .width(30)
+
+                TableColumn("Method", value: \.method) { req in
+                    HStack(spacing: 4) {
+                        Text(req.method)
+                            .font(DS.Typography.metadata.monospaced().weight(.semibold))
+                            .foregroundStyle(methodColor(req.method))
+
+                        if req.hitCount > 1 {
+                            Text("\(req.hitCount)")
+                                .font(DS.Typography.caption.monospaced().weight(.semibold))
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(Color.orange.opacity(0.8))
+                                .foregroundStyle(.white)
+                                .clipShape(Capsule())
+                        }
+                    }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
-                    .contextMenu { tableRowContextMenu(req) }
-            }
-            .width(min: 70, ideal: 80, max: 100)
-            
-            TableColumn("Size", value: \.displaySize) { req in
-                Text(formatSize(req.displaySize))
-                    .font(DS.Typography.metadata.monospaced())
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+                .width(min: 75, ideal: 80, max: 100)
+
+                TableColumn("Started", value: \.timestamp) { req in
+                    Text(formatTableTime(req.timestamp))
+                        .font(DS.Typography.metadata.monospaced())
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .width(min: 100, ideal: 110, max: 130)
+
+                TableColumn("URL", value: \.url) { req in
+                    HStack(spacing: 4) {
+                        if req.responseBody != nil || req.requestBody != nil {
+                            Image(systemName: "shippingbox").foregroundStyle(.secondary)
+                                .font(DS.Typography.caption)
+                                .help("Payload Captured")
+                        }
+
+                        Text(req.url)
+                            .font(DS.Typography.metadata)
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
-                    .contextMenu { tableRowContextMenu(req) }
-            }
-            .width(62)
-            
-            TableColumn("Time", value: \.sortDuration) { req in
-                Text(formatDuration(req.duration))
-                    .font(DS.Typography.metadata.monospaced())
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .contentShape(Rectangle())
-                    .contextMenu { tableRowContextMenu(req) }
-            }
-            .width(60)
+                }
+
+                TableColumn("Type", value: \.type) { req in
+                    TypeBadge(type: req.type)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .width(min: 70, ideal: 80, max: 100)
+
+                TableColumn("Size", value: \.displaySize) { req in
+                    Text(formatSize(req.displaySize))
+                        .font(DS.Typography.metadata.monospaced())
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .contentShape(Rectangle())
+                }
+                .width(62)
+
+                TableColumn("Time", value: \.sortDuration) { req in
+                    Text(formatDuration(req.duration))
+                        .font(DS.Typography.metadata.monospaced())
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .contentShape(Rectangle())
+                }
+                .width(60)
             }
             .scrollIndicators(.never)
+            .contextMenu(forSelectionType: String.self) { selection in
+                if selection.count == 1, let request = requests.first(where: { selection.contains($0.id) }) {
+                    tableRowContextMenu(request)
+                }
+            } primaryAction: { selection in
+                if selection.count == 1, let id = selection.first {
+                    openWindow(id: "network-inspector", value: id)
+                }
+            }
         }
-
-
     }
 
     private var emptyTitle: String {
-        if !service.isListening { return "Analysis listener is stopped" }
-        return requests.isEmpty ? "No requests captured" : "No matching requests"
+        if !isListening && !hasCapturedRequests { return "Analysis listener is stopped" }
+        return hasCapturedRequests ? "No matching requests" : "No requests captured"
     }
 
     private var emptyIcon: String {
-        service.isListening ? "network.slash" : "pause.circle"
+        isListening || hasCapturedRequests ? "network.slash" : "pause.circle"
     }
 
     private var emptyDescription: String {
-        if !service.isListening { return "Start listening to capture browser traffic." }
-        if requests.isEmpty { return "Captured requests will appear here." }
+        if !isListening && !hasCapturedRequests { return "Turn on Listen to capture browser traffic." }
+        if !hasCapturedRequests { return "Captured requests will appear here." }
         return "Change the search or filter selection to show requests."
     }
     
     @ViewBuilder
     private func tableRowContextMenu(_ req: BrowserRequest) -> some View {
         Button {
-            // New Window Action
             openWindow(id: "network-inspector", value: req.id)
         } label: {
             Label("Inspect Network Details", systemImage: "macwindow.badge.plus")
         }
 
-        
         Button {
             selectedRequestId = req.id
             NSPasteboard.general.clearContents()

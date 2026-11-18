@@ -157,7 +157,7 @@ struct ProxiesView: View {
     // MARK: - Toolbar
 
     private var toolbar: some View {
-        HStack(spacing: DS.Space.md) {
+        WorkspaceControls(placeholder: selectedTab == .direct ? nil : "Search nodes", search: $searchText) {
             Picker("Mode", selection: Binding(get: { selectedTab }, set: { tab in
                 Task {
                     await appState.setMode(ClashConfig.Mode(rawValue: tab.rawValue.lowercased()) ?? .rule)
@@ -174,63 +174,30 @@ struct ProxiesView: View {
             .controlSize(.small)
             .fixedSize()
 
-            Spacer(minLength: DS.Space.sm)
-
-            TextField("Search nodes", text: $searchText)
-                .textFieldStyle(.roundedBorder)
-                .controlSize(.small)
-                .frame(minWidth: 130, idealWidth: 200, maxWidth: 200)
-
-            HStack(spacing: 8) {
-                HStack(spacing: 6) {
-                    Button { appState.selection = .policies } label: { Image(systemName: "slider.horizontal.3") }
-                        .help("Open policy groups").accessibilityLabel("Policies")
-                    Button {
+        } actions: {
+            if selectedTab != .direct {
+                if !clashViewModel.isRunning {
+                    WorkspaceAction(title: "Start Core", symbol: "power") { Task { await clashViewModel.start() } }
+                        .disabled(clashViewModel.isToggling || appState.isPerformingNetworkOperation)
+                        .help("Start the core for latency tests without changing system proxy settings")
+                } else {
+                    WorkspaceAction(title: clashController.isTestingAllProxies ? "Testing…" : "Test Latency",
+                                    symbol: "bolt", primary: true) {
+                        Task { await clashController.testAllProxyDelays() }
+                    }.disabled(!showingLive || clashController.isTestingAllProxies)
+                        .help("Test all nodes · Automatically refreshed every 5 minutes while the core runs")
+                }
+                Menu {
+                    Button("Refresh Nodes") { Task { await refreshProxies() } }.disabled(isLoading)
+                    Divider()
+                    Button("Open Policies") { appState.selection = .policies }
+                    Button("Open Node Providers") {
                         appState.showNodeProvidersOnEntry = true
                         appState.selection = .resources
-                    } label: { Image(systemName: "square.stack") }
-                        .help("Open Node Providers").accessibilityLabel("Open Node Providers")
-                }
-
-                Divider().frame(height: 14).padding(.horizontal, 4)
-
-                HStack(spacing: 6) {
-                    if !clashViewModel.isRunning {
-                        Button {
-                            Task { await clashViewModel.start() }
-                        } label: {
-                            Image(systemName: "power")
-                        }
-                        .accessibilityLabel("Start Core")
-                        .disabled(clashViewModel.isToggling || appState.isPerformingNetworkOperation)
-                        .help("Start the core to test latency; system proxy remains a separate control")
                     }
-
-                    Button {
-                        Task { await clashController.testAllProxyDelays() }
-                    } label: {
-                        if clashController.isTestingAllProxies {
-                            ProgressView().controlSize(.mini)
-                        } else {
-                            ProxyLatencySymbol()
-                        }
-                    }
-                    .disabled(!showingLive || clashController.isTestingAllProxies)
-                    .help("Test all nodes · Automatically refreshed every 5 minutes while the core runs")
-                    .accessibilityLabel("Test all nodes")
-
-                    Button {
-                        Task { await refreshProxies() }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .help("Refresh nodes")
-                    .disabled(isLoading)
-                }
+                } label: { Image(systemName: "ellipsis.circle") }
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().accessibilityLabel("Proxy actions")
             }
-            .buttonStyle(ProxyToolbarButtonStyle())
-            .fixedSize()
-            .padding(.leading, 8)
         }
         .padding(.horizontal, DS.Space.lg)
         .padding(.top, DS.Space.pageTop)
@@ -316,21 +283,5 @@ struct ProxiesView: View {
             do { try await profileService.clearNodeSelection(group: group) }
             catch { appState.reportError(error.localizedDescription) }
         }
-    }
-}
-
-/// Stable hit areas keep the utility icons quiet and comfortably separated.
-private struct ProxyToolbarButtonStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var isEnabled
-    @State private var hovering = false
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 13, weight: .regular))
-            .foregroundStyle(isEnabled ? Color.primary.opacity(0.75) : Color.secondary.opacity(0.4))
-            .frame(width: 28, height: 28)
-            .background(Color.primary.opacity(configuration.isPressed ? 0.10 : hovering && isEnabled ? 0.05 : 0), in: RoundedRectangle(cornerRadius: 6))
-            .contentShape(Rectangle())
-            .onHover { hovering = $0 }
     }
 }

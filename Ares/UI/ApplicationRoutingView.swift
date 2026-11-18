@@ -28,11 +28,10 @@ struct ApplicationRoutingView: View {
                     .controlSize(.small).padding(DS.Space.lg)
             }
             CollectionTools(placeholder: "Search applications", search: $search) {
-                Button { showingDiscovery = true } label: { Image(systemName: "plus") }
-                    .help("Add application route").accessibilityLabel("Add application route")
+                WorkspaceAction(title: "Add Application…", symbol: "plus", primary: true) { showingDiscovery = true }
                 Button { Task { await model.reload() } } label: { Image(systemName: "arrow.clockwise") }
                     .help("Reload configuration and connections").accessibilityLabel("Reload application routes")
-                Button { Task { await model.revert() } } label: { Image(systemName: "arrow.uturn.backward") }
+                WorkspaceAction(title: "Undo", symbol: "arrow.uturn.backward") { Task { await model.revert() } }
                     .disabled(model.undo == nil).help("Undo last route change").accessibilityLabel("Undo last route change")
                 Image(systemName: "info.circle").foregroundStyle(.secondary)
                     .help("Local application routes apply across subscriptions in Rule mode. Each selected executable is matched exactly; helpers are never included implicitly. Existing connections keep their original route.")

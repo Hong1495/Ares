@@ -16,6 +16,7 @@ struct DevicesView: View {
     @State private var connectionsAvailable = false
     @State private var activityStatus = "Waiting for current connections"
     @State private var confirming = false
+    @State private var discarding = false
     private var changed: Bool { snapshot.map { draft != $0.document } ?? false }
     private var selected: DeviceAccess.Device? { draft.devices.first { $0.id == selection } }
     private var filtered: [DeviceAccess.Device] { draft.devices.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) } }
@@ -28,9 +29,14 @@ struct DevicesView: View {
         VStack(spacing: 0) {
             CollectionTools(placeholder: "Search devices", search: $search) {
                 if changed { Text("Unsaved changes").font(DS.Typography.metadata).foregroundStyle(.secondary) }
-                Button { newDevice() } label: { Image(systemName: "plus") }.help("Add device access")
-                Button { Task { await load() } } label: { Image(systemName: "arrow.counterclockwise") }.help("Discard draft and reload")
-                Button("Apply") { confirming = true }.disabled(!changed)
+                WorkspaceAction(title: "Add Device…", symbol: "plus", primary: true) { newDevice() }
+                if changed {
+                    WorkspaceAction(title: "Discard Draft", symbol: "arrow.counterclockwise") { discarding = true }
+                    WorkspaceAction(title: "Review & Apply…", symbol: "checkmark") { confirming = true }
+                } else {
+                    Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") }
+                        .help("Reload devices").accessibilityLabel("Reload devices")
+                }
             }.disabled(busy || snapshot == nil)
             if let error { Text(error).font(DS.Typography.metadata).foregroundStyle(Color.statusBad).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16) }
             HSplitView {
@@ -105,6 +111,9 @@ struct DevicesView: View {
         .confirmationDialog("Apply device access changes?", isPresented: $confirming) {
             Button("Apply") { Task { await apply() } }
         } message: { Text("Enabled entries accept authenticated HTTP and SOCKS TCP connections on their configured local address. Applying restarts a running core and closes existing connections. Disabled or removed entries stop accepting connections after Apply.") }
+        .confirmationDialog("Discard unsaved device changes?", isPresented: $discarding) {
+            Button("Discard Draft", role: .destructive) { if let snapshot { draft = snapshot.document; selection = nil } }
+        }
     }
     private func newDevice() {
         let ports = Set(draft.devices.map(\.port))

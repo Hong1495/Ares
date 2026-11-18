@@ -10,7 +10,6 @@ struct MenuBarPanel: View {
     let download: String
     let upload: String
     let openDashboard: () -> Void
-    let openActivity: () -> Void
     let openSettings: () -> Void
     let quit: () -> Void
     var availableVersion: String? = nil
@@ -62,7 +61,7 @@ struct MenuBarPanel: View {
                 Button("Open Ares", action: openDashboard)
                     .font(.system(size: 12, weight: .medium))
                 Spacer()
-                action("Activity", icon: "waveform.path", perform: openActivity)
+                action("Dashboard", icon: WorkspaceSymbols.dashboard, perform: openDashboard)
                 action("Settings", icon: "gearshape", perform: openSettings)
                 action("Quit Ares", icon: "power", perform: quit)
             }.buttonStyle(.plain)

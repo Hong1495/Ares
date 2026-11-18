@@ -24,6 +24,7 @@ SOURCES=(
   "$ROOT/Ares/UI/DesignSystem/AresMenuBarLabel.swift"
   "$ROOT/Ares/UI/DesignSystem/WindowUpdateIndicator.swift"
   "$ROOT/Ares/UI/DesignSystem/OverviewPresentation.swift"
+  "$ROOT/Ares/UI/DesignSystem/OverviewConfiguration.swift"
   "$ROOT/Ares/UI/DesignSystem/ProxyNodeTile.swift"
   "$ROOT/Ares/UI/DesignSystem/ProxyWorkspaceTable.swift"
   "$ROOT/DesignPreview/AresDesignPreview.swift"

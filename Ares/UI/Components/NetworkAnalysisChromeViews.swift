@@ -40,31 +40,6 @@ struct StatusIndicator: View {
     }
 }
 
-struct SearchField: View {
-    @Binding var text: String
-    var body: some View {
-        HStack {
-            Image(systemName: "magnifyingglass")
-                .font(DS.Typography.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            TextField("Search...", text: $text)
-                .textFieldStyle(.plain)
-                .font(DS.Typography.metadata)
-            if !text.isEmpty {
-                Button(action: { text = "" }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(Color.primary.opacity(0.05))
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-    }
-}
-
 struct EmptyStateView: View {
     var body: some View {
         VStack(spacing: 12) {

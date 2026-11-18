@@ -29,7 +29,7 @@ struct ProfilesView: View {
                     ContentUnavailableView(
                         searchText.isEmpty ? "No subscriptions" : "No matching subscriptions",
                         systemImage: "rectangle.stack",
-                        description: Text(searchText.isEmpty ? "Use + to add a remote subscription or local file." : "Try another name or host.")
+                        description: Text(searchText.isEmpty ? "Add a subscription URL or import a local configuration." : "Try another name or host.")
                     ).frame(maxWidth: .infinity).padding(.top, 60)
                 } else {
                     LazyVGrid(
@@ -90,15 +90,8 @@ struct ProfilesView: View {
 
     private var toolbar: some View {
         CollectionTools(placeholder: "Search subscriptions", search: $searchText) {
-            Menu {
-                Button("Remote Subscription") { showingAddSheet = true }
-                Button("Local File") { showingFileImporter = true }
-            } label: {
-                Image(systemName: "plus").frame(width: 16, height: 16)
-            }
-            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-            .help("Add subscription or local file")
-            .accessibilityLabel("Add subscription")
+            WorkspaceAction(title: "Add Subscription…", symbol: "plus", primary: true) { showingAddSheet = true }
+            WorkspaceAction(title: "Import File…", symbol: "square.and.arrow.down") { showingFileImporter = true }
         }
     }
 
@@ -152,6 +145,7 @@ struct ProfileCard: View {
 
     @EnvironmentObject private var clashViewModel: ClashViewModel
     @State private var isUpdating = false
+    @State private var confirmingDeletion = false
     @EnvironmentObject var profileService: ProfileService
 
     var body: some View {
@@ -236,7 +230,7 @@ struct ProfileCard: View {
             .disabled(profileService.isSwitchingProfile || clashViewModel.isToggling || (isActive && !clashViewModel.isRunning))
 
             if profile.type == .remote {
-                ActionButton(icon: "arrow.clockwise", tooltip: "Update subscription") {
+                WorkspaceAction(title: isUpdating ? "Updating…" : "Update", symbol: "arrow.clockwise") {
                     Task {
                         isUpdating = true
                         do { try await profileService.updateProfile(id: profile.id) }
@@ -244,13 +238,20 @@ struct ProfileCard: View {
                         catch { AppState.shared.reportError(error.localizedDescription) }
                         isUpdating = false
                     }
-                }
-                .disabled(isUpdating)
+                }.disabled(isUpdating)
             }
 
-            ActionButton(icon: "pencil", tooltip: "Rename") { onEdit() }
-            ActionButton(icon: "curlybraces", tooltip: "Edit configuration") { onEditRaw() }
-            ActionButton(icon: "trash", tooltip: "Delete", color: .statusBad) { onDelete() }
+            Menu {
+                Button("Rename…", action: onEdit)
+                Button("Edit Configuration…", action: onEditRaw)
+                Divider()
+                Button("Delete…", role: .destructive) { confirmingDeletion = true }
+            } label: { Image(systemName: "ellipsis.circle") }
+                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().controlSize(.small)
+                .accessibilityLabel("Subscription actions")
+        }
+        .confirmationDialog("Delete \(profile.name)?", isPresented: $confirmingDeletion) {
+            Button("Delete Subscription", role: .destructive, action: onDelete)
         }
     }
 
@@ -267,35 +268,6 @@ struct ProfileCard: View {
         return formatter.string(fromByteCount: bytes)
     }
 }
-
-struct ActionButton: View {
-    let icon: String
-    let tooltip: String
-    var color: Color = .secondary
-    let action: () -> Void
-
-    @State private var isHovered = false
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 13, weight: .regular))
-                .symbolRenderingMode(.monochrome)
-                .foregroundStyle(isHovered ? color : Color.secondary)
-                .frame(width: 26, height: 22)
-                .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(isHovered ? color.opacity(0.1) : Color.clear)
-                )
-        }
-        .buttonStyle(.plain)
-        .help(tooltip)
-        .accessibilityLabel(tooltip)
-        .onHover { isHovered = $0 }
-    }
-}
-
-// MARK: - Sheets
 
 struct AddProfileSheet: View {
     @Binding var name: String

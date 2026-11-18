@@ -11,6 +11,7 @@ struct ScenariosView: View {
     @State private var scenarios: [ManualScenario] = []
     @State private var context: ScenarioService.Context?
     @State private var selection: UUID?
+    @State private var search = ""
     @State private var error: String?
     @State private var review: ScenarioService.Review?
     @State private var reviewError: String?
@@ -23,7 +24,11 @@ struct ScenariosView: View {
     @State private var receipt: Receipt?
     private struct Creation: Identifiable { let id = UUID(); let context: ScenarioService.Context }
     private struct Receipt { let name: String; let verified: Bool; let isUndo: Bool; let hasAppRules: Bool }
-    private var selectedScene: ManualScenario? { scenarios.first { $0.id == selection } }
+    private var visibleScenes: [ManualScenario] {
+        scenarios.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) }
+    }
+    private var selectedScene: ManualScenario? { visibleScenes.first { $0.id == selection } }
+
 
     var body: some View {
         VStack(spacing: 0) {
@@ -31,24 +36,24 @@ struct ScenariosView: View {
                 Text("Scenes").font(DS.Typography.secondary.weight(.semibold)); Spacer()
                 Button("Done") { dismiss() }.controlSize(.small)
             }.padding(DS.Space.lg) }
-            DSCard(padding: DS.Space.md) {
-                HStack(spacing: DS.Space.md) {
-                    Button(action: create) { Label("Create Scene…", systemImage: "plus") }.disabled(context == nil)
-                    Spacer(minLength: 8)
-                    Button { showingHistory = true } label: { Image(systemName: "clock.arrow.circlepath") }.help("History").accessibilityLabel("History")
-                    if receipt == nil, ScenarioService.undoReview() != nil {
-                        Button { reviewError = nil; review = ScenarioService.undoReview() } label: { Image(systemName: "arrow.uturn.backward") }
-                            .help("Undo last switch").accessibilityLabel("Undo last switch")
-                    }
-                    Button { showingAutomation = true } label: {
-                        Label(automation.enabled ? automation.paused ? "Automation Paused" : "Automation On" : "Automation Off", systemImage: "bolt.badge.clock")
-                    }.help(automation.status)
-                    Button { load() } label: { Image(systemName: "arrow.clockwise") }
-                        .help("Refresh scenes").accessibilityLabel("Refresh scenes")
-                }.controlSize(.small).buttonStyle(.borderless).font(DS.Typography.secondary)
-            }.padding(.horizontal, DS.Space.lg).padding(.top, DS.Space.pageTop).padding(.bottom, DS.Space.md)
+            CollectionTools(placeholder: "Search scenes", search: $search) {
+                WorkspaceAction(title: "Create Scene…", symbol: "plus", primary: true, action: create).disabled(context == nil)
+                WorkspaceAction(title: "History", symbol: "clock.arrow.circlepath") { showingHistory = true }
+                WorkspaceAction(title: "Automation", symbol: automation.enabled && !automation.paused ? "bolt.badge.clock" : "bolt.slash") {
+                    showingAutomation = true
+                }.help(automation.status)
+                if receipt == nil, ScenarioService.undoReview() != nil {
+                    WorkspaceAction(title: "Undo…", symbol: "arrow.uturn.backward") { reviewError = nil; review = ScenarioService.undoReview() }
+                }
+                Button(action: load) { Image(systemName: "arrow.clockwise") }
+                    .help("Reload scenes").accessibilityLabel("Reload scenes")
+            }
             DSCard(padding: 0, spacing: 0) {
-                if scenarios.isEmpty { emptyState } else { sceneTable }
+                if scenarios.isEmpty { emptyState }
+                else if visibleScenes.isEmpty {
+                    ContentUnavailableView("No matching scenes", systemImage: "magnifyingglass")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else { sceneTable }
                 if let scene = selectedScene, let context {
                     Divider()
                     sceneDetails(scene, context: context)
@@ -73,7 +78,7 @@ struct ScenariosView: View {
         }
         .sheet(item: $creation) { request in
             CreateSceneView(context: request.context) { scene in
-                load(); selection = scene.id
+                load(); search = ""; selection = scene.id
             }
         }
         .sheet(item: $review) { item in reviewView(item) }
@@ -96,7 +101,7 @@ struct ScenariosView: View {
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     private var sceneTable: some View {
-        Table(scenarios, selection: $selection) {
+        Table(visibleScenes, selection: $selection) {
             TableColumn("Scene") { Text($0.name).font(DS.Typography.secondary.weight(.medium)).lineLimit(1).help($0.name) }
             TableColumn("Scope") { scene in
                 let sections = ScenarioSettings.Section.allCases.filter(scene.settings.manages)
@@ -523,6 +528,7 @@ private struct SceneHistoryView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var entries: [SceneExecution] = []
     @State private var selection: UUID?
+    @State private var search = ""
     @State private var error: String?
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.md) {

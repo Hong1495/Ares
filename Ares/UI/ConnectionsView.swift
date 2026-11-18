@@ -22,11 +22,7 @@ struct ConnectionsView: View {
         HSplitView {
             // Main Content
             VStack(spacing: DS.Space.md) {
-                // Toolbar
-                DSCard(padding: DS.Space.md) {
-                    toolbarView
-                }
-                .fixedSize(horizontal: false, vertical: true)
+                toolbarView
 
                 // Table
                 hierarchicalTable
@@ -55,6 +51,9 @@ struct ConnectionsView: View {
         .alert("Activity action failed", isPresented: Binding(get: { viewModel.actionError != nil }, set: { if !$0 { viewModel.actionError = nil } })) {
             Button("OK") { viewModel.actionError = nil }
         } message: { Text(viewModel.actionError ?? "") }
+        .onChange(of: searchText) { _, _ in
+            if let id = selectedNodeID, findNode(id: id, nodes: nodes) == nil { selectedNodeID = nil }
+        }
         .onChange(of: viewModel.groupingMode) { _, _ in selectedNodeID = nil }
         .task {
             // Initial Start (Defer slightly to let UI settle)
@@ -80,56 +79,32 @@ struct ConnectionsView: View {
     // MARK: - Toolbar
 
     private var toolbarView: some View {
-        HStack(spacing: DS.Space.md) {
-            // Grouping Picker
-            Picker("", selection: $viewModel.groupingMode) {
+        let paths = selectedNodeID.flatMap { findNode(id: $0, nodes: viewModel.groupedNodes) }.map(routePaths) ?? []
+        return WorkspaceControls(placeholder: "Search activity", search: $searchText) {
+            Picker("Group by", selection: $viewModel.groupingMode) {
                 ForEach(GroupingMode.allCases) { mode in
                     Label(mode.rawValue, systemImage: mode.icon).tag(mode)
                 }
-            }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .controlSize(.small)
-            .frame(minWidth: 240, idealWidth: 320)
+            }.labelsHidden().pickerStyle(.segmented)
+        } actions: {
+            WorkspaceAction(title: "Route App…", symbol: "arrow.triangle.branch") {
+                routingSelection = RoutingSelection(paths: paths)
+            }.disabled(paths.isEmpty).help("Select an application or a connection with a known executable path")
+            Toggle(isOn: $showInspector) { Label("Inspector", systemImage: "sidebar.right") }
+                .toggleStyle(.button).labelStyle(.iconOnly).help("Show or hide the inspector")
+            Menu {
+                Button("Export Data…") { exportConnections() }
+                Button("Reset Usage Statistics") { viewModel.resetStatistics() }
+            } label: { Image(systemName: "ellipsis.circle") }
+                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().accessibilityLabel("Activity actions")
+        }
+    }
 
-            Spacer(minLength: DS.Space.sm)
-
-            // Search
-            TextField("Search activity", text: $searchText)
-                .textFieldStyle(.roundedBorder)
-                .controlSize(.small)
-                .frame(minWidth: 130, idealWidth: 200, maxWidth: 200)
-
-            // Actions
-            HStack(spacing: DS.Space.xs) {
-                Button {
-                    viewModel.resetStatistics()
-                } label: {
-                    Image(systemName: "arrow.counterclockwise")
-                        .font(DS.Typography.secondary.weight(.medium))
-                }
-                .buttonStyle(.borderless)
-                .help("Reset Usage Statistics")
-
-                Button {
-                    withAnimation { showInspector.toggle() }
-                } label: {
-                    Image(systemName: "sidebar.right")
-                        .font(DS.Typography.secondary.weight(.medium))
-                        .foregroundStyle(showInspector ? AnyShapeStyle(HierarchicalShapeStyle.primary) : AnyShapeStyle(HierarchicalShapeStyle.tertiary))
-                }
-                .buttonStyle(.borderless)
-                .help("Toggle Inspector")
-
-                Button {
-                    exportConnections()
-                } label: {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(DS.Typography.secondary.weight(.medium))
-                }
-                .buttonStyle(.borderless)
-                .help("Export Data")
-            }
+    private func routePaths(_ node: ActivityNode) -> [String] {
+        switch node {
+        case .connection(let connection): return [connection.metadata.processPath ?? ""].filter(ApplicationRouting.validPath)
+        case .app(let session): return Array(Set(session.activeConnections.compactMap { $0.metadata.processPath }.filter(ApplicationRouting.validPath))).sorted()
+        case .group: return []
         }
     }
 
@@ -224,13 +199,7 @@ struct ConnectionsView: View {
                     .contextMenu(forSelectionType: ActivityNode.ID.self) { selection in
                         // Context Menu for Selected Items
                         if selection.count == 1, let id = selection.first, let node = findNode(id: id, nodes: nodes) {
-                            let paths: [String] = {
-                                switch node {
-                                case .connection(let connection): return [connection.metadata.processPath ?? ""].filter(ApplicationRouting.validPath)
-                                case .app(let session): return Array(Set(session.activeConnections.compactMap { $0.metadata.processPath }.filter(ApplicationRouting.validPath))).sorted()
-                                case .group: return []
-                                }
-                            }()
+                            let paths = routePaths(findNode(id: id, nodes: viewModel.groupedNodes) ?? node)
                             Button("Route Application…") { routingSelection = RoutingSelection(paths: paths) }.disabled(paths.isEmpty)
                             // --- Standard Copy Actions ---
                             Button("Copy Summary") {

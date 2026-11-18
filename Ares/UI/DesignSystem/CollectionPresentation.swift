@@ -19,24 +19,100 @@ struct CollectionTitleToolbar: ToolbarContent {
     }
 }
 
+/// In-page controls: the left is for scope and the right for search and actions.
+/// Wrap at an actual fit boundary, including when an inspector is open.
+struct WorkspaceControls<Scope: View, Actions: View>: View {
+    var placeholder: String? = nil
+    var search: Binding<String>? = nil
+    @ViewBuilder var scope: () -> Scope
+    @ViewBuilder var actions: () -> Actions
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: DS.Space.md) {
+                scope().fixedSize(horizontal: true, vertical: false)
+                Spacer(minLength: 0)
+                searchField
+                actionGroup
+            }
+            VStack(alignment: .leading, spacing: DS.Space.sm) {
+                scope()
+                HStack(spacing: DS.Space.md) {
+                    searchField
+                    Spacer(minLength: 0)
+                    actionGroup
+                }
+            }.frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: DS.Space.sm) {
+                scope()
+                searchField
+                actionGroup
+            }.frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .controlSize(.small)
+        .font(DS.Typography.secondary)
+        .buttonStyle(.borderless)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder private var searchField: some View {
+        if let placeholder, let search {
+            WorkspaceSearch(placeholder: placeholder, text: search)
+        }
+    }
+
+    private var actionGroup: some View {
+        HStack(spacing: DS.Space.sm) { actions() }.fixedSize(horizontal: true, vertical: false)
+    }
+}
+
+struct WorkspaceSearch: View {
+    let placeholder: String
+    @Binding var text: String
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").font(DS.Typography.metadata).foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            TextField(placeholder, text: $text)
+                .textFieldStyle(.plain).focused($focused).accessibilityLabel(placeholder)
+                .onExitCommand { if !text.isEmpty { text = "" } else { focused = false } }
+            if !text.isEmpty {
+                Button { text = ""; focused = true } label: { Image(systemName: "xmark.circle.fill") }
+                    .buttonStyle(.borderless).foregroundStyle(.secondary).help("Clear search").accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, 8).frame(height: 24)
+        .background(DS.soft, in: RoundedRectangle(cornerRadius: 6))
+        .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(focused ? DS.accent : DS.line, lineWidth: focused ? 1 : DS.hairline).allowsHitTesting(false) }
+        .frame(minWidth: 124, idealWidth: 182, maxWidth: 200)
+    }
+}
+
+struct WorkspaceAction: View {
+    let title: String
+    let symbol: String
+    var primary = false
+    let action: () -> Void
+
+    var body: some View {
+        let button = Button(action: action) { Label(title, systemImage: symbol).labelStyle(.titleAndIcon) }
+            .fixedSize().controlSize(.small)
+        if primary { button.buttonStyle(.bordered) } else { button.buttonStyle(.borderless) }
+    }
+}
+
 struct CollectionTools<Actions: View>: View {
     let placeholder: String
     @Binding var search: String
     @ViewBuilder var actions: () -> Actions
 
     var body: some View {
-        DSCard(padding: DS.Space.md) { HStack(spacing: DS.Space.md) {
-            Spacer(minLength: DS.Space.sm)
-            TextField(placeholder, text: $search)
-                .textFieldStyle(.roundedBorder).controlSize(.small)
-                .frame(minWidth: 130, idealWidth: 200, maxWidth: 200)
-            HStack(spacing: DS.Space.md) { actions() }
-                .font(.system(size: 13, weight: .regular))
-                .buttonStyle(.borderless)
-        } }
-        .padding(.horizontal, DS.Space.lg)
-        .padding(.top, DS.Space.pageTop)
-        .padding(.bottom, DS.Space.md)
+        WorkspaceControls(placeholder: placeholder, search: $search, scope: { EmptyView() }, actions: actions)
+            .padding(.horizontal, DS.Space.lg)
+            .padding(.top, DS.Space.pageTop)
+            .padding(.bottom, DS.Space.md)
     }
 }
 

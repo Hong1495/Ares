@@ -109,31 +109,28 @@ struct ManagedResourcesView: View {
     }
 
     private var tools: some View {
-        DSCard(padding: DS.Space.md) {
-            HStack(spacing: DS.Space.md) {
-                SettingsTabs(titles: ["Nodes", "Node Providers"], selection: Binding(get: { tab }, set: {
-                    tab = $0; select(nil); search = ""
-                }))
-                Spacer(minLength: 0)
-                if ready {
-                    TextField(providers ? "Search providers" : "Search nodes", text: $search)
-                        .textFieldStyle(.roundedBorder).frame(minWidth: 115, idealWidth: 165, maxWidth: 180)
-                    if !providers { Button("Import Links…") { sheet = .importLinks }.fixedSize() }
-                    Button(providers ? "Add Provider…" : "Add Node…") { sheet = .edit(nil, "") }.fixedSize()
-                    Menu {
-                        if changed { Button("Discard Draft", role: .destructive) { discard() } }
-                        let removed = removedItems
-                        if !removed.isEmpty {
-                            Menu("Restore Removed Resource") {
-                                ForEach(removed) { item in Button(item.name + (item.provider ? " · Provider" : " · Node")) { restore(item) } }
-                            }
+        WorkspaceControls(placeholder: ready ? (providers ? "Search providers" : "Search nodes") : nil, search: $search) {
+            SettingsTabs(titles: ["Nodes", "Node Providers"], selection: Binding(get: { tab }, set: {
+                tab = $0; select(nil); search = ""
+            }))
+        } actions: {
+            if ready {
+                WorkspaceAction(title: providers ? "Add Provider…" : "Add Node…", symbol: "plus", primary: true) { sheet = .edit(nil, "") }
+                if !providers { WorkspaceAction(title: "Import Links…", symbol: "link") { sheet = .importLinks } }
+                Menu {
+                    if changed { Button("Discard Draft", role: .destructive) { discard() } }
+                    let removed = removedItems
+                    if !removed.isEmpty {
+                        Menu("Restore Removed Resource") {
+                            ForEach(removed) { item in Button(item.name + (item.provider ? " · Provider" : " · Node")) { restore(item) } }
                         }
-                        Button("Reload Resources") { Task { await load() } }.disabled(changed)
-                    } label: { Image(systemName: "ellipsis") }
-                    .fixedSize().menuStyle(.borderlessButton).accessibilityLabel("Resource actions")
-                }
-            }.buttonStyle(.borderless).controlSize(.small).disabled(!canOperate)
-        }.padding(.horizontal, DS.Space.lg).padding(.top, DS.Space.pageTop).padding(.bottom, DS.Space.md)
+                    }
+                    Button("Reload Resources") { Task { await load() } }.disabled(changed)
+                } label: { Image(systemName: "ellipsis.circle") }
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().accessibilityLabel("Resource actions")
+            }
+        }.disabled(!canOperate)
+            .padding(.horizontal, DS.Space.lg).padding(.top, DS.Space.pageTop).padding(.bottom, DS.Space.md)
     }
 
     private var emptyState: some View {

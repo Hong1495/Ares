@@ -31,13 +31,16 @@ struct PolicyGroupsView: View {
                     .controlSize(.small).padding(DS.Space.lg)
             }
             CollectionTools(placeholder: "Search groups", search: $search) {
-                Button { if let snapshot = model.snapshot { editor = .init(id: "", isNew: true, snapshot: snapshot) } } label: { Image(systemName: "plus") }
+                WorkspaceAction(title: "New Group…", symbol: "plus", primary: true) {
+                    if let snapshot = model.snapshot { editor = .init(id: "", isNew: true, snapshot: snapshot) }
+                }
                     .disabled(model.snapshot == nil).help("Create policy group").accessibilityLabel("Create policy group")
-                Button { editSelected() } label: { Image(systemName: "pencil") }
+                WorkspaceAction(title: "Edit…", symbol: "pencil") { editSelected() }
                     .disabled(model.selected == nil || !PolicyConfiguration.types.contains(model.selected?.type ?? ""))
                     .help("Edit behavior, members and resources").accessibilityLabel("Edit selected policy group")
+                WorkspaceAction(title: "Compose…", symbol: "square.stack") { compose(false) }
+                    .disabled(model.snapshot == nil).help("Compose groups and rules")
                 Menu {
-                    Button("Compose Groups and Rules…") { compose(false) }
                     Button("Add Recommended…") { compose(true) }
                     Divider()
                     Button("Delete Group…", role: .destructive) {
@@ -56,7 +59,8 @@ struct PolicyGroupsView: View {
                             }
                         }
                     }
-                } label: { Image(systemName: "ellipsis") }
+                } label: { Image(systemName: "ellipsis.circle") }
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
                     .disabled(model.snapshot == nil).help("Policy actions").accessibilityLabel("Policy actions")
                 Button { Task { await model.reload() } } label: { Image(systemName: "arrow.clockwise") }
                     .help("Reload saved groups and runtime").accessibilityLabel("Reload policies")

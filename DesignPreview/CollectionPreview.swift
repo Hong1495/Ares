@@ -20,13 +20,12 @@ struct CollectionPreview: View {
         VStack(spacing: 0) {
             CollectionTools(placeholder: subscriptions ? "Search subscriptions" : "Search rules", search: $search) {
                 if subscriptions {
-                    Menu {
-                        Button("Remote Subscription") { notice = "Add remote subscription" }
-                        Button("Local File") { notice = "Import local file" }
-                    } label: { Image(systemName: "plus").frame(width: 16, height: 16) }
-                        .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                    WorkspaceAction(title: "Add Subscription…", symbol: "plus", primary: true) { notice = "Add remote subscription" }
+                    WorkspaceAction(title: "Import File…", symbol: "square.and.arrow.down") { notice = "Import local file" }
                 } else {
-                    Button { notice = "Edit local rules" } label: { Image(systemName: "text.badge.plus").frame(width: 16, height: 16) }
+                    WorkspaceAction(title: "Edit Local Rules…", symbol: "pencil", primary: true) { notice = "Edit local rules" }
+                    WorkspaceAction(title: "Sources", symbol: "doc.text.magnifyingglass") { notice = "Rule sources" }
+                    WorkspaceAction(title: "Rule Sets", symbol: "square.stack") { notice = "Rule sets" }
                 }
             }
             Divider()
@@ -53,9 +52,16 @@ struct CollectionPreview: View {
                                         Button(selected == name ? "Selected" : "Use profile") { selected = name }
                                             .buttonStyle(.bordered).controlSize(.small)
                                         Spacer()
-                                        ForEach(["arrow.clockwise", "pencil", "curlybraces", "trash"], id: \.self) { icon in
-                                            Button { notice = "Preview action: \(icon)" } label: { Image(systemName: icon).frame(width: 26, height: 22) }
+                                        if name == "Personal" {
+                                            WorkspaceAction(title: "Update", symbol: "arrow.clockwise") { notice = "Update subscription" }
                                         }
+                                        Menu {
+                                            Button("Rename…") { notice = "Rename subscription" }
+                                            Button("Edit Configuration…") { notice = "Edit configuration" }
+                                            Divider()
+                                            Button("Delete…", role: .destructive) { notice = "Delete subscription" }
+                                        } label: { Image(systemName: "ellipsis.circle") }
+                                            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
                                     }.font(.system(size: 13, weight: .regular)).buttonStyle(.borderless)
                                 }.modifier(SubscriptionSurface(selected: selected == name))
                             }

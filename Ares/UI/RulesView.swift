@@ -95,20 +95,12 @@ struct RulesView: View {
 
     private var toolbar: some View {
         CollectionTools(placeholder: "Search rules", search: $searchText) {
-            Button { showingSources = true } label: {
-                Image(systemName: "doc.text.magnifyingglass").frame(width: 16, height: 16)
-            }.help("Inspect rule sources").accessibilityLabel("Inspect rule sources")
-            Button { showingProviders = true } label: {
-                Image(systemName: "square.stack").frame(width: 16, height: 16)
-            }.help("Rule sets").accessibilityLabel("Rule sets")
-            Button {
+            WorkspaceAction(title: "Edit Local Rules…", symbol: "pencil", primary: true) {
                 editor = RuleDraft(text: UserDefaults.standard.string(forKey: DefaultsKeys.localRules) ?? "",
                     revision: ProfileService.shared.activeProfileRevision)
-            } label: {
-                Image(systemName: "text.badge.plus").frame(width: 16, height: 16)
             }
-            .help("Edit local rule overrides")
-            .accessibilityLabel("Edit local rules")
+            WorkspaceAction(title: "Sources", symbol: "doc.text.magnifyingglass") { showingSources = true }
+            WorkspaceAction(title: "Rule Sets", symbol: "square.stack") { showingProviders = true }
         }
     }
 

@@ -11,7 +11,7 @@ extension AppState.NavigationItem {
         case .quality: return "waveform.path.ecg"
         case .policies: return "slider.horizontal.3"
         case .scenes: return "square.stack.3d.up"
-        case .dashboard: return "gauge.with.dots.needle.50percent"
+        case .dashboard: return WorkspaceSymbols.dashboard
         case .connections: return "arrow.up.arrow.down"
         case .proxies: return "network"
         case .rules: return "list.bullet.indent"

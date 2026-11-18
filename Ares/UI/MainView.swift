@@ -35,7 +35,7 @@ struct MainView: View {
             detail
                 .frame(minWidth: 680, minHeight: 540)
                 .background(DS.canvas)
-                .navigationTitle([.applications, .quality, .policies, .scenes, .resources, .devices].contains(appState.selection) || appState.selection == .dashboard || appState.selection == .proxies || appState.selection == .rules || appState.selection == .logs || appState.selection == .subscriptions || appState.selection == .connections || appState.selection == .topology ? "" : appState.selection.displayName)
+                .navigationTitle([.applications, .quality, .policies, .scenes, .resources, .devices, .analysis].contains(appState.selection) || appState.selection == .dashboard || appState.selection == .proxies || appState.selection == .rules || appState.selection == .logs || appState.selection == .subscriptions || appState.selection == .connections || appState.selection == .topology ? "" : appState.selection.displayName)
         }
         .toolbarBackground(.hidden, for: .windowToolbar)
         .background(SidebarToolbarAppearance())

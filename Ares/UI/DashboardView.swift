@@ -106,11 +106,7 @@ private struct DashboardWorkspaceSummary: View {
     @ObservedObject private var controller = ClashController.shared
     @ObservedObject private var profiles = ProfileService.shared
     @ObservedObject private var automation = SceneAutomationService.shared
-    @State private var applications = OverviewWorkspaceSummary.ConfigurationSummary(value: "—", unit: "rules", rows: [], status: "Loading")
-    @State private var policies = OverviewWorkspaceSummary.ConfigurationSummary(value: "—", unit: "groups", rows: [], status: "Loading")
-    @State private var scenes = OverviewWorkspaceSummary.ConfigurationSummary(value: "—", unit: "saved", rows: [], status: "Loading")
-    @State private var resources = OverviewWorkspaceSummary.ConfigurationSummary(value: "—", unit: "resources", rows: [], status: "Loading")
-    @State private var devices = OverviewWorkspaceSummary.ConfigurationSummary(value: "—", unit: "configured", rows: [], status: "Loading")
+    @State private var saved = OverviewConfiguration()
     @State private var deviceConnections: [String: Int]?
     @State private var lastConfigurationRead = Date.distantPast
     @State private var rows: [OverviewWorkspaceSummary.ProcessRow] = []
@@ -120,7 +116,7 @@ private struct DashboardWorkspaceSummary: View {
     @Environment(\.scenePhase) private var phase
 
     var body: some View {
-        OverviewWorkspaceSummary(probes: probes, applications: applications, policies: policies, scenes: sceneSummary, resources: resources, devices: devices, openResources: { appState.selection = .resources }, openDevices: { appState.selection = .devices }, processes: rows, activityStatus: activityStatus,
+        OverviewWorkspaceSummary(probes: probes, configuration: configuration, openResources: { appState.selection = .resources }, openDevices: { appState.selection = .devices }, processes: rows, activityStatus: activityStatus,
             connections: connectionCount, processCount: processCount,
             qualityStatus: quality.enabled ? quality.status : "Monitoring is off · Open Quality to start",
             qualityGroup: quality.group.isEmpty ? "No monitored policy" : quality.group,
@@ -132,11 +128,7 @@ private struct DashboardWorkspaceSummary: View {
             openScenes: { appState.selection = .scenes })
         .task(id: "\(phase)-\(profiles.activeProfileRevision)") {
             guard phase == .active else { return }
-            applications = .init(value: "—", unit: "rules", rows: [], status: "Loading")
-            policies = .init(value: "—", unit: "groups", rows: [], status: "Loading")
-            scenes = .init(value: "—", unit: "saved", rows: [], status: "Loading")
-            resources = .init(value: "—", unit: "resources", rows: [], status: "Loading")
-            devices = .init(value: "—", unit: "configured", rows: [], status: "Loading")
+            saved = OverviewConfiguration()
             deviceConnections = nil
             lastConfigurationRead = .distantPast
             while !Task.isCancelled {
@@ -161,9 +153,15 @@ private struct DashboardWorkspaceSummary: View {
                          latency: samples.last?.milliseconds, samples: samples.map(\.milliseconds))
         }
     }
-    private var sceneSummary: OverviewWorkspaceSummary.ConfigurationSummary {
-        .init(value: scenes.value, unit: scenes.unit, rows: scenes.rows,
-              status: scenes.status + " · " + (automation.enabled ? (automation.paused ? "Automation paused" : "Automation on") : "Automation off"))
+    private var automationState: OverviewConfiguration.Automation {
+        automation.enabled ? (automation.paused ? .paused : .on) : .off
+    }
+    private var configuration: OverviewConfiguration {
+        var configuration = saved
+        if let names = saved.scenes?.names {
+            configuration.scenes = .init(names: names, automation: automationState)
+        }
+        return configuration
     }
     private func refreshConfiguration() async {
         lastConfigurationRead = Date()
@@ -173,16 +171,12 @@ private struct DashboardWorkspaceSummary: View {
             guard !Task.isCancelled, revision == profiles.activeProfileRevision else { return }
             let rules = RuleDraftDocument(snapshot.localRules).rules.compactMap { $0.rule.flatMap(RuleForm.init) }
                 .filter { $0.type == "PROCESS-PATH" || $0.type == "PROCESS-NAME" }
-            applications = .init(value: String(rules.count), unit: "local rules",
-                rows: rules.prefix(3).map { ($0.payload as NSString).lastPathComponent + " → " + $0.target },
-                status: rules.isEmpty ? "Uses subscription rules" : "First \(min(3, rules.count)) rules · Saved configuration")
-            let grouped = Dictionary(grouping: snapshot.effective, by: \.type)
-            policies = .init(value: String(snapshot.effective.count), unit: "groups",
-                rows: grouped.keys.sorted().map { "\($0) · \(grouped[$0]?.count ?? 0)" }, status: "Saved configuration")
+            saved.applications = rules.map { .init(application: ($0.payload as NSString).lastPathComponent, target: $0.target) }
+            saved.policies = Dictionary(grouping: snapshot.effective, by: \.type).mapValues(\.count)
         } catch {
             guard !Task.isCancelled, revision == profiles.activeProfileRevision else { return }
-            applications = .init(value: "—", unit: "rules", rows: [], status: "Configuration unavailable")
-            policies = .init(value: "—", unit: "groups", rows: [], status: "Configuration unavailable")
+            saved.applications = nil
+            saved.policies = nil
         }
         do {
             let managed = try await ManagedWorkspaceService.load()
@@ -191,25 +185,27 @@ private struct DashboardWorkspaceSummary: View {
             let nodes = entries.filter { !$0.provider }.count
             let providers = entries.filter(\.provider).count
             let local = entries.filter(\.local).count
-            resources = .init(value: String(entries.count), unit: "resources", rows: ["\(nodes) nodes · \(providers) providers", "\(local) local · \(entries.count - local) inherited"], status: "Saved definitions · Current subscription")
+            saved.resources = .init(nodes: nodes, providers: providers, local: local)
         } catch {
             guard !Task.isCancelled, revision == profiles.activeProfileRevision else { return }
-            resources = .init(value: "—", unit: "resources", rows: [], status: "Configuration unavailable")
+            saved.resources = nil
         }
         do {
             let saved = try ScenarioService.list().sorted { $0.name < $1.name }
-            scenes = .init(value: String(saved.count), unit: "saved", rows: Array(saved.prefix(3).map(\.name)), status: saved.count > 3 ? "First 3 scenes · Current subscription" : "Current subscription")
-        } catch { scenes = .init(value: "—", unit: "saved", rows: [], status: "Unavailable") }
+            self.saved.scenes = .init(names: saved.map(\.name), automation: automationState)
+        } catch { saved.scenes = nil }
     }
     private func refreshDevices() {
         do {
             let saved = try ManagedWorkspaceService.read(profiles.activeProfileID).devices
             let enabled = saved.filter(\.enabled)
             let names = Set(enabled.map(\.listenerName))
-            let count = deviceConnections.map { values in values.filter { names.contains($0.key) }.values.reduce(0, +) }
-            let active = deviceConnections.map { values in values.filter { names.contains($0.key) && $0.value > 0 }.count }
-            devices = .init(value: String(saved.count), unit: "configured", rows: ["\(enabled.count) enabled · \(saved.count - enabled.count) disabled", "\(active.map(String.init) ?? "—") active entries · \(count.map(String.init) ?? "—") connections"], status: "Saved access · Current proxy connections")
-        } catch { devices = .init(value: "—", unit: "configured", rows: [], status: "Configuration unavailable") }
+            let live = deviceConnections.map { counts in
+                let matched = counts.filter { names.contains($0.key) && $0.value > 0 }
+                return OverviewConfiguration.Devices.Live(active: matched.count, connections: matched.values.reduce(0, +))
+            }
+            self.saved.devices = .init(enabled: enabled.count, disabled: saved.count - enabled.count, live: live)
+        } catch { saved.devices = nil }
     }
     private func refresh() async {
         guard PolicyGroupService.canReadRuntime else {

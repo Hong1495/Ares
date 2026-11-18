@@ -13,7 +13,7 @@ struct AresDesignPreview: App {
                 PreviewWorkspace().frame(minWidth: 900, minHeight: 650)
             }
         }
-        .defaultSize(width: 1180, height: 780)
+        .defaultSize(width: CommandLine.arguments.contains("--compact") ? 905 : 1180, height: 900)
         .windowStyle(.titleBar)
         .commands { PreviewCommands() }
         MenuBarExtra(isInserted: .constant(!CommandLine.arguments.contains("--menu-preview"))) {
@@ -27,7 +27,7 @@ struct AresDesignPreview: App {
 struct PreviewWorkspace: View {
     @State private var showUpdate = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
-    @State private var page = CommandLine.arguments.contains("--settings-sources") ? "Settings" : "Dashboard"
+    @State private var page = CommandLine.arguments.first(where: { $0.hasPrefix("--page=") }).map { String($0.dropFirst(7)) } ?? (CommandLine.arguments.contains("--settings-sources") ? "Settings" : "Dashboard")
     @State private var dark = CommandLine.arguments.contains("--dark")
     @State private var enabled = true
     @State private var tun = false
@@ -40,21 +40,23 @@ struct PreviewWorkspace: View {
     @State private var previewFocus: String?
     @State private var search = ""
     @State private var measured = false
-    @State private var empty = false
-    @State private var error = false
+    @State private var empty = CommandLine.arguments.contains("--empty")
+    @State private var error = CommandLine.arguments.contains("--unavailable")
     @State private var autoScroll = true
     @State private var theme = 0
 
     private let destinations = [
-        WorkspaceDestination(id: "Dashboard", title: "Dashboard", icon: "gauge.with.dots.needle.50percent", section: "Overview"),
+        WorkspaceDestination(id: "Dashboard", title: "Dashboard", icon: WorkspaceSymbols.dashboard, section: "Overview"),
         WorkspaceDestination(id: "Activity", title: "Activity", icon: "arrow.up.arrow.down", section: "Overview"),
         WorkspaceDestination(id: "Quality", title: "Quality", icon: "waveform.path.ecg", section: "Overview"),
         WorkspaceDestination(id: "Proxies", title: "Proxies", icon: "network", section: "Routing"),
         WorkspaceDestination(id: "Applications", title: "Applications", icon: "app.connected.to.app.below.fill", section: "Routing"),
+        WorkspaceDestination(id: "Devices", title: "Devices", icon: "laptopcomputer.and.iphone", section: "Routing"),
         WorkspaceDestination(id: "Policies", title: "Policies", icon: "slider.horizontal.3", section: "Routing"),
         WorkspaceDestination(id: "Rules", title: "Rules", icon: "list.bullet.indent", section: "Routing"),
         WorkspaceDestination(id: "Scenes", title: "Scenes", icon: "square.stack.3d.up", section: "Routing"),
         WorkspaceDestination(id: "Subscriptions", title: "Subscriptions", icon: "rectangle.stack", section: "Library"),
+        WorkspaceDestination(id: "Resources", title: "Resources", icon: "shippingbox", section: "Library"),
         WorkspaceDestination(id: "Analysis", title: "Analysis", icon: "waveform.path.ecg.rectangle", section: "Tools"),
         WorkspaceDestination(id: "Logs", title: "Logs", icon: "text.alignleft", section: "Tools"),
         WorkspaceDestination(id: "Settings", title: "Settings", icon: "slider.horizontal.3", section: "Preferences")
@@ -133,11 +135,13 @@ struct PreviewWorkspace: View {
         } details: {
             OverviewWorkspaceSummary(
                 probes: ["Google", "Cloudflare", "GitHub", "DNS"].map { .init(id: $0, name: $0, success: "83.3%", latency: 42, samples: [30, 44, 36, nil, 50, 42]) },
-                applications: .init(value: "4", unit: "local rules", rows: ["Safari → Automatic", "Mail → DIRECT", "Editor → Work"], status: "First 3 rules · Saved configuration"),
-                policies: .init(value: "8", unit: "groups", rows: ["select · 4", "url-test · 3", "fallback · 1"], status: "Saved configuration"),
-                scenes: .init(value: "2", unit: "saved", rows: ["Home", "Office"], status: "Automation off"),
-                resources: .init(value: "34", unit: "resources", rows: ["32 nodes · 2 providers", "4 local · 30 inherited"], status: "Saved definitions · Current subscription"),
-                devices: .init(value: "3", unit: "configured", rows: ["2 enabled · 1 disabled", "1 active entry · 4 connections"], status: "Saved access · Current proxy connections"),
+                configuration: .init(
+                    resources: error ? nil : .init(nodes: empty ? 0 : 32, providers: empty ? 0 : 8, local: empty ? 0 : 12),
+                    devices: .init(enabled: empty ? 0 : 2, disabled: empty ? 0 : 1, live: error ? nil : .init(active: empty ? 0 : 1, connections: empty ? 0 : 4)),
+                    applications: empty ? [] : [.init(application: "Safari", target: "Automatic"), .init(application: "Mail", target: "DIRECT"), .init(application: "Notion Helper", target: "节点选择"), .init(application: "Editor", target: "Work")],
+                    policies: empty ? [:] : ["select": 4, "url-test": 2, "fallback": 1, "load-balance": 1],
+                    scenes: .init(names: empty ? [] : ["Home", "Office", "Travel"], automation: empty ? .off : .paused)),
+                openResources: { page = "Resources" }, openDevices: { page = "Devices" },
                 processes: empty ? [] : [.init(id: "browser", name: "Safari", connections: 12), .init(id: "editor", name: "Code Editor", connections: 8), .init(id: "mail", name: "Mail", connections: 4), .init(id: "music", name: "Music", connections: 2), .init(id: "calendar", name: "Calendar", connections: 1), .init(id: "sync", name: "Sync", connections: 1)],
                 activityStatus: empty ? "No active connections" : "All sources · Ares excluded",
                 connections: empty ? 0 : 28, processCount: empty ? 0 : 6,
@@ -189,23 +193,26 @@ struct PreviewWorkspace: View {
 
     @ViewBuilder private var proxyPage: some View {
         if page == "Proxies" {
-            HStack(spacing: DS.Space.md) {
+            WorkspaceControls(placeholder: mode == 2 ? nil : "Search nodes", search: $search) {
                 Picker("Mode", selection: $mode) {
                     Text("Rule").tag(0)
                     Text("Global").tag(1)
                     Text("Direct").tag(2)
-                }.pickerStyle(.segmented).labelsHidden().controlSize(.small).fixedSize()
-                Spacer(minLength: DS.Space.sm)
-                TextField("Search nodes", text: $search).textFieldStyle(.roundedBorder)
-                    .controlSize(.small).frame(minWidth: 130, idealWidth: 200, maxWidth: 200)
-                HStack(spacing: DS.Space.xs) {
-                    Button { measured.toggle() } label: { ProxyLatencySymbol() }
-                        .help("Test all nodes").accessibilityLabel("Test all nodes")
-                    Button { measured = false } label: { Image(systemName: "arrow.clockwise") }
-                        .help("Refresh nodes")
-                }.font(DS.Typography.secondary.weight(.medium)).buttonStyle(.borderless)
+                }.pickerStyle(.segmented).labelsHidden()
+            } actions: {
+                if mode != 2 {
+                    WorkspaceAction(title: "Test Latency", symbol: "bolt", primary: true) { measured.toggle() }
+                    Menu {
+                        Button("Refresh Nodes") { measured = false }
+                        Button("Open Policies") { page = "Policies" }
+                        Button("Open Node Providers") { page = "Resources" }
+                    } label: { Image(systemName: "ellipsis.circle") }
+                        .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().accessibilityLabel("Proxy actions")
+                }
             }
-            if empty {
+            if mode == 2 {
+                ContentUnavailableView("Direct Connection", systemImage: "arrow.turn.up.right")
+            } else if empty {
                 ContentUnavailableView("No proxy groups", systemImage: "network.slash", description: Text("Add a subscription to get started."))
             } else {
                 ProxyWorkspaceTable(

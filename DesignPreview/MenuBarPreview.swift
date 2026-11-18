@@ -7,7 +7,7 @@ struct MenuBarPreview: View {
                      showsRisk: true, risk: 33,
                      download: "24.8 KB/s", upload: "1.2 KB/s",
                      openDashboard: { notice = "Dashboard" },
-                     openActivity: { notice = "Activity" }, openSettings: { notice = "Settings" }, quit: { notice = "Quit" })
+                     openSettings: { notice = "Settings" }, quit: { notice = "Quit" })
             .alert("Preview only", isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
                 Button("Done") { notice = nil }
             } message: { Text(notice ?? "") }

@@ -10,34 +10,23 @@ struct LogsTools: View {
     let onExport: () -> Void
 
     var body: some View {
-        HStack(spacing: DS.Space.md) {
+        WorkspaceControls(placeholder: "Search logs", search: $search) {
             Picker("Log level", selection: $level) {
                 Text("All").tag("all")
                 Text("Debug").tag("debug")
                 Text("Info").tag("info")
                 Text("Warning").tag("warning")
                 Text("Error").tag("error")
-            }
-            .labelsHidden().pickerStyle(.segmented).controlSize(.small)
-            .frame(minWidth: 240, idealWidth: 300, maxWidth: 320)
-            Spacer(minLength: DS.Space.sm)
-            TextField("Search logs", text: $search)
-                .textFieldStyle(.roundedBorder).controlSize(.small)
-                .frame(minWidth: 130, idealWidth: 200, maxWidth: 200)
-            HStack(spacing: DS.Space.xs) {
-                Toggle(isOn: $autoScroll) {
-                    Image(systemName: "arrow.down.to.line").frame(width: 16, height: 16)
-                }
-                .toggleStyle(.button)
-                .tint(DS.accent)
-                .help(autoScroll ? "Auto-scroll on · Click to stop following" : "Auto-scroll off · Click to follow latest logs")
-                .accessibilityLabel("Auto-scroll")
-                Button(action: onClear) { Image(systemName: "trash").frame(width: 16, height: 16) }
-                    .help("Clear all logs").accessibilityLabel("Clear all logs").disabled(!canClear)
-                Button(action: onExport) { Image(systemName: "square.and.arrow.up").frame(width: 16, height: 16) }
-                    .help("Export matching logs").accessibilityLabel("Export matching logs").disabled(!canExport)
-            }
-            .font(.system(size: 13, weight: .regular)).buttonStyle(.borderless)
+            }.labelsHidden().pickerStyle(.segmented)
+        } actions: {
+            Toggle("Follow", isOn: $autoScroll).toggleStyle(.switch)
+                .help("Scroll to the newest line as logs arrive")
+            WorkspaceAction(title: "Export…", symbol: "square.and.arrow.up", action: onExport)
+                .help("Export matching logs").disabled(!canExport)
+            Menu {
+                Button("Clear All Logs…", role: .destructive, action: onClear).disabled(!canClear)
+            } label: { Image(systemName: "ellipsis.circle") }
+                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().accessibilityLabel("Log actions")
         }
         .padding(.horizontal, DS.Space.lg)
         .padding(.top, DS.Space.pageTop)

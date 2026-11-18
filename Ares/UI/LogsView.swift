@@ -7,6 +7,7 @@ struct LogsView: View {
     @State private var selectedTabLevel: String = "all"
     @State private var searchText = ""
     @State private var autoScroll = true
+    @State private var confirmingClear = false
 
     var filteredLogs: [String] {
         let lines = clashViewModel.logs
@@ -66,13 +67,16 @@ struct LogsView: View {
         VStack(spacing: 0) {
             LogsTools(level: $selectedTabLevel, search: $searchText, autoScroll: $autoScroll,
                       canClear: !clashViewModel.logs.isEmpty, canExport: !filteredLogs.isEmpty,
-                      onClear: { clashViewModel.clearLogs() }, onExport: exportLogs)
+                      onClear: { confirmingClear = true }, onExport: exportLogs)
             Divider()
             LogsSurface(lines: filteredLogs, autoScroll: autoScroll,
                         emptyTitle: emptyLogsTitle, emptyDescription: emptyLogsDescription)
         }
         .background(DS.canvas)
         .navigationTitle("")
+        .confirmationDialog("Clear all logs?", isPresented: $confirmingClear) {
+            Button("Clear Logs", role: .destructive) { clashViewModel.clearLogs() }
+        }
         .toolbar {
             CollectionTitleToolbar(title: "Logs", count: filteredLogs.count, unit: "Lines")
         }

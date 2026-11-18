@@ -307,18 +307,8 @@ struct OverviewWorkspaceSummary: View {
         let latency: Int?
         let samples: [Int?]
     }
-    struct ConfigurationSummary {
-        let value: String
-        let unit: String
-        let rows: [String]
-        let status: String
-    }
     var probes: [Probe] = []
-    var applications = ConfigurationSummary(value: "—", unit: "rules", rows: [], status: "Unavailable")
-    var policies = ConfigurationSummary(value: "—", unit: "groups", rows: [], status: "Unavailable")
-    var scenes = ConfigurationSummary(value: "—", unit: "saved", rows: [], status: "Unavailable")
-    var resources = ConfigurationSummary(value: "—", unit: "resources", rows: [], status: "Unavailable")
-    var devices = ConfigurationSummary(value: "—", unit: "configured", rows: [], status: "Unavailable")
+    var configuration = OverviewConfiguration()
     var openResources: () -> Void = {}
     var openDevices: () -> Void = {}
     let processes: [ProcessRow]
@@ -346,50 +336,44 @@ struct OverviewWorkspaceSummary: View {
             ViewThatFits(in: .horizontal) {
                 configurationGrid(columns: 3)
                 configurationGrid(columns: 2)
+                configurationGrid(columns: 1)
             }
         }
     }
 
-    private struct SummarySection {
-        let title: String
-        let summary: ConfigurationSummary
-        let action: () -> Void
-    }
-    private var summarySections: [SummarySection] {
-        [
-            .init(title: "Resources", summary: resources, action: openResources),
-            .init(title: "Devices", summary: devices, action: openDevices),
-            .init(title: "Applications", summary: applications, action: openApplications),
-            .init(title: "Policies", summary: policies, action: openPolicies),
-            .init(title: "Scenes", summary: scenes, action: openScenes)
-        ]
+    private func open(_ section: OverviewConfiguration.Section) {
+        switch section {
+        case .resources: openResources()
+        case .devices: openDevices()
+        case .applications: openApplications()
+        case .policies: openPolicies()
+        case .scenes: openScenes()
+        }
     }
 
-    // One column system across every row. Shared grid rows align the headings,
-    // metrics, detail lines and footers even when one section has fewer entries.
     private func configurationGrid(columns: Int) -> some View {
-        let sections = summarySections
-        return Grid(alignment: .topLeading, horizontalSpacing: 24, verticalSpacing: 12) {
+        let sections = OverviewConfiguration.Section.allCases
+        return Grid(alignment: .topLeading, horizontalSpacing: 24, verticalSpacing: 10) {
             ForEach(0..<((sections.count + columns - 1) / columns), id: \.self) { row in
                 let start = row * columns
                 let end = min(start + columns, sections.count)
                 GridRow {
-                    ForEach(start..<end, id: \.self) { index in
-                        heading(sections[index].title, action: sections[index].action)
-                            .frame(minWidth: 176, maxWidth: .infinity)
-                            .padding(.top, row == 0 ? 16 : 20)
-                            .overlay(alignment: .top) { Rectangle().fill(DS.line).frame(height: 0.5) }
+                    ForEach(sections[start..<end], id: \.self) { section in
+                        heading(section.rawValue) { open(section) }
+                            .frame(minWidth: 170, maxWidth: .infinity)
+                            .padding(.top, 14)
+                            .overlay(alignment: .top) { Rectangle().fill(DS.line).frame(height: DS.hairline) }
                     }
                 }
                 GridRow {
-                    ForEach(start..<end, id: \.self) { index in configurationMetric(sections[index].summary) }
+                    ForEach(sections[start..<end], id: \.self) { section in
+                        metric(configuration.count(for: section)?.formatted() ?? "—", section.unit)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
                 GridRow {
-                    ForEach(start..<end, id: \.self) { index in configurationRows(sections[index].summary) }
-                }
-                GridRow {
-                    ForEach(start..<end, id: \.self) { index in
-                        configurationStatus(sections[index].summary).padding(.bottom, 8)
+                    ForEach(sections[start..<end], id: \.self) { section in
+                        OverviewConfigurationGraphic(section: section, configuration: configuration)
                     }
                 }
             }
@@ -463,23 +447,7 @@ struct OverviewWorkspaceSummary: View {
             Text(label).font(DS.Typography.metadata).foregroundStyle(.secondary)
         }
     }
-    private func configurationMetric(_ summary: ConfigurationSummary) -> some View {
-        metric(summary.value, summary.unit).frame(maxWidth: .infinity, alignment: .leading)
-    }
 
-    private func configurationRows(_ summary: ConfigurationSummary) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(summary.rows.enumerated()), id: \.offset) { _, row in
-                Text(row).font(DS.Typography.secondary).lineLimit(1).truncationMode(.middle).help(row)
-            }
-            if summary.rows.isEmpty { Text("—").font(DS.Typography.secondary).foregroundStyle(.secondary) }
-        }.frame(maxWidth: .infinity, alignment: .topLeading)
-    }
-
-    private func configurationStatus(_ summary: ConfigurationSummary) -> some View {
-        Text(summary.status).font(DS.Typography.metadata).foregroundStyle(.secondary)
-            .lineLimit(2).help(summary.status).frame(maxWidth: .infinity, alignment: .topLeading)
-    }
 }
 
 
