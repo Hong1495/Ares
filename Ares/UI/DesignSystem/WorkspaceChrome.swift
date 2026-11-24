@@ -117,6 +117,14 @@ extension ToolbarContent {
     }
 }
 
+extension View {
+    func aresWorkspaceChrome() -> some View {
+        toolbarBackground(DS.canvas, for: .windowToolbar)
+            .toolbarBackground(.visible, for: .windowToolbar)
+            .background(SidebarToolbarAppearance())
+    }
+}
+
 struct AresSidebarToolbar: ToolbarContent {
     @Binding var visibility: NavigationSplitViewVisibility
 
@@ -139,7 +147,7 @@ struct AresSidebarToolbar: ToolbarContent {
 
 /// SwiftUI's native sidebar item keeps its AppKit border on macOS 27 even when
 /// shared backgrounds are hidden. Preserve native placement and toggle behavior.
-struct SidebarToolbarAppearance: NSViewRepresentable {
+private struct SidebarToolbarAppearance: NSViewRepresentable {
     func makeNSView(context: Context) -> SidebarToolbarAppearanceView {
         SidebarToolbarAppearanceView()
     }
@@ -149,7 +157,7 @@ struct SidebarToolbarAppearance: NSViewRepresentable {
     }
 }
 
-final class SidebarToolbarAppearanceView: NSView {
+private final class SidebarToolbarAppearanceView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         scheduleUpdate()
@@ -163,8 +171,6 @@ final class SidebarToolbarAppearanceView: NSView {
     func scheduleUpdate() {
         DispatchQueue.main.async { [weak self] in
             guard let window = self?.window else { return }
-            // Let the content canvas continue through the native title bar.
-            window.titlebarAppearsTransparent = true
             window.titlebarSeparatorStyle = .none
             window.backgroundColor = NSColor(DS.canvas)
             guard let toolbar = window.toolbar else { return }

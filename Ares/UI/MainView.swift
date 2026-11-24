@@ -37,8 +37,7 @@ struct MainView: View {
                 .background(DS.canvas)
                 .navigationTitle([.applications, .quality, .policies, .scenes, .resources, .devices, .analysis].contains(appState.selection) || appState.selection == .dashboard || appState.selection == .proxies || appState.selection == .rules || appState.selection == .logs || appState.selection == .subscriptions || appState.selection == .connections || appState.selection == .topology ? "" : appState.selection.displayName)
         }
-        .toolbarBackground(.hidden, for: .windowToolbar)
-        .background(SidebarToolbarAppearance())
+        .aresWorkspaceChrome()
         .background(WindowUpdateIndicator(version: appUpdates.availableVersion, action: appUpdates.checkForUpdates))
         .alert("Operation failed", isPresented: Binding(
             get: { appState.lastOperationError != nil },

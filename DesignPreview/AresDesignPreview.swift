@@ -113,8 +113,7 @@ struct PreviewWorkspace: View {
                 }
             }
         }
-        .toolbarBackground(.hidden, for: .windowToolbar)
-        .background(SidebarToolbarAppearance())
+        .aresWorkspaceChrome()
         .background(WindowUpdateIndicator(version: "1.1") { showUpdate = true })
         .alert("Ares 1.1 is available", isPresented: $showUpdate) {
             Button("Done", role: .cancel) { }
