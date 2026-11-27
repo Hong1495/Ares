@@ -35,7 +35,7 @@ struct PreviewWorkspace: View {
     @State private var mode = 0
     @State private var tab = 0
     @State private var activityGrouping = "Application"
-    @State private var selectedNode = "Tokyo · 01"
+    @State private var selectedNode = "🇹🇼 台湾🚀 · 01"
     @State private var previewGroup: String? = "Select"
     @State private var previewFocus: String?
     @State private var search = ""
@@ -70,6 +70,8 @@ struct PreviewWorkspace: View {
                          download: enabled ? "4.82 MB/s" : "0 B/s", upload: enabled ? "236 KB/s" : "0 B/s")
     }
 
+    private let previewNodes = ["🇹🇼 台湾🚀 · 01", "🇹🇼 台湾家宽 · 02", "🇯🇵 Tokyo · 01", "🇸🇬 Singapore · 01", "🇭🇰 Hong Kong · 01", "🇺🇸 Los Angeles · 01", "London · 01"]
+
     private var points: [OverviewTrafficPoint] {
         let start = Date().addingTimeInterval(-60)
         let gap = CommandLine.arguments.contains("--traffic-gap")
@@ -98,7 +100,7 @@ struct PreviewWorkspace: View {
                         DashboardTitleSummary(country: empty ? nil : "JP", ip: empty ? "—" : "203.0.113.24", latency: empty || mode == 2 ? nil : 38, showsRisk: true, risk: empty || error ? nil : 33, riskHelp: "Preview · 33/100 risk · proxycheck.io").padding(.leading, 16)
                     }.aresUnframed()
                 }
-                if page == "Proxies" { ProxiesTitleToolbar(count: empty ? 0 : 6) }
+                if page == "Proxies" { ProxiesTitleToolbar(count: empty ? 0 : previewNodes.count) }
                 if page == "Rules" { CollectionTitleToolbar(title: "Rules", count: empty ? 0 : 4, unit: "Rules") }
                 if page == "Subscriptions" { CollectionTitleToolbar(title: "Subscriptions", count: empty ? 0 : 2, unit: "Profiles") }
                 if page == "Activity" {
@@ -215,9 +217,9 @@ struct PreviewWorkspace: View {
                 ContentUnavailableView("No proxy groups", systemImage: "network.slash", description: Text("Add a subscription to get started."))
             } else {
                 ProxyWorkspaceTable(
-                    groups: [.init(id: "Select", type: "Selector", current: selectedNode, count: 6)],
+                    groups: [.init(id: "Select", type: "Selector", current: selectedNode, count: previewNodes.count)],
                     selectedGroup: $previewGroup, focusedNode: $previewFocus,
-                    rows: ProxyNodeOrder.sorted(["Tokyo · 01", "Tokyo · 02", "Singapore · 01", "Hong Kong · 01", "Los Angeles · 01", "London · 01"].filter { search.isEmpty || $0.localizedCaseInsensitiveContains(search) }, delay: previewDelay).map {
+                    rows: ProxyNodeOrder.sorted(previewNodes.filter { search.isEmpty || $0.localizedCaseInsensitiveContains(search) }, delay: previewDelay).map {
                         .init(id: $0, type: "VLESS", delay: previewDelay($0), selected: $0 == selectedNode, active: $0 == selectedNode)
                     }, search: search, onSelect: { selectedNode = $0 }, onTest: { _ in measured.toggle() }, onResume: {}
                 ).frame(minHeight: 360)

@@ -17,6 +17,7 @@ SOURCES=(
   "$ROOT/AresTests/IPReputationTests.swift"
   "$ROOT/Ares/Utilities/IPReputation.swift"
   "$ROOT/AresTests/ExitIdentityTests.swift"
+  "$ROOT/Ares/Utilities/ProxyFlag.swift" "$ROOT/AresTests/ProxyFlagTests.swift"
   "$ROOT/Ares/Utilities/ExitIdentity.swift"
   "$ROOT/Ares/Utilities/DefaultsKeys.swift"
   "$ROOT/Ares/Utilities/ClashPorts.swift"

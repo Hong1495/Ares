@@ -4,6 +4,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/.build/design-preview"
 APP="$OUT/Ares Design Preview.app"
 mkdir -p "$APP/Contents/MacOS"
+ditto "$ROOT/Ares/Resources/ProxyFlags" "$APP/Contents/Resources/ProxyFlags"
 # Explicit allowlist: never compile AresApp, AppDelegate, services, models,
 # production page wrappers, resources, or core binaries into this executable.
 SOURCES=(
@@ -26,6 +27,8 @@ SOURCES=(
   "$ROOT/Ares/UI/DesignSystem/OverviewPresentation.swift"
   "$ROOT/Ares/UI/DesignSystem/OverviewConfiguration.swift"
   "$ROOT/Ares/UI/DesignSystem/ProxyNodeTile.swift"
+  "$ROOT/Ares/Utilities/ProxyFlag.swift"
+  "$ROOT/Ares/UI/DesignSystem/ProxyNameText.swift"
   "$ROOT/Ares/UI/DesignSystem/ProxyWorkspaceTable.swift"
   "$ROOT/DesignPreview/AresDesignPreview.swift"
 )

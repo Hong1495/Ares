@@ -25,3 +25,10 @@ The historical `Country.mmdb` has no verified provenance in this repository and 
 - Version: 5.1.3 (pinned)
 - License: MIT, including the bundled LibYAML notices in [Packages/SubscriptionKit/Yams-LICENSE](Packages/SubscriptionKit/Yams-LICENSE).
 - Parses saved subscription metadata without running a proxy core or making network requests.
+
+## flag-icons
+
+- Project: https://github.com/lipis/flag-icons/tree/v7.5.0
+- Version: 7.5.0, revision `7aa5b2bdddd570ece62c812c0cb588ccdc099e2e`.
+- License: MIT; see [Ares/Resources/ProxyFlags/LICENSE.txt](Ares/Resources/ProxyFlags/LICENSE.txt).
+- Ares bundles the 4:3 flags as 48 × 36 px PNGs, rasterized with `rsvg-convert --width 48 --height 36`. They render offline in proxy names without depending on the platform emoji font.

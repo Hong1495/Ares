@@ -4,11 +4,8 @@ import SwiftUI
 nonisolated enum ProxyCountryLabel {
     static func code(in name: String) -> String? {
         for character in name {
-            let scalars = Array(character.unicodeScalars)
-            if scalars.count == 2, scalars.allSatisfy({ (0x1F1E6...0x1F1FF).contains($0.value) }) {
-                let code = String(String.UnicodeScalarView(scalars.compactMap { UnicodeScalar($0.value - 0x1F1E6 + 65) }))
-                if Locale.Region.isoRegions.contains(where: { $0.identifier == code }) { return code }
-            }
+            if let code = ProxyFlag.regionCode(for: character),
+               Locale.Region.isoRegions.contains(where: { $0.identifier == code }) { return code }
         }
         let tokens = Set(name.uppercased().split { !$0.isLetter }.map(String.init))
         for (code, aliases) in [

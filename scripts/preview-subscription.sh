@@ -7,6 +7,7 @@ APP="$OUT/Ares Subscription Preview.app"
 swift build --build-system native --package-path "$PACKAGE"
 BIN="$(swift build --build-system native --package-path "$PACKAGE" --show-bin-path)"
 mkdir -p "$APP/Contents/MacOS"
+ditto "$ROOT/Ares/Resources/ProxyFlags" "$APP/Contents/Resources/ProxyFlags"
 # Explicit allowlist. All service names resolve to inert mocks in SubscriptionPreview.
 OBJECTS=()
 while IFS= read -r file; do OBJECTS+=("$file"); done < <(find "$BIN/Yams.build" "$BIN/CYaml.build" "$BIN/SubscriptionKit.build" -name '*.o')
@@ -30,6 +31,7 @@ xcrun swiftc -parse-as-library -target arm64-apple-macosx14.0 \
   "$ROOT/Ares/UI/DesignSystem/DesignSystem.swift" \
   "$ROOT/Ares/UI/DesignSystem/WorkspaceChrome.swift" \
   "$ROOT/Ares/UI/DesignSystem/ProxyNodeTile.swift" \
+  "$ROOT/Ares/Utilities/ProxyFlag.swift" "$ROOT/Ares/UI/DesignSystem/ProxyNameText.swift" \
   "$ROOT/Ares/UI/DesignSystem/ProxyWorkspaceTable.swift" \
   "$ROOT/Ares/UI/DesignSystem/WorkspaceCommands.swift" \
   "$ROOT/Ares/UI/DesignSystem/CollectionPresentation.swift" \

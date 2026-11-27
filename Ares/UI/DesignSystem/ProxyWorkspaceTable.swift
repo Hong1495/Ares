@@ -58,7 +58,7 @@ struct ProxyWorkspaceTable: View {
             VStack(spacing: 0) {
                 if let group {
                     HStack(spacing: 10) {
-                        Text(group.id).font(DS.Typography.secondary.weight(.medium)).lineLimit(1).truncationMode(.middle).help(group.id)
+                        ProxyNameText.label(group.id).font(DS.Typography.secondary.weight(.medium)).lineLimit(1).truncationMode(.middle).help(ProxyFlag.plainName(group.id))
                         if group.id.caseInsensitiveCompare(Self.typeLabel(group.type)) != .orderedSame {
                             Text(Self.typeLabel(group.type)).font(DS.Typography.metadata).foregroundStyle(.secondary).fixedSize()
                         }
@@ -109,9 +109,9 @@ struct ProxyWorkspaceTable: View {
                             .foregroundStyle(row.selected || row.active ? (focusedNode == row.id ? Color.primary : DS.accent) : Color.secondary.opacity(0.5))
                             .frame(width: 24, height: 24).contentShape(Rectangle())
                     }.buttonStyle(.plain).disabled(!canSelect || busy)
-                        .accessibilityLabel(row.selected ? "Selected: " + row.id : "Use " + row.id)
-                        .help(group?.type == "LoadBalance" ? "This group balances connections automatically" : row.selected ? "Selected node" : row.active ? "Current automatic node · Click to pin" : "Use " + row.id)
-                    Text(row.id).lineLimit(1).truncationMode(.middle).help(row.id)
+                        .accessibilityLabel((row.selected ? "Selected: " : "Use ") + ProxyFlag.plainName(row.id))
+                        .help(group?.type == "LoadBalance" ? "This group balances connections automatically" : row.selected ? "Selected node" : row.active ? "Current automatic node · Click to pin" : "Use " + ProxyFlag.plainName(row.id))
+                    ProxyNameText.label(row.id).lineLimit(1).truncationMode(.middle).help(ProxyFlag.plainName(row.id))
                 }
             }.width(max(110, width - 322))
             TableColumn("Country") { row in
@@ -136,8 +136,8 @@ struct ProxyWorkspaceTable: View {
             TableColumn("") { row in
                 Button { onTest(row.id) } label: { ProxyLatencySymbol().frame(width: 24, height: 24) }
                     .buttonStyle(.borderless).disabled(!canTest || row.testing)
-                    .help(canTest ? "Test latency for " + row.id : "Connect to test latency")
-                    .accessibilityLabel("Test latency for " + row.id)
+                    .help(canTest ? "Test latency for " + ProxyFlag.plainName(row.id) : "Connect to test latency")
+                    .accessibilityLabel("Test latency for " + ProxyFlag.plainName(row.id))
             }.width(28)
         }
         .contextMenu(forSelectionType: String.self) { selection in
@@ -154,7 +154,7 @@ struct ProxyWorkspaceTable: View {
                     .allowsHitTesting(false)
             }
         }
-        .accessibilityLabel("Nodes in " + (selectedGroup ?? "group"))
+        .accessibilityLabel("Nodes in " + ProxyFlag.plainName(selectedGroup ?? "group"))
     }
 
     static func typeLabel(_ type: String) -> String {
@@ -185,13 +185,13 @@ private struct ProxyGroupListRow: View {
         } else {
             current = group.current ?? "No current node"
         }
-        return [group.id, type, current].joined(separator: " · ")
+        return [ProxyFlag.plainName(group.id), type, ProxyFlag.plainName(current)].joined(separator: " · ")
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 8) {
-                Text(group.id).lineLimit(1).truncationMode(.middle)
+                ProxyNameText.label(group.id).lineLimit(1).truncationMode(.middle)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text(String(group.count)).monospacedDigit().foregroundStyle(.secondary)
             }.font(DS.Typography.secondary)
@@ -199,7 +199,7 @@ private struct ProxyGroupListRow: View {
                 Text(ProxyWorkspaceTable.typeLabel(group.type))
                 if let current = group.current {
                     Text("·")
-                    Text(current).lineLimit(1).truncationMode(.middle)
+                    ProxyNameText.label(current).lineLimit(1).truncationMode(.middle)
                 }
             }.font(DS.Typography.metadata).foregroundStyle(.secondary)
         }
